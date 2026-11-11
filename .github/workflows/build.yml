@@ -1,0 +1,109 @@
+name: Build YMPlayer.wgt
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # needed to create the release
+
+env:
+  # Pins - bump deliberately if download.tizen.org moves things around.
+  TIZEN_STUDIO_VERSION: "5.6"
+  TIZEN_CLI_INSTALLER: web-cli_Tizen_Studio_5.6_ubuntu-64.bin
+  TIZEN_HOME: ${{ github.workspace }}/../tizen-studio
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Run unit tests
+        run: |
+          npm ci
+          npm test
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install Tizen Studio CLI (tizen + sdb)
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends zip unzip libxml2-utils rsync
+          mkdir -p "$RUNNER_TEMP/tizen-dl"
+          curl -fsSL -o "$RUNNER_TEMP/tizen-dl/$TIZEN_CLI_INSTALLER" \
+            "https://download.tizen.org/sdk/Installer/tizen-studio_${TIZEN_STUDIO_VERSION}/${TIZEN_CLI_INSTALLER}"
+          chmod +x "$RUNNER_TEMP/tizen-dl/$TIZEN_CLI_INSTALLER"
+          "$RUNNER_TEMP/tizen-dl/$TIZEN_CLI_INSTALLER" --accept-license "$TIZEN_HOME"
+          echo "$TIZEN_HOME/tools/ide/bin" >> "$GITHUB_PATH"
+          echo "$TIZEN_HOME/tools" >> "$GITHUB_PATH"
+          # Certificate generator lives in an extra package of the web CLI install
+          "$TIZEN_HOME/package-manager/package-manager-cli.bin" install --accept-license CERT-ADD-ON || true
+
+      - name: Generate self-signed author + distributor certificate
+        run: |
+          set -euo pipefail
+          CERT_DIR="$RUNNER_TEMP/tizen-certs"
+          mkdir -p "$CERT_DIR"
+          PW="ci-$(openssl rand -hex 8)"
+          echo "::add-mask::$PW"
+          # Author cert: generated fresh every run (self-signed, throwaway)
+          tizen certificate -a YMPlayerCI -p "$PW" -c GB -n "YM Player CI" -f ymplayer-author -- "$CERT_DIR"
+          # Distributor cert: the public default distributor cert bundled with Tizen Studio
+          DIST="$TIZEN_HOME/tools/certificate-generator/certificates/distributor/tizen-distributor-signer.p12"
+          tizen security-profiles add -n ymplayer-ci \
+            -a "$CERT_DIR/ymplayer-author.p12" -p "$PW" \
+            -d "$DIST" -dp tizenpkcs12passwd
+          tizen security-profiles list
+
+      - name: Stage app files (excludes dev files)
+        run: |
+          set -euo pipefail
+          STAGE="$RUNNER_TEMP/ymplayer-app"
+          rm -rf "$STAGE"; mkdir -p "$STAGE"
+          # Only runtime files ship: config.xml, index.html, js/, css/, assets/
+          rsync -a \
+            --exclude='*.test.js' \
+            config.xml index.html js css assets "$STAGE/"
+          echo "STAGE=$STAGE" >> "$GITHUB_ENV"
+          find "$STAGE" -type f | sort
+
+      - name: tizen build-web + package .wgt
+        run: |
+          set -euo pipefail
+          cd "$STAGE"
+          tizen build-web -- .
+          mkdir -p "$GITHUB_WORKSPACE/out"
+          # build-web writes to .buildResult; package from there
+          tizen package -t wgt -s ymplayer-ci -o "$GITHUB_WORKSPACE/out" -- .buildResult
+          ls -l "$GITHUB_WORKSPACE/out"
+          WGT=$(ls "$GITHUB_WORKSPACE"/out/*.wgt | head -n1)
+          mv "$WGT" "$GITHUB_WORKSPACE/out/YMPlayer.wgt"
+          unzip -l "$GITHUB_WORKSPACE/out/YMPlayer.wgt"
+          # Guard: no tests/node_modules in the package
+          if unzip -l "$GITHUB_WORKSPACE/out/YMPlayer.wgt" | grep -E 'node_modules|\.test\.js|/test/'; then
+            echo "dev files leaked into the wgt"; exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: YMPlayer.wgt
+          path: out/YMPlayer.wgt
+
+      - name: Publish release (permanent latest link)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: YM Player Tizen v${{ github.run_number }}
+          files: out/YMPlayer.wgt
+          make_latest: true
