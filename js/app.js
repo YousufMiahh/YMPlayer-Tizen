@@ -1,6 +1,8 @@
 // YM Player entry point: view registry, router wiring, TV-remote key routing.
 import { router } from './router.js';
 import * as nav from './nav.js';
+import { loginView } from './views/login.js';
+import { setupView } from './views/setup.js';
 
 // Registry of views. Later tasks add entries here: name -> () => view.
 export const views = {
@@ -15,6 +17,18 @@ export const views = {
       unmount() { h = null; },
     };
   },
+  login: loginView,
+  setup: setupView,
+  // Placeholder: a later task replaces this with the real home screen.
+  home: () => ({
+    mount(root, params) {
+      const p = document.createElement('p');
+      p.id = 'home';
+      p.textContent = (params && params.status) || 'Home';
+      root.appendChild(p);
+    },
+    unmount() {},
+  }),
 };
 
 // Returns a dispose function that removes the global listeners.

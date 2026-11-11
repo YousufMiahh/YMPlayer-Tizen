@@ -1,0 +1,12 @@
+.login { max-width: 720px; margin: 0 auto; padding: 96px 0; display: flex; flex-direction: column; gap: 24px; }
+.login h1 { font-size: 56px; font-weight: 700; margin: 0 0 16px; }
+.login form { display: flex; flex-direction: column; gap: 20px; }
+.login label { display: flex; flex-direction: column; gap: 8px; font-size: 24px; font-weight: 500; opacity: .85; }
+.login input { font: inherit; font-size: 28px; color: #fff; background: #1b1b22; border: 3px solid transparent; border-radius: 12px; padding: 16px 20px; outline: none; }
+.login input:focus, .login button:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 4px rgba(10,132,255,.35); }
+.login .actions { display: flex; gap: 16px; margin-top: 8px; }
+.login button { font: inherit; font-size: 28px; font-weight: 600; color: #fff; background: #1b1b22; border: 3px solid transparent; border-radius: 12px; padding: 16px 32px; cursor: pointer; }
+.login button.primary { background: var(--accent); }
+.login .error { min-height: 36px; margin: 0; font-size: 24px; color: #ff6961; }
+.login .account { display: flex; align-items: center; gap: 16px; font-size: 28px; }
+.login .account span { flex: 1; }
