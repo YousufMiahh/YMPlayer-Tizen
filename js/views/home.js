@@ -16,7 +16,7 @@ export function openTarget(rowKey, items, index) {
 }
 
 export function homeView() {
-  let root; let onClick; let rows = [];
+  let root; let onClick; let onActivate; let rows = [];
   return {
     async mount(rootEl, params) {
       root = rootEl;
@@ -48,7 +48,8 @@ export function homeView() {
         if (row) openTarget(row.key, row.items, Number(t.dataset.tile));
       };
       root.addEventListener('click', onClick);
-      root.addEventListener('activate', (e) => { e.target.closest('button')?.click(); });
+      onActivate = (e) => { e.target.closest('button')?.click(); };
+      root.addEventListener('activate', onActivate);
       nav.register(root);
       nav.focusFirst(header);
 
@@ -74,6 +75,12 @@ export function homeView() {
         body.appendChild(sec);
       }
     },
-    unmount() { root = null; rows = []; },
+    unmount() {
+      if (root) {
+        if (onClick) root.removeEventListener('click', onClick);
+        if (onActivate) root.removeEventListener('activate', onActivate);
+      }
+      root = null; rows = []; onClick = onActivate = null;
+    },
   };
 }

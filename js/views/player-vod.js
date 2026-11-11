@@ -31,7 +31,7 @@ export function playerVodView() {
 
   function showControls() {
     clearTimeout(timer);
-    dur = store.duration(item) || dur;
+    dur = store.duration(item) || dur; // begin() resets dur per item
     controls.querySelector('.title').textContent = item.parentName ? `${item.parentName} — ${item.name}` : item.name;
     controls.hidden = false;
     paint();
@@ -42,6 +42,7 @@ export function playerVodView() {
     prompt.hidden = true;
     errorEl.hidden = true;
     pos = startMs; paused = false;
+    dur = store.duration(item) || 0; // each item starts from its own stored duration
     store.addHistory(item);
     player.stop(); // contract: release any previous session before opening the next
     player.open(item, { startMs });

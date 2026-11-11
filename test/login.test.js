@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
+vi.mock('../js/home-rows.js', () => ({ clearCache: vi.fn() }));
 vi.mock('../js/api.js', async (orig) => ({ ...(await orig()), login: vi.fn() }));
 
 import * as api from '../js/api.js';
 import * as store from '../js/store.js';
 import { router } from '../js/router.js';
 import { loginView } from '../js/views/login.js';
+import { clearCache } from '../js/home-rows.js';
 import { setupView, label } from '../js/views/setup.js';
 
 const GOOD = { user_info: { status: 'Active', exp_date: '1893456000', active_cons: '1', max_connections: '2' } };
@@ -29,10 +31,27 @@ beforeEach(() => {
   router.register('setup', setupView);
   router.register('home', () => ({ mount(r) { r.innerHTML = '<p id="home"></p>'; }, unmount() {} }));
   api.login.mockReset();
+  clearCache.mockClear();
 });
 afterEach(() => router.reset());
 
 describe('login view', () => {
+  it('clears Home cache once on successful login only', async () => {
+    api.login.mockResolvedValueOnce(GOOD);
+    router.go('login');
+    fill('[name=server]', 'h'); fill('[name=user]', 'u'); fill('[name=pass]', 'p');
+    submit();
+    await tick();
+    expect(clearCache).toHaveBeenCalledTimes(1);
+    clearCache.mockClear();
+    api.login.mockRejectedValueOnce(new Error('bad'));
+    router.go('login', { new: true });
+    fill('[name=server]', 'h2'); fill('[name=user]', 'u'); fill('[name=pass]', 'p');
+    submit();
+    await tick();
+    expect(clearCache).not.toHaveBeenCalled();
+  });
+
   it('saves + selects the account BEFORE calling login, then marks ok and goes home', async () => {
     let seen;
     api.login.mockImplementation(async () => { seen = { ...store.current() }; return GOOD; });

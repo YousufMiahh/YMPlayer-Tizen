@@ -51,12 +51,27 @@ describe('settings view', () => {
     addAccounts();
     router.go('settings');
     const keys = [...root.querySelectorAll('[data-home]')].map((b) => b.dataset.home);
-    expect(keys).toEqual(store.HOME_KEYS);
+    expect(keys).toEqual(store.HOME_KEYS.filter((k) => k !== 'top_movies' && k !== 'top_series'));
     expect(store.homeShows('fav_movie')).toBe(true);
     click('[data-home="fav_movie"]');
     expect(store.homeShows('fav_movie')).toBe(false);
     click('[data-home="fav_movie"]');
     expect(store.homeShows('fav_movie')).toBe(true);
+  });
+
+  it('Customise Home shows the Top 10 toggles only when a TMDB key exists', () => {
+    addAccounts();
+    router.go('settings');
+    expect(root.querySelector('[data-home="top_movies"]')).toBeNull();
+    expect(root.querySelector('[data-home="top_series"]')).toBeNull();
+    router.reset(); router.init(root);
+    router.register('settings', settingsView); router.register('setup', setupView);
+    globalThis.YM_KEYS = { tmdb: 'k' };
+    try {
+      router.go('settings');
+      expect(root.querySelector('[data-home="top_movies"]')).not.toBeNull();
+      expect(root.querySelector('[data-home="top_series"]')).not.toBeNull();
+    } finally { delete globalThis.YM_KEYS; }
   });
 
   it('user-agent edits persist and are what the next api request will send', () => {

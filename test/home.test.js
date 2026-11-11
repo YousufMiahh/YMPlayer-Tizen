@@ -32,6 +32,22 @@ beforeEach(() => {
 });
 afterEach(() => router.reset());
 
+describe('home listeners', () => {
+  it('unmount removes click/activate handlers from the shared root', async () => {
+    router.go('home');
+    await tick();
+    const go = vi.spyOn(router, 'go');
+    router.go('settings'); // unmounts home
+    go.mockClear();
+    const b = document.createElement('button');
+    b.dataset.menu = 'live';
+    root.appendChild(b);
+    b.click();
+    b.dispatchEvent(new Event('activate', { bubbles: true }));
+    expect(go).not.toHaveBeenCalled();
+  });
+});
+
 describe('home rows', () => {
   it('renders only non-empty rows whose homeShows is true', async () => {
     store.toggleFav({ type: 'live', id: 'c1', name: 'BBC' });

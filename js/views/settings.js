@@ -1,6 +1,7 @@
 // Settings: playback, subtitles, Customise Home, theme, accounts. Every control writes straight to the store.
 import * as store from '../store.js';
 import * as nav from '../nav.js';
+import { hasTmdb } from '../keys.js';
 import { mountAccounts } from './setup.js';
 
 const COLORS = ['White', 'Yellow', 'Green', 'Cyan', 'Blue', 'Red'];
@@ -87,6 +88,7 @@ export function settingsView() {
 
       const home = section(el, 'Customise Home');
       for (const k of store.HOME_KEYS) {
+        if (!hasTmdb() && (k === 'top_movies' || k === 'top_series')) continue; // no-ops without a TMDB key
         const r = row(store.HOME_NAMES[k]);
         const b = document.createElement('button');
         b.type = 'button'; b.dataset.home = k; b.textContent = onOff(store.homeShows(k));
