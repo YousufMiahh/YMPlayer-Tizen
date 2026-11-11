@@ -21,7 +21,9 @@ export function register(container) {
 }
 
 function isVisible(el) {
-  if (el.disabled || el.hidden) return false;
+  if (el.disabled || el.hidden || el.inert) return false;
+  if (el.getAttribute('aria-disabled') === 'true') return false;
+  if (getComputedStyle(el).visibility === 'hidden') return false;
   const r = el.getBoundingClientRect();
   return r.width > 0 && r.height > 0;
 }
@@ -40,6 +42,7 @@ function allFocusables() {
 }
 
 export function focusFirst(container) {
+  if (!container) return false;
   const el = focusables(container)[0];
   if (el) el.focus();
   return !!el;
@@ -60,7 +63,10 @@ export function moveFocus(dir) {
   const cc = center(cr);
   const horiz = dir === 'left' || dir === 'right';
   const sign = dir === 'right' || dir === 'down' ? 1 : -1;
-  let best = null, bestScore = Infinity;
+  // Pass 1: candidates whose cross-axis span overlaps the current element
+  // (so Right at a row end never drops into the row below).
+  // Pass 2 (so focus is never stranded): a narrow cone (across <= along/2, ~27 degrees).
+  const pass1 = [], pass2 = [];
   for (const el of all) {
     if (el === cur) continue;
     const r = el.getBoundingClientRect();
@@ -69,17 +75,39 @@ export function moveFocus(dir) {
     if (along <= 0) continue; // not in that direction
     const across = Math.abs(horiz ? c.y - cc.y : c.x - cc.x);
     // Perpendicular drift is penalised so aligned items beat closer diagonal ones.
-    const score = along + across * 3;
-    if (score < bestScore) { bestScore = score; best = el; }
+    const cand = { el, score: along + across * 3 };
+    const overlap = horiz
+      ? r.top < cr.bottom && r.bottom > cr.top
+      : r.left < cr.right && r.right > cr.left;
+    if (overlap) pass1.push(cand);
+    else if (across <= along / 2) pass2.push(cand);
   }
+  const pool = pass1.length ? pass1 : pass2;
+  let best = null;
+  for (const cand of pool) if (!best || cand.score < best.score) best = cand;
   if (!best) return false;
-  best.focus();
-  return true;
+  best.el.focus();
+  return document.activeElement === best.el;
+}
+
+const TEXT_TYPES = new Set(['text', 'search', 'url', 'email', 'password', 'number', 'tel']);
+function isTextField(el) {
+  if (!el) return false;
+  if (el.tagName === 'TEXTAREA') return true;
+  return el.tagName === 'INPUT' && TEXT_TYPES.has((el.getAttribute('type') || 'text').toLowerCase());
+}
+
+function eventTarget() {
+  const a = document.activeElement;
+  return a && a !== document.body ? a : document;
 }
 
 export function onKey(e) {
   const code = e.keyCode;
   const dir = DIR_BY_KEY[code];
+  if (isTextField(document.activeElement) && (code === KEY_LEFT || code === KEY_RIGHT || code === KEY_ENTER)) {
+    return false; // let the caret move / IME / form submit work
+  }
   if (dir) {
     e.preventDefault();
     moveFocus(dir);
@@ -87,14 +115,12 @@ export function onKey(e) {
   }
   if (code === KEY_ENTER) {
     e.preventDefault();
-    const target = document.activeElement && document.activeElement !== document.body ? document.activeElement : document;
-    target.dispatchEvent(new CustomEvent('activate', { bubbles: true }));
+    eventTarget().dispatchEvent(new CustomEvent('activate', { bubbles: true }));
     return true;
   }
   if (code === KEY_BACK || code === KEY_ESC) {
     e.preventDefault();
-    const target = document.activeElement && document.activeElement !== document.body ? document.activeElement : document;
-    target.dispatchEvent(new CustomEvent('back', { bubbles: true }));
+    eventTarget().dispatchEvent(new CustomEvent('back', { bubbles: true }));
     return true;
   }
   return false;

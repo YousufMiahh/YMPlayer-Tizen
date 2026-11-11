@@ -8,12 +8,6 @@ function box(el, x, y, w = 100, h = 50) {
   });
   return el;
 }
-function btn(id, x, y, w, h) {
-  const b = document.createElement('button');
-  b.id = id;
-  document.body.appendChild(b);
-  return box(b, x, y, w, h);
-}
 const key = (keyCode) => ({ keyCode, preventDefault: vi.fn() });
 
 let c;
@@ -121,5 +115,94 @@ describe('nav', () => {
     globalThis.tizen = { tvinputdevice: { registerKey: reg } };
     registerTizenKeys();
     expect(reg).toHaveBeenCalledWith('MediaPlayPause');
+  });
+
+  it('left/right and Enter pass through when a text input is focused', () => {
+    const a = box(document.createElement('input'), 0, 0); a.type = 'password';
+    const b = box(document.createElement('button'), 0, 100);
+    c.append(a, b); register(c); a.focus();
+    for (const k of [37, 39, 13]) {
+      const ev = key(k);
+      expect(onKey(ev)).toBe(false);
+      expect(ev.preventDefault).not.toHaveBeenCalled();
+    }
+    expect(onKey(key(40))).toBe(true);
+    expect(document.activeElement).toBe(b);
+    const ta = box(document.createElement('textarea'), 0, 200); c.append(ta); ta.focus();
+    expect(onKey(key(37))).toBe(false);
+  });
+
+  it('arrows and Enter still handled when a button is focused', () => {
+    grid();
+    const ev = key(37);
+    expect(onKey(ev)).toBe(true);
+    expect(ev.preventDefault).toHaveBeenCalled();
+  });
+
+  it('skips visibility:hidden, aria-disabled and inert candidates', () => {
+    const a = box(document.createElement('button'), 0, 0); a.id = 'a';
+    const h = box(document.createElement('button'), 120, 0); h.id = 'h'; h.style.visibility = 'hidden';
+    const ad = box(document.createElement('button'), 240, 0); ad.id = 'ad'; ad.setAttribute('aria-disabled', 'true');
+    const inr = box(document.createElement('button'), 360, 0); inr.id = 'in'; inr.inert = true;
+    const t = box(document.createElement('button'), 500, 0); t.id = 't';
+    c.append(a, h, ad, inr, t); register(c); a.focus();
+    expect(moveFocus('right')).toBe(true);
+    expect(document.activeElement.id).toBe('t');
+  });
+
+  it('returns false when the chosen element refuses focus', () => {
+    const a = box(document.createElement('button'), 0, 0);
+    const b = box(document.createElement('button'), 200, 0);
+    b.focus = () => {};
+    c.append(a, b); register(c); a.focus();
+    expect(moveFocus('right')).toBe(false);
+    expect(document.activeElement).toBe(a);
+  });
+
+  it('does not drop into the next row at the end of a ragged row', () => {
+    const mk = (id, x, y) => { const e = box(document.createElement('button'), x, y); e.id = id; c.append(e); return e; };
+    const a = mk('a', 0, 0); mk('b', 120, 0); mk('r2', 150, 100); mk('r2b', 300, 100);
+    register(c); a.focus(); moveFocus('right');
+    expect(document.activeElement.id).toBe('b');
+    expect(moveFocus('right')).toBe(false);
+    expect(document.activeElement.id).toBe('b');
+  });
+
+  it('falls back to a diagonal-cone candidate when nothing overlaps', () => {
+    const a = box(document.createElement('button'), 0, 0); a.id = 'a';
+    const d = box(document.createElement('button'), 300, 80); d.id = 'd';
+    c.append(a, d); register(c); a.focus();
+    expect(moveFocus('right')).toBe(true);
+    expect(document.activeElement.id).toBe('d');
+  });
+
+  it('activate and back bubble to an ancestor', () => {
+    grid();
+    const fn = vi.fn(), bk = vi.fn();
+    c.addEventListener('activate', fn); c.addEventListener('back', bk);
+    onKey(key(13)); onKey(key(27));
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(bk).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to document when nothing is focused', () => {
+    grid(); document.activeElement.blur();
+    const fn = vi.fn();
+    document.addEventListener('activate', fn);
+    expect(onKey(key(13))).toBe(true);
+    expect(fn).toHaveBeenCalledTimes(1);
+    document.removeEventListener('activate', fn);
+  });
+
+  it('focusFirst(null) and register(null) do not throw', () => {
+    expect(() => focusFirst(null)).not.toThrow();
+    expect(() => register(null)).not.toThrow();
+  });
+
+  it('swallows a throwing registerKey and tolerates missing tvinputdevice', () => {
+    globalThis.tizen = { tvinputdevice: { registerKey: () => { throw new Error('x'); } } };
+    expect(() => registerTizenKeys()).not.toThrow();
+    globalThis.tizen = {};
+    expect(() => registerTizenKeys()).not.toThrow();
   });
 });
