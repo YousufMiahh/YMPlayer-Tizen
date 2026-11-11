@@ -6,7 +6,8 @@ const containers = new Set();
 
 const KEY_LEFT = 37, KEY_UP = 38, KEY_RIGHT = 39, KEY_DOWN = 40, KEY_ENTER = 13, KEY_BACK = 10009, KEY_ESC = 27;
 const DIR_BY_KEY = { [KEY_LEFT]: 'left', [KEY_UP]: 'up', [KEY_RIGHT]: 'right', [KEY_DOWN]: 'down' };
-const TIZEN_KEYS = ['MediaPlay', 'MediaPause', 'MediaPlayPause', 'MediaStop', 'MediaFastForward', 'MediaRewind'];
+const TIZEN_KEYS = ['MediaPlay', 'MediaPause', 'MediaPlayPause', 'MediaStop', 'MediaFastForward', 'MediaRewind',
+  'ChannelUp', 'ChannelDown', 'Menu'];
 
 export function registerTizenKeys() {
   const t = globalThis.tizen;

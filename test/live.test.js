@@ -104,6 +104,34 @@ describe('live browse', () => {
     expect(store.isFav({ type: 'live', id: '11' })).toBe(false);
   });
 
+  it('short OK opens the channel; held OK toggles favourite without opening it', async () => {
+    vi.useFakeTimers();
+    try {
+      const spy = vi.fn();
+      router.register('player-live', () => ({ mount(r, p) { spy(p); }, unmount() {} }));
+      router.go('live', {});
+      await vi.advanceTimersByTimeAsync(0);
+      catBtn('1').click();
+      await vi.advanceTimersByTimeAsync(0);
+      rows()[1].focus();
+      const up = () => document.dispatchEvent(new KeyboardEvent('keyup', { keyCode: 13, bubbles: true }));
+      // hold
+      expect(key(13)).toBe(true);
+      key(13, { repeat: true });
+      vi.advanceTimersByTime(700);
+      up();
+      expect(store.isFav({ type: 'live', id: '11' })).toBe(true);
+      expect(spy).not.toHaveBeenCalled();
+      // short press
+      key(13);
+      vi.advanceTimersByTime(100);
+      up();
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy.mock.calls[0][0].index).toBe(1);
+      expect(store.isFav({ type: 'live', id: '11' })).toBe(true);
+    } finally { vi.useRealTimers(); }
+  });
+
   it('Menu key on a category toggles favourite category', async () => {
     router.go('live', {});
     await tick();
@@ -168,12 +196,14 @@ describe('live player', () => {
   it('Up goes back and wraps; CH+/CH- also zap', () => {
     mountPlayer(0);
     vi.clearAllMocks();
+    const order = [];
+    player.stop.mockImplementation(() => order.push('stop'));
+    player.open.mockImplementation((i) => order.push(`open:${i.id}`));
     key(38);
-    expect(player.open.mock.calls[0][0].id).toBe('20'); // wrapped to last
+    expect(order).toEqual(['stop', 'open:20']); // wrapped to last
     key(427); // CH+
-    expect(player.open.mock.calls[1][0].id).toBe('10');
     key(428); // CH-
-    expect(player.open.mock.calls[2][0].id).toBe('20');
+    expect(order).toEqual(['stop', 'open:20', 'stop', 'open:10', 'stop', 'open:20']);
   });
 
   it('OK shows the info overlay with Now/Next from api.epg', async () => {

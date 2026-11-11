@@ -209,3 +209,15 @@ describe('nav', () => {
     expect(() => registerTizenKeys()).not.toThrow();
   });
 });
+
+describe('tizen key registration', () => {
+  it('registers channel and menu keys, tolerating unsupported ones', async () => {
+    const calls = [];
+    globalThis.tizen = { tvinputdevice: { registerKey: (k) => { calls.push(k); if (k === 'Menu') throw new Error('unsupported'); } } };
+    try {
+      const { registerTizenKeys } = await import('../js/nav.js');
+      expect(() => registerTizenKeys()).not.toThrow();
+      expect(calls).toEqual(expect.arrayContaining(['ChannelUp', 'ChannelDown', 'Menu', 'MediaPlay']));
+    } finally { delete globalThis.tizen; }
+  });
+});

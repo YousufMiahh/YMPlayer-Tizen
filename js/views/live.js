@@ -7,10 +7,13 @@ import { router } from '../router.js';
 import { LIVE } from '../item.js';
 
 const KEY_MENU = 10133;
+const KEY_ENTER = 13;
+const HOLD_MS = 600; // long-press OK toggles favourite instead of opening
 const EAGER_EPG = 8; // rows whose Now/Next is fetched up front; the rest load when focused
 
 export function liveView() {
   let root; let railEl; let listEl; let params; let cats = []; let channels = [];
+  let holdTimer = null; let held = false; let onKeyUp;
   let loadSeq = 0; let epgCache; let onClick; let onActivate; let onBack; let onFocusIn;
 
   const catBtn = (id) => railEl.querySelector(`[data-cat="${id}"]`);
@@ -134,6 +137,15 @@ export function liveView() {
           (catBtn(params?.categoryId) || railEl.querySelector('[data-cat]'))?.focus();
         }
       };
+      onKeyUp = (e) => {
+        if (e.keyCode !== KEY_ENTER) return;
+        const wasHold = held;
+        const pending = holdTimer !== null;
+        clearTimeout(holdTimer); holdTimer = null; held = false;
+        const el = document.activeElement;
+        if (pending && !wasHold && root && root.contains(el) && el.matches('[data-cat], [data-channel]')) el.click();
+      };
+      document.addEventListener('keyup', onKeyUp);
       root.addEventListener('click', onClick);
       root.addEventListener('activate', onActivate);
       root.addEventListener('focusin', onFocusIn);
@@ -153,12 +165,25 @@ export function liveView() {
       }
     },
     onKey(e) {
-      if (e.keyCode !== KEY_MENU) return false;
-      e.preventDefault();
-      return toggleFavourite();
+      if (e.keyCode === KEY_MENU) {
+        e.preventDefault();
+        return toggleFavourite();
+      }
+      // OK is decided on release: short press activates, a hold (HOLD_MS) toggles favourite.
+      if (e.keyCode === KEY_ENTER && root && root.contains(document.activeElement)
+          && document.activeElement.matches('[data-cat], [data-channel]')) {
+        e.preventDefault();
+        if (!e.repeat && holdTimer === null && !held) {
+          holdTimer = setTimeout(() => { holdTimer = null; held = true; toggleFavourite(); }, HOLD_MS);
+        }
+        return true;
+      }
+      return false;
     },
     unmount() {
       loadSeq++;
+      clearTimeout(holdTimer); holdTimer = null; held = false;
+      document.removeEventListener('keyup', onKeyUp);
       if (root) {
         root.removeEventListener('click', onClick);
         root.removeEventListener('activate', onActivate);
