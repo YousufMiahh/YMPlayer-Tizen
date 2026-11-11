@@ -12,6 +12,7 @@ import { movieDetailView } from './views/movie-detail.js';
 import { seriesDetailView } from './views/series-detail.js';
 import { homeView } from './views/home.js';
 import { playerVodView } from './views/player-vod.js';
+import { searchView } from './views/search.js';
 
 const SPLASH_MS = 600;
 
@@ -40,6 +41,7 @@ export const views = {
   'series-detail': seriesDetailView,
   'player-vod': playerVodView,
   home: homeView,
+  search: searchView,
 };
 
 // Returns a dispose function that removes the global listeners.

@@ -5,6 +5,7 @@ import * as store from '../store.js';
 import * as nav from '../nav.js';
 import { router } from '../router.js';
 import { LIVE } from '../item.js';
+import * as favourites from '../favourites.js';
 
 const KEY_MENU = 10133;
 const KEY_ENTER = 13;
@@ -18,17 +19,7 @@ export function liveView() {
 
   const catBtn = (id) => railEl.querySelector(`[data-cat="${id}"]`);
 
-  function renderRail() {
-    const fav = (c) => store.isFavCategory(LIVE, c.id);
-    const ordered = [...cats.filter(fav), ...cats.filter((c) => !fav(c))];
-    railEl.replaceChildren(...ordered.map((c) => {
-      const b = document.createElement('button');
-      b.type = 'button'; b.dataset.cat = c.id;
-      b.className = `cat${fav(c) ? ' fav' : ''}`;
-      b.textContent = (fav(c) ? '★ ' : '') + c.name;
-      return b;
-    }));
-  }
+  function renderRail() { railEl.replaceChildren(...favourites.railButtons(LIVE, cats)); }
 
   function fillEpg(row, ch) {
     if (epgCache.has(ch.id)) return;
@@ -93,15 +84,11 @@ export function liveView() {
     if (el.dataset.channel) {
       const ch = channels.find((c) => c.id === el.dataset.channel);
       if (!ch) return false;
-      el.classList.toggle('fav', store.toggleFav(ch));
+      favourites.toggleItem(ch, el);
       return true;
     }
     if (el.dataset.cat) {
-      store.toggleFavCategory(LIVE, el.dataset.cat);
-      renderRail();
-      const b = catBtn(el.dataset.cat);
-      if (b) b.focus();
-      if (params?.categoryId) catBtn(params.categoryId)?.classList.add('selected');
+      favourites.toggleCategory(LIVE, el.dataset.cat, railEl, cats, params?.categoryId);
       return true;
     }
     return false;

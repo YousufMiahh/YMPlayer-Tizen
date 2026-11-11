@@ -5,6 +5,7 @@ import * as store from '../store.js';
 import * as nav from '../nav.js';
 import { router } from '../router.js';
 import { MOVIE } from '../item.js';
+import * as favourites from '../favourites.js';
 
 const KEY_MENU = 10133;
 const KEY_ENTER = 13;
@@ -19,17 +20,7 @@ export function vodBrowseView(type, detail) {
 
     const catBtn = (id) => railEl.querySelector(`[data-cat="${id}"]`);
 
-    function renderRail() {
-      const fav = (c) => store.isFavCategory(type, c.id);
-      const ordered = [...cats.filter(fav), ...cats.filter((c) => !fav(c))];
-      railEl.replaceChildren(...ordered.map((c) => {
-        const b = document.createElement('button');
-        b.type = 'button'; b.dataset.cat = c.id;
-        b.className = `cat${fav(c) ? ' fav' : ''}`;
-        b.textContent = (fav(c) ? '★ ' : '') + c.name;
-        return b;
-      }));
-    }
+    function renderRail() { railEl.replaceChildren(...favourites.railButtons(type, cats)); }
 
     function renderCard(it) {
       const b = document.createElement('button');
@@ -74,14 +65,11 @@ export function vodBrowseView(type, detail) {
       if (el.dataset.item) {
         const it = items.find((i) => i.id === el.dataset.item);
         if (!it) return false;
-        el.classList.toggle('fav', store.toggleFav(it));
+        favourites.toggleItem(it, el);
         return true;
       }
       if (el.dataset.cat) {
-        store.toggleFavCategory(type, el.dataset.cat);
-        renderRail();
-        catBtn(el.dataset.cat)?.focus();
-        if (params?.categoryId) catBtn(params.categoryId)?.classList.add('selected');
+        favourites.toggleCategory(type, el.dataset.cat, railEl, cats, params?.categoryId);
         return true;
       }
       return false;
