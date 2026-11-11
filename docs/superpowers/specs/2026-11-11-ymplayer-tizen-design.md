@@ -14,7 +14,7 @@ Reimplement the user's existing Fire TV / Android TV app **YM Player** (repo `Yo
 This is a **reimplementation, not a code port**: Tizen apps are web apps (HTML/CSS/JS), so none of the Java transfers directly. What carries over is the **theme**, the **Xtream API contract**, the **UX/screen structure**, and the **data model**.
 
 ### Goals
-- Full feature parity with the Android app in v1 (Live TV + EPG, Movies, Series, Favourites, Search, Settings, and the Extras: Top 10, Ambient, Trailers, QR add-from-phone).
+- Feature parity with the Android app in v1 (Live TV + EPG, Movies, Series, Favourites, Search, Settings, Ambient, QR add-from-phone). Top 10 and Trailers are built but key-gated and hidden by default — see §7 (no external keys for v1).
 - Identical look: dark `#0B0B0F` background, iOS-blue `#0A84FF` accent, Inter font family.
 - Install over the network (no USB), via Vetro, as a signed `.wgt`.
 - Its own GitHub repo (`YMPlayer-Tizen`) with a GitHub Actions build producing a latest-release `.wgt` link, mirroring the APK workflow.
@@ -113,7 +113,11 @@ Custom spatial-focus engine: arrow keys move focus to the nearest focusable in t
 - **Repo:** `YMPlayer-Tizen` (new, public — so the release `.wgt` link is fetchable, same reasoning as the APK repo).
 - **GitHub Actions** (`.github/workflows/build.yml`): install Tizen CLI (tizen-studio CLI / `tizen` + `sdb`), build and sign the `.wgt`, attach it to a release so `…/releases/latest/download/YMPlayer.wgt` is a permanent link.
 - **Signing:** a self-signed Tizen author+distributor certificate generated in CI. Because the S90D is **rooted** (via Vetro/APL), a self-signed `.wgt` installs without a Samsung partner certificate.
-- **External API keys (optional, like APL):** Top 10 / trending and artwork need a TMDB key; Trailers need a YouTube key. Without them, those Extra rows degrade gracefully (hidden / disabled), exactly as the "Recently Added" and library rows still work from Xtream alone. Keys supplied as GitHub Actions secrets at build time.
+- **External API keys — DECISION: none for v1.** The user has chosen to skip TMDB/YouTube keys. Consequences:
+  - **Top 10 Movies/Series** (home rows `top_movies`/`top_series` and the Top 10 Extra) require TMDB trending + library matching → **hidden by default**. The row toggles and code paths exist but stay dark unless a TMDB key is ever supplied.
+  - **Trailers** require YouTube → **disabled** (no trailer affordance shown).
+  - **Everything else ships and works from Xtream alone:** Live + EPG, Movies, Series, Favourites, Search, Continue Watching, Recent Channels, Recently Added, Settings, **Ambient** (uses Xtream poster/backdrop artwork only), and **QR add-from-phone**.
+  - Graceful degradation is the rule: a missing key hides its feature, never breaks a screen. Keys can be added later as GitHub Actions secrets to light these up without code changes.
 
 ---
 
@@ -153,5 +157,5 @@ Nothing is pushed to GitHub until the user says "push".
 
 - **AVPlay codec coverage** vs VLC (see §5) — resolved only on-device.
 - **User-agent header** support in AVPlay for providers that demand it — verify early; document if unsupported.
-- **Top 10 / Trailers** depend on external keys; confirm the user wants these wired (and will supply TMDB/YouTube keys) or accept them degrading gracefully.
+- **Top 10 / Trailers** — resolved: no keys for v1, both degrade gracefully (hidden/disabled). Can be enabled later via Actions secrets.
 - **Vetro `.wgt` install path** on this exact firmware — confirm during deployment; `sdb` is the fallback.
