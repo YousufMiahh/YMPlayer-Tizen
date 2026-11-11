@@ -76,15 +76,13 @@ async function readArray(url, onObject) {
   let inStr = false;
   let esc = false;
   let buf = ''; // text of the object currently being read
-  let first = true;
   const feed = (chunk) => {
     let start = 0; // where the pending slice of `chunk` begins (when depth > 0)
     for (let i = 0; i < chunk.length; i++) {
       const c = chunk[i];
       if (!started) {
         if (c === '[') started = true;
-        else if (!/\s/.test(c) && first) return false; // not an array
-        first = false;
+        else if (!/[\s\uFEFF]/.test(c)) return false; // not an array (BOM/whitespace tolerated)
         start = i + 1;
         continue;
       }
@@ -217,7 +215,9 @@ function b64(s) {
   try {
     const bin = atob(s.replace(/\s+/g, ''));
     const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
-    return new TextDecoder('utf-8', { fatal: true }).decode(bytes).trim();
+    const out = new TextDecoder('utf-8', { fatal: true }).decode(bytes).trim();
+    // Plain text that merely looks like base64 decodes to junk: keep the original then.
+    return /[\x00-\x08\x0e-\x1f\uFFFD]/.test(out) ? s : out;
   } catch {
     return s;
   }

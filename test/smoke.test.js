@@ -25,6 +25,7 @@ describe('scaffold smoke test', () => {
 
   it('config.xml targets Tizen 7.0 with required privileges', () => {
     const xml = read('../config.xml');
+    expect(xml).toMatch(/<access\s+origin="\*"/);
     expect(xml).toContain('required_version="7.0"');
     for (const p of ['internet', 'tv.inputdevice', 'application.launch']) {
       expect(xml).toContain(`http://tizen.org/privilege/${p}`);

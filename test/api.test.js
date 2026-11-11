@@ -195,6 +195,26 @@ describe('epg', () => {
   });
 });
 
+describe('robustness fixes', () => {
+  it('plain titles that look like base64 are kept', async () => {
+    const t = now();
+    mockFetch({ epg_listings: [{ title: 'Film', description: 'Test', start_timestamp: t, stop_timestamp: t + 60 }] });
+    const [p] = await api.epg('1');
+    expect(p.title).toBe('Film');
+    expect(p.desc).toBe('Test');
+  });
+  it('whitespace/BOM-prefixed error object with a nested array returns []', async () => {
+    mockFetch('\n  {"user_info":{"auth":0},"x":[{"stream_id":1,"name":"n"}]}');
+    expect(await api.streams('live')).toEqual([]);
+    mockFetch('\uFEFF{"x":[{"category_id":"1","category_name":"c"}]}');
+    expect(await api.categories('live')).toEqual([]);
+  });
+  it('whitespace/BOM-prefixed real array still parses', async () => {
+    mockFetch('\uFEFF \n[{"stream_id":1,"name":"n"}]');
+    expect(await api.streams('live')).toHaveLength(1);
+  });
+});
+
 describe('playUrl', () => {
   it('produces the three exact shapes', () => {
     login('http://h.com:80', 'bob', 'pw');

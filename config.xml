@@ -3,6 +3,7 @@
         id="https://ymplayer.app/YMPlayer" version="0.1.0" viewmodes="maximized">
   <tizen:application id="YMPlayr001.YMPlayer" package="YMPlayr001" required_version="7.0"/>
   <content src="index.html"/>
+  <access origin="*" subdomains="true"/>
   <feature name="http://tizen.org/feature/screen.size.all"/>
   <icon src="assets/logo.png"/>
   <name>YM Player</name>
