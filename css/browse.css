@@ -1,0 +1,28 @@
+.live { display: flex; height: 100%; }
+.live .rail { width: 440px; padding: 48px 24px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; background: #101016; }
+.live .cat { font: inherit; font-size: 28px; text-align: left; color: #fff; background: transparent; border: 3px solid transparent; border-radius: 12px; padding: 14px 20px; cursor: pointer; opacity: .75; }
+.live .cat.selected { background: #1b1b22; opacity: 1; }
+.live .cat.fav { color: #ffd60a; }
+.live .channels { flex: 1; padding: 48px 56px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+.live .channel { display: flex; align-items: center; gap: 24px; font: inherit; color: #fff; text-align: left; background: #1b1b22; border: 3px solid transparent; border-radius: 14px; padding: 12px 24px; cursor: pointer; }
+.live .channel .logo { width: 96px; height: 64px; display: flex; align-items: center; justify-content: center; flex: none; }
+.live .channel .logo img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.live .channel .num { width: 64px; font-size: 24px; opacity: .6; flex: none; }
+.live .channel .name { width: 420px; font-size: 30px; font-weight: 600; flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live .channel .epg { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 24px; }
+.live .channel .epg .now, .live .channel .epg .next { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live .channel .epg .next { opacity: .55; }
+.live .channel.fav .name::after { content: ' ★'; color: #ffd60a; }
+.live .cat:focus, .live .channel:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 4px rgba(10,132,255,.35); }
+.live .empty { font-size: 28px; opacity: .6; }
+
+/* Video plays on the AVPlay plane behind the page, so the page must be see-through. */
+body.video-on, body.video-on #root { background: transparent; }
+#av { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+.live-player { position: relative; width: 100%; height: 100%; }
+.live-info { position: absolute; left: 80px; right: 80px; bottom: 80px; padding: 28px 36px; border-radius: 20px; background: rgba(11,11,15,.82); font-size: 28px; }
+.live-info .ch { font-size: 36px; font-weight: 700; margin-bottom: 12px; }
+.live-info .bar { height: 6px; background: rgba(255,255,255,.2); border-radius: 3px; margin-bottom: 14px; }
+.live-info .bar > i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 3px; }
+.live-info .next { opacity: .6; }
+.live-error { position: absolute; top: 80px; left: 0; right: 0; text-align: center; font-size: 36px; margin: 0; }

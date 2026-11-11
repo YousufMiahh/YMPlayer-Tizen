@@ -4,6 +4,8 @@ import * as nav from './nav.js';
 import * as store from './store.js';
 import { loginView } from './views/login.js';
 import { setupView } from './views/setup.js';
+import { liveView } from './views/live.js';
+import { playerLiveView } from './views/player-live.js';
 
 const SPLASH_MS = 600;
 
@@ -24,6 +26,8 @@ export const views = {
   },
   login: loginView,
   setup: setupView,
+  live: liveView,
+  'player-live': playerLiveView,
   // Placeholder: a later task replaces this with the real home screen.
   home: () => ({
     mount(root, params) {
