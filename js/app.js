@@ -6,6 +6,11 @@ import { loginView } from './views/login.js';
 import { setupView } from './views/setup.js';
 import { liveView } from './views/live.js';
 import { playerLiveView } from './views/player-live.js';
+import { moviesView } from './views/movies.js';
+import { seriesView } from './views/series.js';
+import { movieDetailView } from './views/movie-detail.js';
+import { seriesDetailView } from './views/series-detail.js';
+import { playerVodView } from './views/player-vod.js';
 
 const SPLASH_MS = 600;
 
@@ -28,6 +33,11 @@ export const views = {
   setup: setupView,
   live: liveView,
   'player-live': playerLiveView,
+  movies: moviesView,
+  series: seriesView,
+  'movie-detail': movieDetailView,
+  'series-detail': seriesDetailView,
+  'player-vod': playerVodView,
   // Placeholder: a later task replaces this with the real home screen.
   home: () => ({
     mount(root, params) {
