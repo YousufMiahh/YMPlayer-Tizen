@@ -143,9 +143,10 @@ describe('nav', () => {
     const a = box(document.createElement('button'), 0, 0); a.id = 'a';
     const h = box(document.createElement('button'), 120, 0); h.id = 'h'; h.style.visibility = 'hidden';
     const ad = box(document.createElement('button'), 240, 0); ad.id = 'ad'; ad.setAttribute('aria-disabled', 'true');
-    const inr = box(document.createElement('button'), 360, 0); inr.id = 'in'; inr.inert = true;
+    const wrap = document.createElement('div'); wrap.setAttribute('inert', '');
+    const inr = box(document.createElement('button'), 360, 0); inr.id = 'in'; wrap.append(inr);
     const t = box(document.createElement('button'), 500, 0); t.id = 't';
-    c.append(a, h, ad, inr, t); register(c); a.focus();
+    c.append(a, h, ad, wrap, t); register(c); a.focus();
     expect(moveFocus('right')).toBe(true);
     expect(document.activeElement.id).toBe('t');
   });
@@ -161,18 +162,20 @@ describe('nav', () => {
 
   it('does not drop into the next row at the end of a ragged row', () => {
     const mk = (id, x, y) => { const e = box(document.createElement('button'), x, y); e.id = id; c.append(e); return e; };
-    const a = mk('a', 0, 0); mk('b', 120, 0); mk('r2', 150, 100); mk('r2b', 300, 100);
+    const a = mk('a', 0, 0); mk('b', 120, 0); mk('r2', 0, 100); mk('r2b', 100, 100);
     register(c); a.focus(); moveFocus('right');
     expect(document.activeElement.id).toBe('b');
     expect(moveFocus('right')).toBe(false);
     expect(document.activeElement.id).toBe('b');
   });
 
-  it('falls back to a diagonal-cone candidate when nothing overlaps', () => {
+  it('never strands: diagonal two-item layout reaches the far item right and down', () => {
     const a = box(document.createElement('button'), 0, 0); a.id = 'a';
-    const d = box(document.createElement('button'), 300, 80); d.id = 'd';
-    c.append(a, d); register(c); a.focus();
-    expect(moveFocus('right')).toBe(true);
+    const d = box(document.createElement('button'), 150, 120); d.id = 'd';
+    c.append(a, d); register(c);
+    a.focus(); expect(moveFocus('right')).toBe(true);
+    expect(document.activeElement.id).toBe('d');
+    a.focus(); expect(moveFocus('down')).toBe(true);
     expect(document.activeElement.id).toBe('d');
   });
 

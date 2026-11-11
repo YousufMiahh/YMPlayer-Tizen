@@ -21,7 +21,7 @@ export function register(container) {
 }
 
 function isVisible(el) {
-  if (el.disabled || el.hidden || el.inert) return false;
+  if (el.disabled || el.hidden || el.closest('[inert]')) return false;
   if (el.getAttribute('aria-disabled') === 'true') return false;
   if (getComputedStyle(el).visibility === 'hidden') return false;
   const r = el.getBoundingClientRect();
@@ -56,7 +56,7 @@ export function moveFocus(dir) {
   const cur = document.activeElement;
   const all = allFocusables();
   if (!cur || !all.includes(cur)) {
-    if (all[0]) { all[0].focus(); return true; }
+    if (all[0]) { all[0].focus(); return document.activeElement === all[0]; }
     return false;
   }
   const cr = cur.getBoundingClientRect();
@@ -65,7 +65,7 @@ export function moveFocus(dir) {
   const sign = dir === 'right' || dir === 'down' ? 1 : -1;
   // Pass 1: candidates whose cross-axis span overlaps the current element
   // (so Right at a row end never drops into the row below).
-  // Pass 2 (so focus is never stranded): a narrow cone (across <= along/2, ~27 degrees).
+  // Pass 2 (only if pass 1 is empty, so focus is never stranded): every forward candidate.
   const pass1 = [], pass2 = [];
   for (const el of all) {
     if (el === cur) continue;
@@ -80,7 +80,7 @@ export function moveFocus(dir) {
       ? r.top < cr.bottom && r.bottom > cr.top
       : r.left < cr.right && r.right > cr.left;
     if (overlap) pass1.push(cand);
-    else if (across <= along / 2) pass2.push(cand);
+    else pass2.push(cand);
   }
   const pool = pass1.length ? pass1 : pass2;
   let best = null;
