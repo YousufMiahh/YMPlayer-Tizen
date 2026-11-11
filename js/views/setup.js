@@ -2,6 +2,7 @@
 import * as store from '../store.js';
 import { router } from '../router.js';
 import * as nav from '../nav.js';
+import { clearCache } from '../home-rows.js';
 
 export function label(acc) {
   if (acc.name) return acc.name;
@@ -10,8 +11,13 @@ export function label(acc) {
   return `${acc.user}@${host}`;
 }
 
-export function setupView() {
-  let root; let list; let onActivate;
+/**
+ * Account list + Add button, shared by the Setup and Settings views.
+ * Builds into `host`; `root` is the nav container to refocus. Returns { dispose }.
+ */
+export function mountAccounts(host, root) {
+  host.innerHTML = '<div class="accounts"></div><div class="actions"><button type="button" data-action="add" class="primary">Add account</button></div>';
+  const list = host.querySelector('.accounts');
 
   function render() {
     list.replaceChildren();
@@ -34,28 +40,37 @@ export function setupView() {
 
   function onClick(e) {
     const action = e.target.dataset && e.target.dataset.action;
-    if (!action) return;
+    if (action !== 'add' && action !== 'switch' && action !== 'remove') return;
     const row = e.target.closest('[data-account]');
     if (action === 'add') { router.go('login', { new: true }); return; }
-    if (action === 'switch') { store.setCurrent(row.dataset.account); render(); nav.focusFirst(root); return; }
-    if (action === 'remove') {
-      store.removeAccount(row.dataset.account);
-      if (store.accounts().length === 0) { router.go('login', { new: true }); return; }
-      render();
-      nav.focusFirst(root);
+    if (action === 'switch') {
+      store.setCurrent(row.dataset.account);
+      clearCache(); // Home caches Recently Added per type, not per account
+      render(); nav.focusFirst(root); return;
     }
+    store.removeAccount(row.dataset.account);
+    if (store.accounts().length === 0) { router.go('login', { new: true }); return; }
+    clearCache(); // the current account may have changed
+    render();
+    nav.focusFirst(root);
   }
+
+  render();
+  host.addEventListener('click', onClick);
+  return { dispose() { host.removeEventListener('click', onClick); } };
+}
+
+export function setupView() {
+  let root; let accountsUi; let onActivate;
 
   return {
     mount(rootEl) {
       root = rootEl;
       const el = document.createElement('div');
       el.className = 'login setup';
-      el.innerHTML = '<h1>Accounts</h1><div class="accounts"></div><div class="actions"><button type="button" data-action="add" class="primary">Add account</button></div>';
-      list = el.querySelector('.accounts');
+      el.innerHTML = '<h1>Accounts</h1><div class="accounts-host"></div>';
       root.appendChild(el);
-      render();
-      el.addEventListener('click', onClick);
+      accountsUi = mountAccounts(el.querySelector('.accounts-host'), root);
       onActivate = (e) => { if (e.target.tagName === 'BUTTON') e.target.click(); };
       root.addEventListener('activate', onActivate);
       nav.register(root);
@@ -63,7 +78,8 @@ export function setupView() {
     },
     unmount() {
       if (root && onActivate) root.removeEventListener('activate', onActivate);
-      root = list = onActivate = null;
+      if (accountsUi) accountsUi.dispose();
+      root = accountsUi = onActivate = null;
     },
   };
 }

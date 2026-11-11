@@ -6,6 +6,12 @@ export const DEFAULT_UA = 'XtreamPlayer/1.0 (Linux; Android; Fire TV)';
 export const HOME_KEYS = ['continue', 'recent', 'fav_live', 'fav_movie', 'fav_series',
   'top_movies', 'top_series', 'new_movies', 'new_series'];
 
+export const HOME_NAMES = {
+  continue: 'Continue Watching', recent: 'Recent Channels', fav_live: 'Favourite Channels',
+  fav_movie: 'Favourite Movies', fav_series: 'Favourite Series', top_movies: 'Top 10 Movies',
+  top_series: 'Top 10 Series', new_movies: 'Recently Added Movies', new_series: 'Recently Added Series',
+};
+
 const HISTORY_MAX = 40;
 const ls = () => globalThis.localStorage;
 
