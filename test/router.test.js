@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { createRouter, router as appRouter, router } from '../js/router.js';
+import { createRouter, router } from '../js/router.js';
 import { boot, views } from '../js/app.js';
 
 function dummy(label, extra = {}) {
@@ -31,7 +31,7 @@ beforeEach(() => {
   document.body.innerHTML = '<div id="root"></div>';
   root = document.getElementById('root');
 });
-afterEach(() => { appRouter.reset(); });
+afterEach(() => { router.reset(); });
 
 describe('router', () => {
   it('go mounts the view with params and swaps root content', () => {
@@ -137,13 +137,63 @@ describe('router', () => {
     expect(r.current()).toBeNull();
   });
 
-  it('back still pops when the top view unmount throws', () => {
+  it('back remounts the beneath view even when the outgoing unmount throws', () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     const r = createRouter(); r.init(root);
     r.register('a', appender('a'));
-    r.register('b', () => ({ mount() {}, unmount() { throw new Error('unmount boom'); } }));
+    r.register('b', () => ({
+      mount(rt) { rt.appendChild(document.createElement('i')); },
+      unmount() { throw new Error('unmount boom'); },
+    }));
     r.go('a'); r.go('b');
-    expect(() => r.back()).toThrow('unmount boom');
+    expect(r.back()).toBe(true);
     expect(r.stackDepth()).toBe(1);
+    expect(r.current().name).toBe('a');
+    expect([...root.children].map((c) => c.id)).toEqual(['a']);
+    expect(err).toHaveBeenCalledTimes(1);
+    err.mockRestore();
+  });
+
+  it('go completes when the outgoing unmount throws', () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const r = createRouter(); r.init(root);
+    r.register('a', () => ({
+      mount(rt) { rt.appendChild(document.createElement('i')); },
+      unmount() { throw new Error('unmount boom'); },
+    }));
+    r.register('b', appender('b'));
+    r.go('a'); r.go('b');
+    expect(r.stackDepth()).toBe(2);
+    expect(r.current().name).toBe('b');
+    expect([...root.children].map((c) => c.id)).toEqual(['b']);
+    err.mockRestore();
+  });
+
+  it('go with a throwing outgoing unmount and a throwing new mount restores the previous view', () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const r = createRouter(); r.init(root);
+    r.register('a', () => ({
+      mount(rt) { const p = document.createElement('p'); p.id = 'a'; rt.appendChild(p); },
+      unmount() { throw new Error('unmount boom'); },
+    }));
+    r.register('bad', () => ({ mount() { throw new Error('boom'); }, unmount() {} }));
+    r.go('a');
+    expect(() => r.go('bad')).toThrow('boom');
+    expect(r.stackDepth()).toBe(1);
+    expect(r.current().view).not.toBeNull();
+    expect([...root.children].map((c) => c.id)).toEqual(['a']);
+    err.mockRestore();
+  });
+
+  it('a mount that appends and then throws leaves the root cleared', () => {
+    const r = createRouter(); r.init(root);
+    r.register('bad', () => ({
+      mount(rt) { rt.appendChild(document.createElement('p')); throw new Error('boom'); },
+      unmount() {},
+    }));
+    expect(() => r.go('bad')).toThrow('boom');
+    expect(root.children.length).toBe(0);
+    expect(r.stackDepth()).toBe(0);
   });
 
   it('back at depth 1 emits exit and keeps the view mounted', () => {

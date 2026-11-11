@@ -26,13 +26,14 @@ export function createRouter() {
     entry.view = view;
   }
 
+  // A throwing unmount must never block navigation: log it, always clear the view and root.
   function unmountTop() {
     const top = stack[stack.length - 1];
     if (!top || !top.view) return;
-    try { top.view.unmount(); } finally {
-      top.view = null;
-      root.replaceChildren();
-    }
+    const view = top.view;
+    top.view = null;
+    try { view.unmount(); } catch (err) { console.error(`View "${top.name}" unmount failed`, err); }
+    root.replaceChildren();
   }
 
   return {
@@ -43,7 +44,8 @@ export function createRouter() {
     },
     // Unmount the active view and empty the stack (used on re-init / dispose).
     reset() {
-      try { if (root) unmountTop(); } finally { stack.length = 0; }
+      if (root) unmountTop();
+      stack.length = 0;
     },
     register(name, viewFactory) {
       factories.set(name, viewFactory);
@@ -69,7 +71,8 @@ export function createRouter() {
         if (root) root.dispatchEvent(new CustomEvent('exit', { bubbles: true }));
         return false;
       }
-      try { unmountTop(); } finally { stack.pop(); }
+      unmountTop();
+      stack.pop();
       mountEntry(stack[stack.length - 1]);
       return true;
     },
