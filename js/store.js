@@ -15,6 +15,7 @@ const setStr = (k, v) => ls().setItem(k, String(v));
 const getInt = (k, d) => { const n = parseInt(ls().getItem(k), 10); return Number.isNaN(n) ? d : n; };
 const getBool = (k, d) => { const v = ls().getItem(k); return v === null ? d : v === 'true'; };
 const getJson = (k, d) => { try { const v = JSON.parse(ls().getItem(k)); return v ?? d; } catch { return d; } };
+const getArr = (k) => { const v = getJson(k, []); return Array.isArray(v) ? v : []; };
 const setJson = (k, v) => ls().setItem(k, JSON.stringify(v));
 
 // ================================================================ accounts
@@ -37,6 +38,8 @@ export function accounts() {
     })];
     writeAccounts(out);
     setStr('current', '');
+    // Legacy keys are now owned by accounts[]; clear them so a removed login can't be re-adopted.
+    for (const k of ['server', 'user', 'pass', 'ua', 'ok']) ls().removeItem(k);
   }
   return out;
 }
@@ -69,6 +72,7 @@ function isAccountData(k) {
 }
 
 export function removeAccount(id) {
+  const wasCurrent = current()?.id === id;
   const l = accounts().filter((a) => a.id !== id);
   writeAccounts(l);
   const prefix = id === '' ? null : `${id}_`;
@@ -77,13 +81,11 @@ export function removeAccount(id) {
   for (const k of keys) {
     if (prefix !== null ? k.startsWith(prefix) : isAccountData(k)) ls().removeItem(k);
   }
-  setStr('current', l.length ? l[0].id : '');
+  if (wasCurrent) setStr('current', l.length ? l[0].id : '');
 }
 
 /** Key prefix for the current account ("" for the first account). */
 function ns() {
-  const id = ls().getItem('current');
-  if (id !== null) return id === '' ? '' : `${id}_`;
   const a = current();
   return !a || a.id === '' ? '' : `${a.id}_`;
 }
@@ -145,7 +147,7 @@ export const setLastRefresh = (t) => setStr(`${ns()}lib_time`, t);
 
 // ================================================================ favourites (per account)
 
-export const favs = (type) => getJson(`${ns()}fav_${type}`, []).map(fromJson);
+export const favs = (type) => getArr(`${ns()}fav_${type}`).map(fromJson);
 
 export function isFav(item) {
   return favs(item.type).some((f) => f.id === String(item.id));
@@ -162,7 +164,7 @@ export function toggleFav(item) {
   return !removed;
 }
 
-export const favCategories = (type) => getJson(`${ns()}favcat_${type}`, []);
+export const favCategories = (type) => getArr(`${ns()}favcat_${type}`);
 export const isFavCategory = (type, id) => favCategories(type).includes(String(id));
 
 /** @returns true if the category is now a favourite. */
@@ -195,7 +197,7 @@ export function setDuration(item, ms) {
 
 // ================================================================ watch history (per account, newest first)
 
-export const history = (live) => getJson(`${ns()}hist_${live ? 'live' : 'vod'}`, []).map(fromJson);
+export const history = (live) => getArr(`${ns()}hist_${live ? 'live' : 'vod'}`).map(fromJson);
 
 export function addHistory(item) {
   const live = item.type === 'live';

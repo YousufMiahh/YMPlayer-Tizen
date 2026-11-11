@@ -77,6 +77,61 @@ describe('accounts', () => {
   });
 });
 
+describe('account removal edge cases', () => {
+  it('removing the sole account keeps it gone (legacy keys not re-adopted)', () => {
+    localStorage.setItem('server', 'http://old');
+    localStorage.setItem('user', 'u');
+    localStorage.setItem('pass', 'p');
+    localStorage.setItem('ok', 'true');
+    expect(store.hasAccount()).toBe(true);
+    store.removeAccount('');
+    expect(store.accounts()).toEqual([]);
+    expect(store.hasAccount()).toBe(false);
+    expect(store.current()).toBeNull();
+    expect(store.server()).toBe('');
+  });
+
+  it('removing a non-current account leaves current alone', () => {
+    const [a, b] = twoAccounts();
+    const c = store.newAccount();
+    c.id = 'aC';
+    Object.assign(c, { server: 'http://c', user: 'uc', ok: true });
+    store.saveAccount(c);
+    store.setCurrent('aC');
+    store.removeAccount(b.id);
+    expect(store.current().id).toBe('aC');
+    expect(store.accounts().map((x) => x.id)).toEqual([a.id, 'aC']);
+  });
+
+  it('removing the current account falls back to the first remaining', () => {
+    const [a, b] = twoAccounts();
+    store.setCurrent(b.id);
+    store.removeAccount(b.id);
+    expect(store.current().id).toBe(a.id);
+  });
+
+  it('stale current id: reads and writes agree on the same account', () => {
+    twoAccounts();
+    store.setCurrent('bogus');
+    store.toggleFav(ch(1));
+    expect(store.isFav(ch(1))).toBe(true);
+    expect(localStorage.getItem('fav_live')).not.toBeNull();
+    expect(localStorage.getItem('bogus_fav_live')).toBeNull();
+  });
+});
+
+describe('corrupt stored values', () => {
+  it('non-array JSON is treated as empty', () => {
+    localStorage.setItem('fav_live', '{"a":1}');
+    localStorage.setItem('favcat_live', '5');
+    localStorage.setItem('hist_vod', '"x"');
+    expect(store.favs('live')).toEqual([]);
+    expect(store.favCategories('live')).toEqual([]);
+    expect(store.history(false)).toEqual([]);
+    expect(store.toggleFav(ch(1))).toBe(true);
+  });
+});
+
 describe('namespacing', () => {
   it('favourites are isolated per account and use prefix scheme', () => {
     const [a, b] = twoAccounts();
@@ -97,12 +152,21 @@ describe('namespacing', () => {
     const [a, b] = twoAccounts();
     store.setCurrent(a.id);
     store.setPosition(ch(9, 'movie'), 1000);
+    store.setDuration(ch(9, 'movie'), 5000);
     store.addHistory(ch(9, 'movie'));
     store.toggleFavCategory('live', 'c1');
     store.setCurrent(b.id);
     expect(store.position(ch(9, 'movie'))).toBe(0);
+    expect(store.duration(ch(9, 'movie'))).toBe(0);
     expect(store.history(false)).toEqual([]);
     expect(store.favCategories('live')).toEqual([]);
+    store.setPosition(ch(9, 'movie'), 2000);
+    store.setDuration(ch(9, 'movie'), 6000);
+    store.setCurrent(a.id);
+    expect(store.position(ch(9, 'movie'))).toBe(1000);
+    expect(store.duration(ch(9, 'movie'))).toBe(5000);
+    expect(store.history(false).map((x) => x.id)).toEqual(['9']);
+    expect(store.favCategories('live')).toEqual(['c1']);
   });
 });
 
