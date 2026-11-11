@@ -4,7 +4,7 @@ import * as store from '../store.js';
 import { router } from '../router.js';
 import { buildRows } from '../home-rows.js';
 
-const MENU = [['live', 'Live'], ['movies', 'Movies'], ['series', 'Series'], ['search', 'Search'], ['settings', 'Settings']];
+const MENU = [['live', 'Live'], ['movies', 'Movies'], ['series', 'Series'], ['search', 'Search'], ['settings', 'Settings'], ['ambient', 'Ambient'], ['phonelink', 'Phone']];
 
 /** Where selecting a tile goes. */
 export function openTarget(rowKey, items, index) {

@@ -2,9 +2,9 @@
 import * as store from './store.js';
 import * as api from './api.js';
 import { MOVIE, SERIES } from './item.js';
+import { hasTmdb } from './keys.js';
 
-// No TMDB key in v1; Task 13 formalises this (js/keys.js).
-export const hasTmdb = () => false;
+export { hasTmdb };
 
 const RECENT_LIMIT = 20;
 const byAddedDesc = (a, b) => (Number(b.added) || 0) - (Number(a.added) || 0);
