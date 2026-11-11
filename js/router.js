@@ -8,10 +8,22 @@ export function createRouter() {
   let root = null;
   let onExit = null;
 
+  function createView(name) {
+    const view = factories.get(name)();
+    if (!isView(view)) throw new Error(`View "${name}" does not implement mount/unmount`);
+    return view;
+  }
+
   function mountEntry(entry) {
-    entry.view = factories.get(entry.name)();
-    if (!isView(entry.view)) throw new Error(`View "${entry.name}" does not implement mount/unmount`);
-    entry.view.mount(root, entry.params);
+    const view = createView(entry.name);
+    try {
+      view.mount(root, entry.params);
+    } catch (err) {
+      try { view.unmount(); } catch { /* best-effort cleanup of a half-mounted view */ }
+      root.replaceChildren();
+      throw err;
+    }
+    entry.view = view;
   }
 
   function unmountTop() {
@@ -31,8 +43,7 @@ export function createRouter() {
     },
     // Unmount the active view and empty the stack (used on re-init / dispose).
     reset() {
-      if (root) unmountTop();
-      stack.length = 0;
+      try { if (root) unmountTop(); } finally { stack.length = 0; }
     },
     register(name, viewFactory) {
       factories.set(name, viewFactory);
@@ -40,10 +51,17 @@ export function createRouter() {
     go(name, params) {
       if (!root) throw new Error('router.init(root) not called');
       if (!factories.has(name)) throw new Error(`Unknown view "${name}"`);
-      unmountTop();
       const entry = { name, params, view: null };
+      const prev = stack[stack.length - 1];
+      unmountTop();
+      try {
+        mountEntry(entry);
+      } catch (err) {
+        // New view failed: stack is unchanged; best-effort restore of the previous view.
+        if (prev) { try { mountEntry(prev); } catch { /* leave root empty */ } }
+        throw err;
+      }
       stack.push(entry);
-      mountEntry(entry);
     },
     back() {
       if (stack.length <= 1) {
@@ -51,8 +69,7 @@ export function createRouter() {
         if (root) root.dispatchEvent(new CustomEvent('exit', { bubbles: true }));
         return false;
       }
-      unmountTop();
-      stack.pop();
+      try { unmountTop(); } finally { stack.pop(); }
       mountEntry(stack[stack.length - 1]);
       return true;
     },

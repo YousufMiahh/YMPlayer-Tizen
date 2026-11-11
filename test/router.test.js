@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { createRouter, router } from '../js/router.js';
+import { createRouter, router as appRouter, router } from '../js/router.js';
 import { boot, views } from '../js/app.js';
 
 function dummy(label, extra = {}) {
@@ -18,11 +18,20 @@ function dummy(label, extra = {}) {
   return factory;
 }
 
+// Mounts via appendChild so only the router's own cleanup can empty the root.
+function appender(label) {
+  return () => ({
+    mount(r) { const p = document.createElement('p'); p.id = label; r.appendChild(p); },
+    unmount() {},
+  });
+}
+
 let root;
 beforeEach(() => {
   document.body.innerHTML = '<div id="root"></div>';
   root = document.getElementById('root');
 });
+afterEach(() => { appRouter.reset(); });
 
 describe('router', () => {
   it('go mounts the view with params and swaps root content', () => {
@@ -65,6 +74,76 @@ describe('router', () => {
     expect(root.querySelector('#a')).not.toBeNull();
     expect(a.calls.filter((c) => c[0] === 'mount').length).toBe(2);
     expect(b.calls).toEqual([['mount', 'b'], ['unmount', 'b']]);
+  });
+
+  it('router (not the view) empties root on go, back and reset', () => {
+    const r = createRouter(); r.init(root);
+    r.register('a', appender('a')); r.register('b', appender('b'));
+    r.go('a');
+    r.go('b');
+    expect([...root.children].map((c) => c.id)).toEqual(['b']);
+    r.back();
+    expect([...root.children].map((c) => c.id)).toEqual(['a']);
+    r.reset();
+    expect(root.children.length).toBe(0);
+    expect(r.stackDepth()).toBe(0);
+  });
+
+  it('dispose empties the root', () => {
+    views.t1 = appender('t1');
+    const d = boot(root);
+    router.go('t1');
+    d();
+    delete views.t1;
+    expect(root.children.length).toBe(0);
+  });
+
+  it('unmount contract: a document listener added in mount stops firing after navigating away', () => {
+    const r = createRouter(); r.init(root);
+    const spy = vi.fn();
+    r.register('a', () => ({
+      mount() { document.addEventListener('ping', spy); },
+      unmount() { document.removeEventListener('ping', spy); },
+    }));
+    r.register('b', dummy('b'));
+    r.go('a');
+    document.dispatchEvent(new Event('ping'));
+    expect(spy).toHaveBeenCalledTimes(1);
+    r.go('b');
+    document.dispatchEvent(new Event('ping'));
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('a throwing mount leaves the stack unchanged and restores the previous view', () => {
+    const r = createRouter(); r.init(root);
+    r.register('a', appender('a'));
+    r.register('bad', () => ({ mount() { throw new Error('boom'); }, unmount() {} }));
+    r.register('notview', () => ({}));
+    r.go('a');
+    expect(() => r.go('bad')).toThrow('boom');
+    expect(r.stackDepth()).toBe(1);
+    expect(r.current().name).toBe('a');
+    expect([...root.children].map((c) => c.id)).toEqual(['a']);
+    expect(() => r.go('notview')).toThrow(/mount\/unmount/);
+    expect(r.stackDepth()).toBe(1);
+    expect(r.current().view).not.toBeNull();
+  });
+
+  it('a throwing mount on the very first go leaves an empty stack', () => {
+    const r = createRouter(); r.init(root);
+    r.register('bad', () => ({ mount() { throw new Error('boom'); }, unmount() {} }));
+    expect(() => r.go('bad')).toThrow('boom');
+    expect(r.stackDepth()).toBe(0);
+    expect(r.current()).toBeNull();
+  });
+
+  it('back still pops when the top view unmount throws', () => {
+    const r = createRouter(); r.init(root);
+    r.register('a', appender('a'));
+    r.register('b', () => ({ mount() {}, unmount() { throw new Error('unmount boom'); } }));
+    r.go('a'); r.go('b');
+    expect(() => r.back()).toThrow('unmount boom');
+    expect(r.stackDepth()).toBe(1);
   });
 
   it('back at depth 1 emits exit and keeps the view mounted', () => {
@@ -114,9 +193,7 @@ describe('app.boot', () => {
   it('a view onKey returning true stops nav from handling the key', () => {
     const onKey = vi.fn(() => true);
     views.t1 = dummy('t1', { onKey });
-    root.innerHTML = '';
     dispose = boot(root);
-    
     router.go('t1');
     const e = keydown(40);
     expect(onKey).toHaveBeenCalledTimes(1);
@@ -132,9 +209,9 @@ describe('app.boot', () => {
   });
 
   it('a back event pops the stack via the router', () => {
-    views.t1 = dummy('t1'); views.t2 = dummy('t2');
+    views.t1 = dummy('t1');
     dispose = boot(root);
-    
+
     router.go('t1');
     expect(router.stackDepth()).toBe(2); // splash + t1
     document.dispatchEvent(new CustomEvent('back', { bubbles: true }));
@@ -145,7 +222,7 @@ describe('app.boot', () => {
   it('Back key (10009) reaches the router through nav', () => {
     views.t1 = dummy('t1');
     dispose = boot(root);
-    
+
     router.go('t1');
     keydown(10009);
     expect(router.current().name).toBe('splash');
