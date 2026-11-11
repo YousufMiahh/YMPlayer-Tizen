@@ -65,6 +65,36 @@ jobs:
           # between Tizen Studio versions and was the cause of the first failure).
           tizen security-profiles add -n ymplayer-ci \
             -a "$CERT_DIR/ymplayer-author.p12" -p "$PW"
+          # On a headless runner there is no desktop keyring, so the CLI stores the
+          # passwords as references to .pwd files it later can't read back
+          # ("Invalid password" at package time). Rewrite profiles.xml with the
+          # plaintext passwords: author = our generated one, distributor = the
+          # Tizen SDK's public default distributor password.
+          PROFILES="$TIZEN_HOME/../tizen-studio-data/profile/profiles.xml"
+          AUTHOR_PW="$PW" python3 - "$PROFILES" <<'PY'
+          import os, sys, xml.etree.ElementTree as ET
+          path = sys.argv[1]
+          tree = ET.parse(path)
+          for prof in tree.getroot().iter('profile'):
+              if prof.get('name') != 'ymplayer-ci':
+                  continue
+              for item in prof.iter('profileitem'):
+                  kind = item.get('distributor')
+                  if kind == '0':
+                      item.set('password', os.environ['AUTHOR_PW'])
+                  elif kind == '1' and item.get('key'):
+                      item.set('password', 'tizenpkcs12passwd')
+                  print('profileitem', kind, 'key=', item.get('key') or '(none)')
+          tree.write(path)
+          PY
+          # Sanity check: the distributor .p12 must open with the default password
+          DIST_KEY=$(python3 -c "import sys,xml.etree.ElementTree as E;r=E.parse(sys.argv[1]).getroot();print(next((i.get('key') for p in r.iter('profile') if p.get('name')=='ymplayer-ci' for i in p.iter('profileitem') if i.get('distributor')=='1'),''))" "$PROFILES")
+          echo "distributor key: $DIST_KEY"
+          if [ -n "$DIST_KEY" ]; then
+            openssl pkcs12 -in "$DIST_KEY" -passin pass:tizenpkcs12passwd -noout 2>/dev/null \
+              || openssl pkcs12 -legacy -in "$DIST_KEY" -passin pass:tizenpkcs12passwd -noout \
+              && echo "distributor p12 opens with default password: OK"
+          fi
           tizen security-profiles list
 
       - name: Stage app files (excludes dev files)
