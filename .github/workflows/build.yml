@@ -57,19 +57,18 @@ jobs:
           mkdir -p "$CERT_DIR"
           PW="ci-$(openssl rand -hex 8)"
           echo "::add-mask::$PW"
-          # Author cert: generated fresh every run (self-signed, throwaway)
+          # Author + distributor certs: both generated fresh every run (self-signed,
+          # throwaway). We use our own distributor cert rather than the SDK's bundled
+          # one: on a headless runner the bundled one's password is stored in a
+          # keyring-backed .pwd file that doesn't exist, so packaging can't read it.
+          # On a rooted TV (Vetro re-signs with your Samsung cert) this is equivalent.
           tizen certificate -a YMPlayerCI -p "$PW" -c GB -n "YM Player CI" -f ymplayer-author -- "$CERT_DIR"
-          # Register the profile with ONLY the author cert. The Tizen CLI then
-          # applies its bundled default distributor certificate automatically, so
-          # we don't hard-code a distributor .p12 path/password (that pair differs
-          # between Tizen Studio versions and was the cause of the first failure).
+          tizen certificate -a YMPlayerDist -p "$PW" -c GB -n "YM Player Dist" -f ymplayer-dist -- "$CERT_DIR"
           tizen security-profiles add -n ymplayer-ci \
-            -a "$CERT_DIR/ymplayer-author.p12" -p "$PW"
-          # On a headless runner there is no desktop keyring, so the CLI can't
-          # read back the AUTHOR password it stored ("Invalid password" at package
-          # time). Rewrite only the author item with our plaintext password; leave
-          # the distributor item exactly as the CLI wrote it (it knows the bundled
-          # default distributor password, which varies by SDK version).
+            -a "$CERT_DIR/ymplayer-author.p12" -p "$PW" \
+            -d "$CERT_DIR/ymplayer-dist.p12" -dp "$PW"
+          # No desktop keyring on the runner: the CLI stores passwords as references
+          # to .pwd files it never creates. Write both passwords inline instead.
           PROFILES="$TIZEN_HOME/../tizen-studio-data/profile/profiles.xml"
           AUTHOR_PW="$PW" python3 - "$PROFILES" <<'PY'
           import os, sys, xml.etree.ElementTree as ET
@@ -79,15 +78,9 @@ jobs:
               if prof.get('name') != 'ymplayer-ci':
                   continue
               for item in prof.iter('profileitem'):
-                  kind, pw = item.get('distributor'), item.get('password') or ''
-                  if kind == '0':
+                  if item.get('distributor') in ('0', '1') and item.get('key'):
                       item.set('password', os.environ['AUTHOR_PW'])
-                  # diagnostics only: describe (never print) the stored password
-                  form = 'file' if pw.endswith('.pwd') else ('empty' if not pw else 'inline')
-                  extra = ''
-                  if form == 'file':
-                      extra = ' exists=%s' % os.path.exists(pw)
-                  print('profileitem', kind, 'pw-form=', form, 'len=', len(pw), extra)
+                      print('set inline password for profileitem', item.get('distributor'))
           tree.write(path)
           PY
           tizen security-profiles list
