@@ -10,6 +10,7 @@ import { moviesView } from './views/movies.js';
 import { seriesView } from './views/series.js';
 import { movieDetailView } from './views/movie-detail.js';
 import { seriesDetailView } from './views/series-detail.js';
+import { homeView } from './views/home.js';
 import { playerVodView } from './views/player-vod.js';
 
 const SPLASH_MS = 600;
@@ -38,16 +39,7 @@ export const views = {
   'movie-detail': movieDetailView,
   'series-detail': seriesDetailView,
   'player-vod': playerVodView,
-  // Placeholder: a later task replaces this with the real home screen.
-  home: () => ({
-    mount(root, params) {
-      const p = document.createElement('p');
-      p.id = 'home';
-      p.textContent = (params && params.status) || 'Home';
-      root.appendChild(p);
-    },
-    unmount() {},
-  }),
+  home: homeView,
 };
 
 // Returns a dispose function that removes the global listeners.
