@@ -67,11 +67,17 @@ describe('live fallback', () => {
     expect(errors).toEqual([]);
     expect(shim.getState()).toBe('PLAYING');
   });
-  it('runtime onerror also falls back, and an m3u8 start falls back to ts', () => {
+  it('runtime onerror falls back silently once, then a second error emits exactly one error', () => {
     store.setLiveFormat('m3u8');
+    const errors = [];
+    player.on('error', (e) => errors.push(e));
     player.open(live);
     shim.emitError();
     expect(opens()).toEqual(['http://h.com:80/live/u/p/42.m3u8', 'http://h.com:80/live/u/p/42.ts']);
+    expect(errors).toEqual([]);
+    shim.emitError();
+    expect(errors).toHaveLength(1);
+    expect(opens()).toHaveLength(2);
   });
   it('emits error only after the retry also fails, and retries exactly once', () => {
     const errors = [];
@@ -136,6 +142,29 @@ describe('events and stop', () => {
     expect(store.position(movie)).toBe(123000);
     expect(store.duration(movie)).toBe(600000);
     expect(shim.getState()).toBe('NONE');
+  });
+  it('stop with no tick keeps an existing resume point (startMs seeds position)', () => {
+    store.setPosition(movie, 5000);
+    store.setDuration(movie, 600000);
+    shim.duration = 0;
+    player.open(movie, { startMs: 5000 });
+    player.stop();
+    expect(store.position(movie)).toBe(5000);
+    expect(store.duration(movie)).toBe(600000);
+  });
+  it('stop after a load error does not wipe a saved resume point', () => {
+    store.setPosition(movie, 7000);
+    shim.failWhen = () => true;
+    player.open(movie, { startMs: 7000 });
+    player.stop();
+    expect(store.position(movie)).toBe(7000);
+  });
+  it('controls are no-ops with no open session', () => {
+    const playing = [];
+    player.on('playing', () => playing.push(1));
+    expect(() => { player.play(); player.pause(); player.seek(1); player.setRate(2); player.stop(); }).not.toThrow();
+    expect(playing).toEqual([]);
+    expect(shim.calls).toEqual([]);
   });
   it('stop persists for an episode but never for a live item', () => {
     shim.duration = 1000;

@@ -80,14 +80,14 @@ function onCompleted(av, session) {
 export function open(item, { startMs = 0 } = {}) {
   const av = getAvplay();
   if (s) teardown(av);
-  s = { item, startMs, pos: 0, retried: false, format: null, token: 0 };
+  s = { item, startMs, pos: item.type === LIVE ? 0 : startMs, retried: false, format: null, token: 0 };
   start(av, s, item.type === LIVE ? store.liveFormat() : 'ts');
 }
 
-export function play() { getAvplay().play(); emit('playing'); }
-export function pause() { getAvplay().pause(); }
-export function seek(ms) { getAvplay().seekTo(Math.max(0, Math.floor(ms))); }
-export function setRate(r) { getAvplay().setSpeed(r); }
+export function play() { if (!s) return; getAvplay().play(); emit('playing'); }
+export function pause() { if (!s) return; getAvplay().pause(); }
+export function seek(ms) { if (!s) return; getAvplay().seekTo(Math.max(0, Math.floor(ms))); }
+export function setRate(r) { if (!s) return; getAvplay().setSpeed(r); }
 
 /** Stop and release. Persists resume position + duration for VOD/episodes (never live). */
 export function stop() {
@@ -98,8 +98,9 @@ export function stop() {
   if (session.item.type !== LIVE) {
     let dur = 0;
     try { dur = av.getDuration(); } catch { /* not prepared */ }
-    store.setDuration(session.item, dur);
-    store.setPosition(session.item, session.pos);
+    // Only write real values: a 0 would erase an existing resume point.
+    if (dur > 0) store.setDuration(session.item, dur);
+    if (session.pos > 0) store.setPosition(session.item, session.pos);
   }
   teardown(av);
 }
