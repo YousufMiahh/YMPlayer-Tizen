@@ -83,10 +83,15 @@ jobs:
         run: |
           set -euo pipefail
           cd "$STAGE"
+          # Surface the Tizen CLI log on any failure below (the CLI prints only
+          # "An error has occurred. See the log file" to stdout).
+          CLI_LOG="$TIZEN_HOME/../tizen-studio-data/cli/logs/cli.log"
+          dump_log() { echo "::group::tizen cli.log"; tail -n 60 "$CLI_LOG" 2>/dev/null || echo "(no cli.log at $CLI_LOG)"; echo "::endgroup::"; }
+          trap 'dump_log' ERR
           tizen build-web -- .
           mkdir -p "$GITHUB_WORKSPACE/out"
-          # build-web writes to .buildResult; package from there
-          tizen package -t wgt -s ymplayer-ci -o "$GITHUB_WORKSPACE/out" -- .buildResult
+          # build-web writes to .buildResult; package that dir
+          tizen package -t wgt -s ymplayer-ci -o "$GITHUB_WORKSPACE/out" -- "$STAGE/.buildResult"
           ls -l "$GITHUB_WORKSPACE/out"
           WGT=$(ls "$GITHUB_WORKSPACE"/out/*.wgt | head -n1)
           mv "$WGT" "$GITHUB_WORKSPACE/out/YMPlayer.wgt"
