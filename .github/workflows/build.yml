@@ -59,11 +59,12 @@ jobs:
           echo "::add-mask::$PW"
           # Author cert: generated fresh every run (self-signed, throwaway)
           tizen certificate -a YMPlayerCI -p "$PW" -c GB -n "YM Player CI" -f ymplayer-author -- "$CERT_DIR"
-          # Distributor cert: the public default distributor cert bundled with Tizen Studio
-          DIST="$TIZEN_HOME/tools/certificate-generator/certificates/distributor/tizen-distributor-signer.p12"
+          # Register the profile with ONLY the author cert. The Tizen CLI then
+          # applies its bundled default distributor certificate automatically, so
+          # we don't hard-code a distributor .p12 path/password (that pair differs
+          # between Tizen Studio versions and was the cause of the first failure).
           tizen security-profiles add -n ymplayer-ci \
-            -a "$CERT_DIR/ymplayer-author.p12" -p "$PW" \
-            -d "$DIST" -dp tizenpkcs12passwd
+            -a "$CERT_DIR/ymplayer-author.p12" -p "$PW"
           tizen security-profiles list
 
       - name: Stage app files (excludes dev files)
