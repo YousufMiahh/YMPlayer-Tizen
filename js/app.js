@@ -1,20 +1,25 @@
 // YM Player entry point: view registry, router wiring, TV-remote key routing.
 import { router } from './router.js';
 import * as nav from './nav.js';
+import * as store from './store.js';
 import { loginView } from './views/login.js';
 import { setupView } from './views/setup.js';
+
+const SPLASH_MS = 600;
 
 // Registry of views. Later tasks add entries here: name -> () => view.
 export const views = {
   splash: () => {
-    let h;
+    let h; let timer;
     return {
       mount(root) {
         h = document.createElement('h1');
         h.textContent = 'YM Player';
         root.appendChild(h);
+        // Brief logo, then route on account state (deferred: router.go must not run inside mount).
+        timer = setTimeout(() => router.go(store.hasAccount() ? 'home' : 'login'), SPLASH_MS);
       },
-      unmount() { h = null; },
+      unmount() { clearTimeout(timer); h = null; },
     };
   },
   login: loginView,

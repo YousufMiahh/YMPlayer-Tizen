@@ -52,21 +52,24 @@ export function loginView() {
     // Save + select first: api.login reads its credentials from the current account.
     store.saveAccount({ ...acc, server, user, pass, ua: input('ua').value.trim(), ok: false });
     store.setCurrent(acc.id);
+    let info;
     try {
-      const info = await api.login();
+      info = await api.login();
       if (!info || !info.user_info || typeof info.user_info !== 'object') {
         throw new Error("This doesn't look like an Xtream server");
       }
       store.saveAccount({ ...store.current(), ok: true });
-      busy = false;
-      router.go('home', { status: api.describeAccount(info) });
     } catch (err) {
       busy = false;
       // Roll back so a failed attempt never leaves a half-saved account or changes the selection.
       if (prevAcc) store.saveAccount(prevAcc); else store.removeAccount(acc.id);
       if (prevCurrent !== undefined && store.accounts().some((a) => a.id === prevCurrent)) store.setCurrent(prevCurrent);
-      setError(`Login failed: ${err && err.message ? err.message : err}`);
+      if (errorEl) setError(`Login failed: ${err && err.message ? err.message : err}`);
+      return;
     }
+    busy = false;
+    // Committed ok:true; a failure while mounting home must not undo the login.
+    router.go('home', { status: api.describeAccount(info) });
   }
 
   return {

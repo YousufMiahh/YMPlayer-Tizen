@@ -289,3 +289,37 @@ describe('app.boot', () => {
   });
 });
 
+
+describe('splash launch routing', () => {
+  afterEach(() => { vi.useRealTimers(); localStorage.clear(); });
+
+  function setup(hasAcc) {
+    vi.useFakeTimers();
+    localStorage.clear();
+    if (hasAcc) {
+      localStorage.setItem('accounts', JSON.stringify([{ id: '', server: 'http://h', user: 'u', pass: 'p', ua: '', ok: true }]));
+    }
+    views.home = appender('home'); views.login = appender('login');
+    document.body.innerHTML = '<div id="root"></div>';
+    const dispose = boot(document.getElementById('root'));
+    return dispose;
+  }
+
+  it('boot starts at splash, then redirects to home when an account exists', () => {
+    const dispose = setup(true);
+    expect(router.current().name).toBe('splash');
+    vi.advanceTimersByTime(2000);
+    expect(router.current().name).toBe('home');
+    dispose();
+    delete views.home; delete views.login;
+  });
+
+  it('redirects to login when no account exists', () => {
+    const dispose = setup(false);
+    expect(router.current().name).toBe('splash');
+    vi.advanceTimersByTime(2000);
+    expect(router.current().name).toBe('login');
+    dispose();
+    delete views.home; delete views.login;
+  });
+});

@@ -190,3 +190,36 @@ describe('setup view (multi-account)', () => {
     expect(store.current().id).toBe(a.id);
   });
 });
+
+describe('login robustness', () => {
+  it('failed login after navigating away does not throw', async () => {
+    let rej;
+    api.login.mockReturnValue(new Promise((_, r) => { rej = r; }));
+    const errs = [];
+    const h = (e) => errs.push(e);
+    process.on('unhandledRejection', h);
+    router.go('login');
+    fill('[name=server]', 'h'); fill('[name=user]', 'u'); fill('[name=pass]', 'p');
+    submit();
+    router.go('home');
+    rej(new Error('late'));
+    await tick();
+    process.off('unhandledRejection', h);
+    expect(errs).toEqual([]);
+    expect(store.accounts()).toEqual([]);
+  });
+
+  it('a throwing home mount does not roll back a successful login', async () => {
+    api.login.mockResolvedValue(GOOD);
+    router.register('home', () => ({ mount() { throw new Error('boom'); }, unmount() {} }));
+    const errs = [];
+    const h = (e) => errs.push(e);
+    process.on('unhandledRejection', h);
+    router.go('login');
+    fill('[name=server]', 'h'); fill('[name=user]', 'u'); fill('[name=pass]', 'p');
+    submit();
+    await tick();
+    process.off('unhandledRejection', h);
+    expect(store.current()).toMatchObject({ user: 'u', ok: true });
+  });
+});
