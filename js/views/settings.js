@@ -3,6 +3,10 @@ import * as store from '../store.js';
 import * as nav from '../nav.js';
 import { hasTmdb } from '../keys.js';
 import { mountAccounts } from './setup.js';
+import { router } from '../router.js';
+import { mountSection, tabFocused } from '../ui/topbar.js';
+import { applyTheme } from '../ui/theme.js';
+import * as backdrop from '../ui/backdrop.js';
 
 const COLORS = ['White', 'Yellow', 'Green', 'Cyan', 'Blue', 'Red'];
 const SIZES = ['Small', 'Medium', 'Large'];
@@ -64,9 +68,11 @@ export function settingsView() {
   return {
     mount(rootEl) {
       root = rootEl;
+      const outer = document.createElement('div');
+      outer.className = 'settings';
       const el = document.createElement('div');
-      el.className = 'settings';
-      el.innerHTML = '<h1>Settings</h1>';
+      el.className = 'settings-col';
+      outer.appendChild(el);
       const sections = {};
       const sec = (n) => (sections[n] ||= section(el, n));
 
@@ -95,6 +101,15 @@ export function settingsView() {
         r.appendChild(b); home.appendChild(r);
       }
 
+      // Tizen extras that Android doesn't have; they used to sit on the Home menu.
+      const extras = section(el, 'Extras');
+      for (const [view, title] of [['ambient', 'Ambient'], ['phonelink', 'Phone Link']]) {
+        const r = row(title);
+        const b = document.createElement('button');
+        b.type = 'button'; b.dataset.open = view; b.textContent = 'Open';
+        r.appendChild(b); extras.appendChild(r);
+      }
+
       const theme = section(el, 'Theme');
       const tr = row('Dark theme');
       const tb = document.createElement('button');
@@ -104,7 +119,8 @@ export function settingsView() {
       const acc = section(el, 'Accounts');
       const host = document.createElement('div');
       acc.appendChild(host);
-      root.appendChild(el);
+      const { page } = mountSection(root, 'settings', { onDown: () => nav.focusFirst(outer) });
+      page.appendChild(outer);
       accountsUi = mountAccounts(host, root);
 
       onClick = (e) => {
@@ -117,6 +133,9 @@ export function settingsView() {
           c.set(next); paint(b, c);
         } else if (b.dataset.setting === 'dark') {
           store.setDark(!store.dark()); b.textContent = onOff(store.dark());
+          applyTheme(store.dark()); backdrop.retheme();
+        } else if (b.dataset.open) {
+          router.go(b.dataset.open);
         } else if (b.dataset.home) {
           store.setHomeShows(b.dataset.home, !store.homeShows(b.dataset.home));
           b.textContent = onOff(store.homeShows(b.dataset.home));
@@ -132,12 +151,12 @@ export function settingsView() {
       onActivate = (e) => { if (e.target.tagName === 'BUTTON') e.target.click(); };
       root.addEventListener('activate', onActivate);
       nav.register(root);
-      nav.focusFirst(root);
+      if (!tabFocused()) nav.focusFirst(outer);
     },
     unmount() {
       if (root) {
         root.removeEventListener('activate', onActivate);
-        const el = root.querySelector('.settings');
+        const el = root.querySelector('.settings-col');
         if (el && el._cleanup) el._cleanup();
       }
       if (accountsUi) accountsUi.dispose();

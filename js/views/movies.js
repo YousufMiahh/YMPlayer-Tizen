@@ -6,17 +6,19 @@ import * as nav from '../nav.js';
 import { router } from '../router.js';
 import { MOVIE } from '../item.js';
 import * as favourites from '../favourites.js';
+import { LONG_PRESS_MS } from '../ui/theme.js';
+import { mountSection, tabFocused } from '../ui/topbar.js';
+import { createGlider } from '../ui/glider.js';
 
 const KEY_MENU = 10133;
 const KEY_ENTER = 13;
-const HOLD_MS = 600;
 
 /** @param type MOVIE|SERIES  @param detail name of the detail view to open */
 export function vodBrowseView(type, detail) {
   return function create() {
     let root; let railEl; let gridEl; let params; let cats = []; let items = [];
     let holdTimer = null; let held = false; let loadSeq = 0;
-    let onKeyUp; let onClick; let onActivate; let onBack;
+    let onKeyUp; let onClick; let onActivate; let onBack; let glider = null;
 
     const catBtn = (id) => railEl.querySelector(`[data-cat="${id}"]`);
 
@@ -25,7 +27,8 @@ export function vodBrowseView(type, detail) {
     function renderCard(it) {
       const b = document.createElement('button');
       b.type = 'button'; b.dataset.item = it.id;
-      b.className = `poster${store.isFav(it) ? ' fav' : ''}`;
+      b.className = `poster poster-cell${store.isFav(it) ? ' fav' : ''}`;
+      if (it.icon) b.dataset.art = it.icon;
       const art = document.createElement('span');
       art.className = 'art';
       if (it.icon) {
@@ -83,7 +86,14 @@ export function vodBrowseView(type, detail) {
         el.innerHTML = '<nav class="rail"></nav><section class="grid"></section>';
         railEl = el.querySelector('.rail');
         gridEl = el.querySelector('.grid');
-        root.appendChild(el);
+        const section = type === MOVIE ? 'movies' : 'series';
+        const firstCat = () => railEl.querySelector('[data-cat]');
+        const { page } = mountSection(root, section, {
+          onDown: () => (catBtn(params?.categoryId) || firstCat())?.focus(),
+          onReselect: () => firstCat()?.focus(),
+        });
+        page.appendChild(el);
+        glider = createGlider(railEl, { rows: '.cat' });
 
         onClick = (e) => {
           const cat = e.target.closest('[data-cat]');
@@ -118,11 +128,11 @@ export function vodBrowseView(type, detail) {
         renderRail();
         const first = (params.categoryId && catBtn(params.categoryId)) || railEl.querySelector('[data-cat]');
         if (!first) { gridEl.innerHTML = '<p class="empty">No categories.</p>'; return; }
-        first.focus();
+        if (!tabFocused()) first.focus();
         if (params.categoryId) {
           await selectCategory(params.categoryId, false);
           const back = params.itemId && gridEl.querySelector(`[data-item="${params.itemId}"]`);
-          if (back) back.focus();
+          if (back && !tabFocused()) back.focus();
         }
       },
       onKey(e) {
@@ -132,7 +142,7 @@ export function vodBrowseView(type, detail) {
             && document.activeElement.matches('[data-cat], [data-item]')) {
           e.preventDefault();
           if (!e.repeat && holdTimer === null && !held) {
-            holdTimer = setTimeout(() => { holdTimer = null; held = true; toggleFavourite(); }, HOLD_MS);
+            holdTimer = setTimeout(() => { holdTimer = null; held = true; toggleFavourite(); }, LONG_PRESS_MS);
           }
           return true;
         }
@@ -147,7 +157,8 @@ export function vodBrowseView(type, detail) {
           root.removeEventListener('activate', onActivate);
           root.removeEventListener('back', onBack);
         }
-        root = railEl = gridEl = params = null;
+        if (glider) glider.destroy();
+        root = railEl = gridEl = params = glider = null;
       },
     };
   };

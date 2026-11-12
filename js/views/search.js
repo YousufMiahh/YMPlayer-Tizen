@@ -7,6 +7,7 @@ import { router } from '../router.js';
 import { LIVE, MOVIE, SERIES } from '../item.js';
 import * as favourites from '../favourites.js';
 import * as store from '../store.js';
+import { mountSection, tabFocused } from '../ui/topbar.js';
 
 const KEY_MENU = 10133;
 const DEBOUNCE_MS = 120;
@@ -33,6 +34,7 @@ export function searchView() {
     const b = document.createElement('button');
     b.type = 'button'; b.dataset.result = it.id;
     b.className = `result${store.isFav(it) ? ' fav' : ''}`;
+    if (it.icon) b.dataset.art = it.icon;
     const art = document.createElement('span'); art.className = 'art';
     if (it.icon) { const img = document.createElement('img'); img.src = it.icon; img.alt = ''; art.appendChild(img); }
     const name = document.createElement('span'); name.className = 'name'; name.textContent = it.name;
@@ -76,7 +78,8 @@ export function searchView() {
       listEl = document.createElement('section');
       listEl.className = 'results';
       el.append(head, listEl);
-      root.appendChild(el);
+      const { page } = mountSection(root, 'search', { onReselect: () => box.focus(), onDown: () => box.focus() });
+      page.appendChild(el);
       message('Type to search');
 
       onInput = () => { clearTimeout(timer); timer = setTimeout(run, DEBOUNCE_MS); };
@@ -97,7 +100,7 @@ export function searchView() {
       root.addEventListener('click', onClick);
       root.addEventListener('activate', onActivate);
       nav.register(root);
-      box.focus();
+      if (!tabFocused()) box.focus();
     },
     onKey(e) {
       if (e.keyCode !== KEY_MENU) return false;

@@ -6,16 +6,19 @@ import * as nav from '../nav.js';
 import { router } from '../router.js';
 import { LIVE } from '../item.js';
 import * as favourites from '../favourites.js';
+import { LONG_PRESS_MS } from '../ui/theme.js';
+import { mountSection, tabFocused } from '../ui/topbar.js';
+import { createGlider } from '../ui/glider.js';
 
 const KEY_MENU = 10133;
 const KEY_ENTER = 13;
-const HOLD_MS = 600; // long-press OK toggles favourite instead of opening
 const EAGER_EPG = 8; // rows whose Now/Next is fetched up front; the rest load when focused
 
 export function liveView() {
   let root; let railEl; let listEl; let params; let cats = []; let channels = [];
   let holdTimer = null; let held = false; let onKeyUp;
   let loadSeq = 0; let epgCache; let onClick; let onActivate; let onBack; let onFocusIn;
+  let gliders = [];
 
   const catBtn = (id) => railEl.querySelector(`[data-cat="${id}"]`);
 
@@ -37,6 +40,7 @@ export function liveView() {
     const b = document.createElement('button');
     b.type = 'button'; b.dataset.channel = ch.id;
     b.className = `channel${store.isFav(ch) ? ' fav' : ''}`;
+    if (ch.icon) b.dataset.art = ch.icon;
     const logo = document.createElement('span');
     logo.className = 'logo';
     if (ch.icon) {
@@ -51,7 +55,7 @@ export function liveView() {
     const epg = document.createElement('span');
     epg.className = 'epg';
     epg.innerHTML = '<span class="now"></span><span class="next"></span>';
-    b.append(logo, num, name, epg);
+    b.append(num, logo, name, epg); // Adapters.java: number, logo, name
     return b;
   }
 
@@ -103,7 +107,13 @@ export function liveView() {
       el.innerHTML = '<nav class="rail"></nav><section class="channels"></section>';
       railEl = el.querySelector('.rail');
       listEl = el.querySelector('.channels');
-      root.appendChild(el);
+      const firstCat = () => railEl.querySelector('[data-cat]');
+      const { page } = mountSection(root, 'live', {
+        onDown: () => (catBtn(params?.categoryId) || firstCat())?.focus(),
+        onReselect: () => firstCat()?.focus(),
+      });
+      page.appendChild(el);
+      gliders = [createGlider(railEl, { rows: '.cat' }), createGlider(listEl, { rows: '.channel' })];
 
       onClick = (e) => {
         const cat = e.target.closest('[data-cat]');
@@ -144,11 +154,11 @@ export function liveView() {
       renderRail();
       const first = (params?.categoryId && catBtn(params.categoryId)) || railEl.querySelector('[data-cat]');
       if (!first) { listEl.innerHTML = '<p class="empty">No categories.</p>'; return; }
-      first.focus();
+      if (!tabFocused()) first.focus();
       if (params?.categoryId) {
         await selectCategory(params.categoryId, false);
         const back = params.channelId && listEl.querySelector(`[data-channel="${params.channelId}"]`);
-        if (back) back.focus();
+        if (back && !tabFocused()) back.focus();
       }
     },
     onKey(e) {
@@ -156,12 +166,12 @@ export function liveView() {
         e.preventDefault();
         return toggleFavourite();
       }
-      // OK is decided on release: short press activates, a hold (HOLD_MS) toggles favourite.
+      // OK is decided on release: short press activates, a hold (LONG_PRESS_MS) toggles favourite.
       if (e.keyCode === KEY_ENTER && root && root.contains(document.activeElement)
           && document.activeElement.matches('[data-cat], [data-channel]')) {
         e.preventDefault();
         if (!e.repeat && holdTimer === null && !held) {
-          holdTimer = setTimeout(() => { holdTimer = null; held = true; toggleFavourite(); }, HOLD_MS);
+          holdTimer = setTimeout(() => { holdTimer = null; held = true; toggleFavourite(); }, LONG_PRESS_MS);
         }
         return true;
       }
@@ -177,6 +187,7 @@ export function liveView() {
         root.removeEventListener('focusin', onFocusIn);
         root.removeEventListener('back', onBack);
       }
+      gliders.forEach((g) => g.destroy()); gliders = [];
       root = railEl = listEl = params = null;
     },
   };

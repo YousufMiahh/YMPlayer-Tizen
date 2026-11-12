@@ -97,11 +97,37 @@ describe('home rows', () => {
 });
 
 describe('home navigation', () => {
-  it.each([['live'], ['movies'], ['series'], ['search'], ['settings']])('menu item %s routes there', async (name) => {
+  it.each([['live'], ['movies'], ['series'], ['search'], ['settings']])('top-bar tab %s routes there (pushed over Home)', async (name) => {
     router.go('home');
     await tick();
-    root.querySelector(`[data-menu="${name}"]`).click();
+    root.querySelector(`[data-tab="${name}"]`).click();
     expect(router.current().name).toBe(name);
+    expect(router.stackDepth()).toBe(2);
+  });
+
+  it('has no Ambient/Phone entries on Home (they live in Settings, as on Android)', async () => {
+    router.go('home');
+    await tick();
+    const tabs = [...root.querySelectorAll('[data-tab]')].map((t) => t.textContent);
+    expect(tabs).toEqual(['Home', 'Live TV', 'Movies', 'Series', 'Search', 'Settings']);
+  });
+
+  it('focus starts on the first card, not the top bar', async () => {
+    store.toggleFav({ type: 'live', id: 'c1', name: 'BBC One' });
+    router.go('home');
+    await tick();
+    expect(document.activeElement.dataset.row).toBe('fav_live');
+    expect(document.activeElement.dataset.tile).toBe('0');
+  });
+
+  it('cards use the Android shape per row and initials for missing channel art', async () => {
+    store.toggleFav({ type: 'live', id: 'c1', name: 'bbc one hd' });
+    router.go('home');
+    await tick();
+    const card = root.querySelector('[data-row="fav_live"] [data-tile]');
+    expect(card.classList.contains('channel')).toBe(true);
+    expect(card.querySelector('.initials').textContent).toBe('BO');
+    expect(root.querySelector('[data-row="new_movies"] [data-tile]').classList.contains('poster')).toBe(true);
   });
 
   it('Continue Watching tile resumes in the VOD player', async () => {
@@ -133,13 +159,12 @@ describe('home navigation', () => {
   });
 });
 
-describe('home status', () => {
-  it('shows params.status when present and is safe without it', async () => {
+describe('home top bar', () => {
+  it('shows the clock where Tizen used to show an account chip', async () => {
     router.go('home', { status: 'Active · expires 2027' });
     await tick();
-    expect(root.querySelector('.status-chip').textContent).toBe('Active · expires 2027');
-    router.go('home');
-    await tick();
     expect(root.querySelector('.status-chip')).toBeNull();
+    expect(root.querySelector('.tb-clock').textContent).toMatch(/^\d\d:\d\d$/);
+    expect(root.querySelector('[data-tab="home"]').classList.contains('current')).toBe(true);
   });
 });

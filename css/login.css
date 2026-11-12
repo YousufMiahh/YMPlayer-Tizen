@@ -1,12 +1,28 @@
-.login { max-width: 720px; margin: 0 auto; padding: 96px 0; display: flex; flex-direction: column; gap: 24px; }
-.login h1 { font-size: 56px; font-weight: 700; margin: 0 0 16px; }
-.login form { display: flex; flex-direction: column; gap: 20px; }
-.login label { display: flex; flex-direction: column; gap: 8px; font-size: 24px; font-weight: 500; opacity: .85; }
-.login input { font: inherit; font-size: 28px; color: #fff; background: #1b1b22; border: 3px solid transparent; border-radius: 12px; padding: 16px 20px; outline: none; }
-.login input:focus, .login button:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 4px rgba(10,132,255,.35); }
-.login .actions { display: flex; gap: 16px; margin-top: 8px; }
-.login button { font: inherit; font-size: 28px; font-weight: 600; color: #fff; background: #1b1b22; border: 3px solid transparent; border-radius: 12px; padding: 16px 32px; cursor: pointer; }
-.login button.primary { background: var(--accent); }
-.login .error { min-height: 36px; margin: 0; font-size: 24px; color: #ff6961; }
-.login .account { display: flex; align-items: center; gap: 16px; font-size: 28px; }
+/* Login (LoginActivity): a SURFACE_LO card, radius 28u, padding 44u, 620u wide, centred. Rebuilt later. */
+.login {
+  width: calc(620 * var(--u)); margin: calc(60 * var(--u)) auto 0;
+  padding: calc(44 * var(--u)); border-radius: var(--r-track); background: var(--surface-lo);
+  display: flex; flex-direction: column; gap: calc(12 * var(--u));
+  max-height: calc(100% - 120 * var(--u)); overflow-y: auto;
+}
+.login h1 { font-size: calc(40 * var(--u)); font-weight: 700; letter-spacing: -0.02em; margin: 0 0 calc(14 * var(--u)); }
+.login form { display: flex; flex-direction: column; gap: calc(12 * var(--u)); }
+.login label { display: flex; flex-direction: column; gap: calc(6 * var(--u)); font-size: calc(15 * var(--u)); font-weight: 500; color: var(--text2); }
+.login input {
+  font-size: calc(19 * var(--u)); font-weight: 500;
+  padding: calc(16 * var(--u)) calc(16 * var(--u)) calc(16 * var(--u)) calc(20 * var(--u));
+  border: 0; border-radius: var(--r-button); background: var(--surface); color: var(--text);
+}
+.login input:focus { background: var(--focus-bg); color: var(--on-focus); }
+.login .actions { display: flex; gap: calc(16 * var(--u)); margin-top: calc(8 * var(--u)); }
+.login button {
+  flex: 1; font-size: calc(18 * var(--u)); font-weight: 600; text-align: center;
+  padding: calc(14 * var(--u)) calc(28 * var(--u));
+  border-radius: var(--r-button); background: var(--surface-hi); color: var(--text);
+  transition: transform var(--dur-focus) var(--ease-focus);
+}
+.login button:focus { background: var(--focus-bg); color: var(--on-focus); transform: scale(1.06); }
+.login .error { min-height: calc(18 * var(--u)); margin: 0; font-size: calc(15 * var(--u)); color: var(--text2); }
+.login .account { display: flex; align-items: center; gap: calc(16 * var(--u)); font-size: calc(19 * var(--u)); }
 .login .account span { flex: 1; }
+.login .account button { flex: none; }

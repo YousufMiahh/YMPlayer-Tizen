@@ -1,5 +1,6 @@
 // Single source of truth for favourite handling shared by Live, Movies, Series and Search.
 import * as store from './store.js';
+import { rowCell } from './ui/widgets.js';
 
 /** Favourite categories first (stable), then the rest in their original order. */
 export function orderCategories(type, cats) {
@@ -7,14 +8,14 @@ export function orderCategories(type, cats) {
   return [...cats.filter(fav), ...cats.filter((c) => !fav(c))];
 }
 
-/** Category rail buttons for a section, favourites pinned to the top and starred. */
+/** Category rail rows (Adapters.RowCell) for a section; favourites pinned with a trailing ♥. */
 export function railButtons(type, cats) {
   return orderCategories(type, cats).map((c) => {
     const fav = store.isFavCategory(type, c.id);
-    const b = document.createElement('button');
-    b.type = 'button'; b.dataset.cat = c.id;
-    b.className = `cat${fav ? ' fav' : ''}`;
-    b.textContent = (fav ? '★ ' : '') + c.name;
+    const b = rowCell({ title: c.name, trail: fav ? '\u2665' : '' });
+    b.dataset.cat = c.id;
+    b.classList.add('cat');
+    if (fav) b.classList.add('fav');
     return b;
   });
 }

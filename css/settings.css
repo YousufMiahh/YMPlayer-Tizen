@@ -1,8 +1,39 @@
-.settings { padding: 48px 64px; max-width: 1100px; overflow-y: auto; height: 100%; }
-.settings h1 { font-size: 40px; margin: 0 0 24px; }
-.settings h2 { font-size: 24px; margin: 32px 0 12px; color: #9a9aa5; font-weight: 600; }
-.settings .setting, .settings .account { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 0; font-size: 22px; }
-.settings button, .settings input { font: inherit; color: #fff; background: #1c1c22; border: 2px solid transparent; border-radius: 10px; padding: 8px 20px; min-width: 200px; }
-.settings .account button { min-width: 0; margin-left: 8px; }
+/* Settings (SettingsActivity): 900u column centred under the top bar; rows are SURFACE pills,
+   label medium 19u TEXT, value 18u TEXT2; the focused row turns white with dark text. Rebuilt later. */
+.settings { height: 100%; overflow-y: auto; scrollbar-width: none; }
+.settings::-webkit-scrollbar { display: none; }
+.settings-col { width: calc(900 * var(--u)); margin: 0 auto; padding: 0 calc(16 * var(--u)) calc(60 * var(--u)); }
+.settings h1 { display: none; }
+.settings h2, .settings .section-heading {
+  margin: 0; font-size: calc(14 * var(--u)); font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--text3); padding: calc(34 * var(--u)) 0 calc(10 * var(--u)) calc(22 * var(--u));
+}
+.settings .setting, .settings .account {
+  display: flex; align-items: center; justify-content: space-between; gap: calc(24 * var(--u));
+  margin-bottom: calc(6 * var(--u));
+  padding: calc(4 * var(--u)) calc(4 * var(--u)) calc(4 * var(--u)) calc(22 * var(--u));
+  border-radius: var(--r-button); background: var(--surface);
+  font-size: calc(19 * var(--u)); font-weight: 500; color: var(--text);
+  transition: transform var(--dur-focus) var(--ease-focus);
+}
+.settings .setting:focus-within, .settings .account:focus-within { transform: scale(1.02); }
+.settings .setting:focus-within { background: var(--focus-bg); color: var(--on-focus); }
+.settings .setting button, .settings .setting input {
+  min-width: calc(200 * var(--u)); padding: calc(14 * var(--u)) calc(18 * var(--u));
+  border: 0; border-radius: var(--r-button); background: transparent;
+  font-size: calc(18 * var(--u)); font-weight: 400; color: var(--text2); text-align: right;
+}
+.settings .setting:focus-within button, .settings .setting:focus-within input { color: var(--on-focus2); }
 .settings .account span { flex: 1; }
-.settings button:focus, .settings input:focus { outline: none; border-color: var(--accent); background: #26262e; }
+.settings .account button {
+  min-width: 0; margin-left: calc(8 * var(--u)); padding: calc(14 * var(--u)) calc(22 * var(--u));
+  border-radius: var(--r-button); font-size: calc(18 * var(--u)); font-weight: 600; color: var(--text2);
+}
+.settings .account button:focus { background: var(--focus-bg); color: var(--on-focus); }
+.settings .actions { padding: calc(8 * var(--u)) 0; }
+.settings .actions button {
+  font-size: calc(18 * var(--u)); font-weight: 600; padding: calc(14 * var(--u)) calc(28 * var(--u));
+  border-radius: var(--r-button); background: var(--surface-hi); color: var(--text);
+  transition: transform var(--dur-focus) var(--ease-focus);
+}
+.settings .actions button:focus { background: var(--focus-bg); color: var(--on-focus); transform: scale(1.06); }
