@@ -46,7 +46,8 @@ function api(q, origin) {
 /**
  * Per-action behaviour for screens that need a slow or failing provider (Setup):
  *   { get_vod_streams: { trickleMs: 30000 }, get_series: { holdMs: 60000 }, get_live_streams: { status: 502 } }
- * trickle = send the body in small pieces over that time; hold = say nothing for that long.
+ * trickle = send the body in small pieces over that time; hold = say nothing for that long;
+ * body = answer with this JSON instead (e.g. [] for an account with nothing in it).
  */
 let behaviour = {};
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -63,8 +64,8 @@ export function startServer(port = 0) {
       if (url.pathname === '/favicon.ico') { send(204, 'text/plain', ''); return; }
       if (url.pathname === '/player_api.php') {
         // Providers return absolute artwork URLs; mirror that so the app fetches them like real ones.
-        const body = JSON.stringify(api(url.searchParams, origin)).replaceAll('"/art/', `"${origin}/art/`);
         const b = behaviour[url.searchParams.get('action')] || {};
+        const body = JSON.stringify(b.body !== undefined ? b.body : api(url.searchParams, origin)).replaceAll('"/art/', `"${origin}/art/`);
         if (b.holdMs) await sleep(b.holdMs);
         if (b.status) { send(b.status, 'text/plain', 'Bad Gateway'); return; }
         if (b.trickleMs) {

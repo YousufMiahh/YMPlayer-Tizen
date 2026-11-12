@@ -194,3 +194,30 @@ export function vodInfo(id) {
     movie_data: { stream_id: m.stream_id, name: m.name, added: m.added, category_id: m.category_id, container_extension: 'mp4' },
   };
 }
+
+/**
+ * A small stand-in for Netflix's all-weeks-countries.tsv (the harness never reaches the internet):
+ * several weeks and countries, with the latest UK week naming titles from this library (plus two
+ * it doesn't have, which Home drops). Movie names lose their "(year)" as on Netflix.
+ */
+export const TOP10_WEEK = '2026-11-08';
+export function top10Tsv() {
+  const head = 'country_name\tcountry_iso2\tweek\tcategory\tweekly_rank\tshow_title\tseason_title\tcumulative_weeks_in_top_10';
+  const plain = (n) => n.replace(/\s*\(\d{4}\)$/, '');
+  const films = [61, 5, 'A Film Not On This Provider', 130, 200, 222, 87, 300, 150, 12].map((x) => (typeof x === 'number' ? plain(movies[x].name) : x));
+  const tv = [3, 40, 'A Show Not On This Provider', 77, 120, 9, 150, 201, 55, 99].map((x) => (typeof x === 'number' ? series[x].name : x));
+  const lines = [head];
+  const countries = [['France', 'FR'], ['United States', 'US'], ['United Kingdom', 'GB'], ['Germany', 'DE']];
+  for (const week of ['2026-10-25', '2026-11-01', TOP10_WEEK]) {
+    for (const [cn, iso] of countries) {
+      const latestUk = iso === 'GB' && week === TOP10_WEEK;
+      for (let r = 1; r <= 10; r++) {
+        const f = latestUk ? films[r - 1] : plain(movies[(r * 7 + week.length * 3 + cn.length) % movies.length].name);
+        const t = latestUk ? tv[r - 1] : series[(r * 11 + cn.length) % series.length].name;
+        lines.push(`${cn}\t${iso}\t${week}\tFilms (English)\t${r}\t${f}\tN/A\t${r}`);
+        lines.push(`${cn}\t${iso}\t${week}\tTV (English)\t${r}\t${t}\t${t}: Season 1\t${r}`);
+      }
+    }
+  }
+  return `${lines.join('\n')}\n`;
+}

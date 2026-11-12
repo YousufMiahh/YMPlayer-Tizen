@@ -19,7 +19,7 @@ const CHROME = process.env.CHROME || '/usr/bin/google-chrome';
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Put an account plus some history and favourites in the app's store, as a returning user. */
-async function seed(page, url) {
+async function seed(page, url, coach = null) {
   const abs = (s) => (s && s.startsWith('/') ? url + s : s);
   const liveItem = (s) => ({ type: 'live', id: String(s.stream_id), name: s.name, icon: abs(s.stream_icon), num: String(s.num), categoryId: s.category_id });
   const movieItem = (s) => ({ type: 'movie', id: String(s.stream_id), name: s.name, icon: abs(s.stream_icon), ext: 'mp4', categoryId: s.category_id, added: s.added });
@@ -27,10 +27,13 @@ async function seed(page, url) {
   const data = {
     account: { id: '', name: 'Demo', server: url, user: USER, pass: PASS, ua: '', ok: true },
     cont: [fx.movies[3], fx.movies[40], fx.movies[77], fx.movies[120]].map(movieItem),
+    episode: { type: 'episode', id: String(fx.series[2].series_id * 100 + 13), name: `${fx.series[2].name} S1E4`, ext: 'mp4', num: '4',
+      parentId: String(fx.series[2].series_id), parentName: fx.series[2].name, parentIcon: abs(fx.series[2].cover) },
     recent: fx.live.slice(0, 12).map(liveItem),
     favLive: [fx.live[14], fx.live[30], fx.live[2], fx.live[51], fx.live[66], fx.live[90]].map(liveItem),
     favMovies: fx.movies.slice(10, 20).map(movieItem),
     favSeries: fx.series.slice(5, 13).map(seriesItem),
+    coach,
   };
   await page.evaluate(async (d) => {
     const s = await import('/js/store.js');
@@ -39,6 +42,9 @@ async function seed(page, url) {
     s.setCurrent('');
     [...d.recent].reverse().forEach((i) => s.addHistory(i));
     [...d.cont].reverse().forEach((i, n) => { s.addHistory(i); s.setDuration(i, 6000000); s.setPosition(i, 900000 * (n + 1)); });
+    s.addHistory(d.episode); s.setDuration(d.episode, 2700000); s.setPosition(d.episode, 1220000); // newest: an episode
+    if (d.coach !== 'offer') localStorage.setItem('coach_asked', 'true'); // the welcome offer has its own screen
+    if (d.coach === 'tour') localStorage.setItem('coach_on', 'true');
     d.favLive.forEach((i) => s.toggleFav(i));
     d.favMovies.forEach((i) => s.toggleFav(i));
     d.favSeries.forEach((i) => s.toggleFav(i));
@@ -47,6 +53,21 @@ async function seed(page, url) {
     await repo.refreshAll();
   }, data);
 }
+
+/** A brand-new account whose provider has nothing in it (saved, so launch lands on Home). */
+async function seedEmpty(page, url) {
+  await page.evaluate(async (acc) => {
+    const s = await import('/js/store.js');
+    localStorage.clear();
+    s.saveAccount(acc); s.setCurrent('');
+    localStorage.setItem('coach_asked', 'true');
+    const repo = await import('/js/repo.js');
+    await repo.refreshAll();
+  }, { id: '', name: 'Demo', server: url, user: USER, pass: PASS, ua: '', ok: true });
+}
+
+/** Hold OK (Android long-press) on the focused element. */
+const holdOk = async (page, ms = 700) => { await page.keyboard.down('Enter'); await wait(ms); await page.keyboard.up('Enter'); };
 
 /** A signed-in account with nothing saved yet: launch goes splash -> Setup. */
 async function seedAccountOnly(page, url) {
@@ -115,6 +136,64 @@ export const SCREENS = {
     seed: true,
     steps: async (page) => { await toHome(page); await press(page, 'ArrowRight', 2); await wait(1100); },
   },
+  'home-cw': { // Continue Watching: episode card ("<series>  ·  m:ss left", series art) focused
+    seed: true,
+    steps: async (page) => { await toHome(page); await wait(1100); },
+  },
+  'home-mid': { // scrolled down to Favourite Movies, a few cards in
+    seed: true,
+    steps: async (page) => { await toHome(page); await press(page, 'ArrowDown', 3, 300); await press(page, 'ArrowRight', 3, 300); await wait(1100); },
+  },
+  'home-top10': { // the Netflix UK Top 10 rows (local stand-in for the TSV)
+    seed: true,
+    steps: async (page) => {
+      await toHome(page);
+      await page.waitForSelector('.home-row[data-row="top_movies"]', { timeout: 15000 });
+      await press(page, 'ArrowDown', 5, 300); await press(page, 'ArrowRight', 1); await wait(1100);
+    },
+  },
+  'home-bottom': { // last row, scrolled sideways past the screen edge
+    seed: true,
+    steps: async (page) => {
+      await toHome(page);
+      await page.waitForSelector('.home-row[data-row="top_series"]', { timeout: 15000 });
+      await press(page, 'ArrowDown', 8, 300); await press(page, 'ArrowRight', 9, 200); await wait(1100);
+    },
+  },
+  'home-remove': { // Hold OK on Continue Watching
+    seed: true,
+    steps: async (page) => { await toHome(page); await press(page, 'ArrowRight'); await holdOk(page); await wait(500); },
+  },
+  'home-fav': { // Hold OK on a Recently Added card: favourite toggled, toast
+    seed: true,
+    steps: async (page) => {
+      await toHome(page);
+      await page.waitForSelector('.home-row[data-row="new_movies"]', { timeout: 15000 });
+      await press(page, 'ArrowDown', 7, 300); await holdOk(page); await wait(600);
+    },
+  },
+  'home-return': { // open a Top 10 card, Back: Home comes back on the same card
+    seed: true,
+    steps: async (page) => {
+      await toHome(page);
+      await page.waitForSelector('.home-row[data-row="top_movies"]', { timeout: 15000 });
+      await press(page, 'ArrowDown', 5, 300); await press(page, 'ArrowRight', 2, 300);
+      await press(page, 'Enter'); await wait(1200); await press(page, 'Escape'); await wait(1300);
+    },
+  },
+  'home-empty': { // new account, nothing watched, empty provider
+    seed: 'empty',
+    provider: Object.fromEntries(['get_live_categories', 'get_vod_categories', 'get_series_categories', 'get_live_streams', 'get_vod_streams', 'get_series'].map((a) => [a, { body: [] }])),
+    steps: async (page) => { await page.waitForSelector('.home-empty:not([hidden])', { timeout: 10000 }); await wait(800); },
+  },
+  'home-coach-offer': { // first Home ever: the tutorial offer after 1.5 s
+    seed: true, coach: 'offer',
+    steps: async (page) => { await toHome(page); await page.waitForSelector('.dialog', { timeout: 6000 }); await wait(400); },
+  },
+  'home-tour': { // the tutorial's second Home tip
+    seed: true, coach: 'tour',
+    steps: async (page) => { await toHome(page); await page.waitForSelector('.coach .coach-card.in', { timeout: 8000 }); await wait(700); await press(page, 'Enter'); await wait(900); },
+  },
   'home-light': { // Settings -> Theme: Light (Ui.applyTheme(false))
     seed: true,
     light: true,
@@ -182,6 +261,17 @@ export async function shoot(names, { log = console.log } = {}) {
     for (const name of want) {
       const scr = SCREENS[name];
       const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
+      // Never reach the internet: the Netflix Top 10 file comes from the fixtures, anything else
+      // that isn't the local server is refused.
+      await ctx.route('**/*', (route) => {
+        const u = new URL(route.request().url());
+        if (u.hostname === '127.0.0.1' || u.protocol === 'data:' || u.protocol === 'blob:') return route.continue();
+        if (u.hostname === 'www.netflix.com' && u.pathname === '/tudum/top10/data/all-weeks-countries.tsv') {
+          return route.fulfill({ status: 200, contentType: 'text/tab-separated-values; charset=utf-8',
+            headers: { 'Access-Control-Allow-Origin': '*', ETag: '"fixture"' }, body: fx.top10Tsv() });
+        }
+        return route.abort();
+      });
       const page = await ctx.newPage();
       page.on('pageerror', (e) => log(`  [${name}] page error: ${e.message}`));
       page.on('console', (m) => { if (m.type() === 'error') log(`  [${name}] console: ${m.text()}`); });
@@ -190,8 +280,11 @@ export async function shoot(names, { log = console.log } = {}) {
       if (scr.seed === 'account') {
         await seedAccountOnly(page, server.url);
         await page.reload();
+      } else if (scr.seed === 'empty') {
+        await seedEmpty(page, server.url);
+        await page.reload();
       } else if (scr.seed) {
-        await seed(page, server.url);
+        await seed(page, server.url, scr.coach || null);
         if (scr.light) await page.evaluate(() => localStorage.setItem('dark', 'false'));
         await page.reload();
       } else {
