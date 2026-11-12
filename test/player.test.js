@@ -167,16 +167,28 @@ describe('events and stop', () => {
     expect(shim.calls).toEqual([]);
   });
   it('stop persists for an episode but never for a live item', () => {
-    shim.duration = 1000;
+    shim.duration = 1000000;
     player.open(live);
     shim.tick(500);
     player.stop();
     expect(store.position(live)).toBe(0);
     expect(store.duration(live)).toBe(0);
     player.open(episode);
-    shim.tick(800);
+    shim.tick(80000);
     player.stop();
-    expect(store.position(episode)).toBe(800);
+    expect(store.position(episode)).toBe(80000);
+  });
+  it('stop follows PlayerActivity.savePosition: last minute = watched, under 10 s not kept', () => {
+    shim.duration = 1000000;
+    store.setPosition(episode, 50000);
+    player.open(episode, { startMs: 50000 });
+    shim.tick(960000); // 40 s from the end
+    player.stop();
+    expect(store.position(episode)).toBe(0);
+    player.open(movie);
+    shim.tick(9000);
+    player.stop();
+    expect(store.position(movie)).toBe(0);
   });
   it('ignores late callbacks from a stopped session', () => {
     const t = [];

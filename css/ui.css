@@ -73,7 +73,7 @@ body.video-on #backdrop { display: none; }
   font-size: calc(22 * var(--u)); font-weight: 600; color: var(--text2); line-height: var(--lh);
   padding: calc(18 * var(--u)) 0 calc(6 * var(--u)) calc(64 * var(--u));
 }
-.shelf-hint { white-space: pre; font-size: calc(15 * var(--u)); color: var(--text3); }
+.shelf-hint { white-space: pre; font-size: calc(15 * var(--u)); font-weight: 400; color: var(--text3); } /* sans-serif span, 15/22 */
 
 /* ---------------------------------------------------------------- Home card (Cards.card) */
 .card {
@@ -106,21 +106,21 @@ body.video-on #backdrop { display: none; }
 .card .title {
   display: block; font-size: calc(16 * var(--u)); font-weight: 500; color: var(--text2);
   padding: calc(12 * var(--u)) 0 0 calc(2 * var(--u));
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  white-space: pre; overflow: hidden; text-overflow: ellipsis; /* TextView keeps every space */
 }
 .card .sub {
   display: block; font-size: calc(14 * var(--u)); color: var(--text3);
   padding: calc(4 * var(--u)) 0 0 calc(2 * var(--u));
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  white-space: pre; overflow: hidden; text-overflow: ellipsis;  /* "Series  ·  12:34 left" */
 }
 .card.poster .title, .card.poster .sub { width: calc(160 * var(--u)); }
 .card.channel .title, .card.channel .sub { width: calc(220 * var(--u)); }
 .card.landscape .title, .card.landscape .sub { width: calc(300 * var(--u)); }
-.card:focus { transform: scale(1.08); }
-.card:focus .art { box-shadow: var(--lift-shadow); }
-.card:focus .art::after { opacity: 1; }
-.card:focus .title { color: var(--text); }
-.card:focus .sub { color: var(--text2); }
+.card:focus, .card.keep-focus { transform: scale(1.08); }
+.card:focus .art, .card.keep-focus .art { box-shadow: var(--lift-shadow); }
+.card:focus .art::after, .card.keep-focus .art::after { opacity: 1; }
+.card:focus .title, .card.keep-focus .title { color: var(--text); }
+.card:focus .sub, .card.keep-focus .sub { color: var(--text2); }
 
 /* ---------------------------------------------------------------- poster grid cell (Adapters.Posters) */
 .poster-cell {
@@ -278,3 +278,25 @@ html.light .toast { background: rgba(238, 238, 238, 0.97); color: rgba(0, 0, 0, 
 .splash.go .splash-logo { opacity: 1; transform: none; }
 .splash.go .splash-name { opacity: 1; transform: none; }
 .splash.go .splash-by { opacity: 1; }
+
+/* ---------------------------------------------------------------- Coach overlay (Coach.java) */
+.coach { position: fixed; inset: 0; z-index: 900; opacity: 0; transition: opacity 200ms linear; overflow: hidden; }
+.coach.on { opacity: 1; transition-duration: 250ms; }
+.coach-hole {
+  position: absolute; border-radius: calc(18 * var(--u));
+  box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.851);           /* 0xD9000000 everywhere but the hole */
+}
+.coach-hole.ring { outline: calc(3 * var(--u)) solid #fff; outline-offset: calc(-1.5 * var(--u)); }
+.coach-card {
+  position: absolute; left: 0; top: 0; box-sizing: border-box;
+  width: calc(620 * var(--u)); padding: calc(28 * var(--u));
+  background: #1C1C22; border-radius: calc(22 * var(--u));
+  box-shadow: 0 calc(6 * var(--u)) calc(24 * var(--u)) rgba(0, 0, 0, 0.45); /* elevation 12 */
+  opacity: 0;
+}
+html.light .coach-card { background: #FFFFFF; }
+.coach-card.in { opacity: 1; transition: opacity 280ms var(--ease-std) 120ms, transform 280ms var(--ease-out) 120ms; }
+.coach-counter { font-size: calc(14 * var(--u)); font-weight: 500; letter-spacing: 0.08em; color: var(--text3); line-height: var(--lh); }
+.coach-title { font-size: calc(26 * var(--u)); font-weight: 700; letter-spacing: -0.02em; color: var(--text); padding: calc(6 * var(--u)) 0 calc(8 * var(--u)); line-height: var(--lh); }
+.coach-body { font-size: calc(18 * var(--u)); color: var(--text); line-height: 1.3; }
+.coach-hint { font-size: calc(15 * var(--u)); font-weight: 500; color: var(--text2); padding-top: calc(18 * var(--u)); white-space: pre; line-height: var(--lh); }

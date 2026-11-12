@@ -49,6 +49,13 @@ export function focusFirst(container) {
   return !!el;
 }
 
+// Screens that scroll themselves (Home's shelves: Android's minimal ScrollView moves) mark the
+// scroller with data-own-scroll; the browser's own focus scrolling is then left out.
+function focusEl(el) {
+  if (el.closest && el.closest('[data-own-scroll]')) el.focus({ preventScroll: true });
+  else el.focus();
+}
+
 function center(r) {
   return { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 };
 }
@@ -67,7 +74,7 @@ export function moveFocus(dir) {
   const cur = document.activeElement;
   const all = barFilter(allFocusables(), cur, dir);
   if (!cur || !all.includes(cur)) {
-    if (all[0]) { all[0].focus(); return document.activeElement === all[0]; }
+    if (all[0]) { focusEl(all[0]); return document.activeElement === all[0]; }
     return false;
   }
   const cr = cur.getBoundingClientRect();
@@ -97,7 +104,7 @@ export function moveFocus(dir) {
   let best = null;
   for (const cand of pool) if (!best || cand.score < best.score) best = cand;
   if (!best) return false;
-  best.el.focus();
+  focusEl(best.el);
   return document.activeElement === best.el;
 }
 

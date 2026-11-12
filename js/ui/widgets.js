@@ -43,9 +43,9 @@ export function shelfTitle(text, hint) {
   return h;
 }
 
-/** Cards.initials(): first letter of the first two words, upper case. */
+/** Cards.initials(): punctuation out, then the first letter of the first two words, upper case. */
 export function initials(name) {
-  return String(name || '').trim().split(/\s+/).filter(Boolean).slice(0, 2)
+  return String(name || '').replace(/[^\p{L}\p{N} ]/gu, ' ').trim().split(/\s+/).filter(Boolean).slice(0, 2)
     .map((w) => [...w][0].toUpperCase()).join('');
 }
 

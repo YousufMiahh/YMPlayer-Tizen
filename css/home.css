@@ -1,12 +1,18 @@
-/* Home (HomeActivity + Cards.shelf): one vertical scroller under the top bar, bottom padding 48u. */
-.home { height: 100%; overflow-y: auto; overflow-x: hidden; padding-bottom: calc(48 * var(--u)); }
-.home::-webkit-scrollbar, .home .strip::-webkit-scrollbar { display: none; }
+/* Home (HomeActivity + Cards.shelf): ONE vertical ScrollView holding the top bar and the shelves,
+   so the bar scrolls away with the rows. Bottom padding 48u. Home moves the scroll itself
+   (data-own-scroll): just enough to show the focused card, like Android's ScrollView. */
+.section-screen.section-home { display: block; overflow-x: hidden; overflow-y: auto; position: relative; scrollbar-width: none; }
+.section-home::-webkit-scrollbar, .home .strip::-webkit-scrollbar { display: none; }
+.section-home .section-page { flex: none; min-height: 0; }
+.home { padding-bottom: calc(48 * var(--u)); }
 .home .strip {
+  position: relative;
   display: flex; align-items: flex-start;
   gap: calc(32 * var(--u));
-  padding: calc(22 * var(--u)) calc(64 * var(--u));
-  overflow-x: auto; overflow-y: hidden;
+  padding: calc(22 * var(--u)) 0 calc(22 * var(--u)) calc(64 * var(--u));
+  overflow-x: hidden; overflow-y: hidden;   /* moved by home.js, no scrollbar */
   scrollbar-width: none;
 }
-.home .strip::after { content: ''; flex: none; width: 1px; } /* keeps the right padding when scrolled */
+.home .strip::after { content: ''; flex: none; width: calc(64 * var(--u)); height: 1px; } /* every card's 32u right margin + the row's 64u right padding */
 .home-empty { margin: 0; padding-top: calc(80 * var(--u)); font-size: calc(18 * var(--u)); color: var(--text2); text-align: center; white-space: pre-line; line-height: var(--lh); }
+.home-empty[hidden] { display: none; }

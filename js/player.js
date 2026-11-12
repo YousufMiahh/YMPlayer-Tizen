@@ -98,9 +98,11 @@ export function stop() {
   if (session.item.type !== LIVE) {
     let dur = 0;
     try { dur = av.getDuration(); } catch { /* not prepared */ }
-    // Only write real values: a 0 would erase an existing resume point.
+    // PlayerActivity.savePosition: within the last minute counts as watched (off Continue
+    // Watching); otherwise only a point past 10 s is kept. A 0 never erases a resume point.
     if (dur > 0) store.setDuration(session.item, dur);
-    if (session.pos > 0) store.setPosition(session.item, session.pos);
+    if (dur > 0 && session.pos > dur - 60000) store.setPosition(session.item, 0);
+    else if (session.pos > 10000) store.setPosition(session.item, session.pos);
   }
   teardown(av);
 }
