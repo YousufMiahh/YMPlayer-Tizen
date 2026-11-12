@@ -127,6 +127,16 @@ const hoverTab = async (page, steps) => {
   await wait(900); // 450 ms dwell + page slide
 };
 
+/** Live TV, Favourite Channels, first channel, ▶: the TV guide (after the layout and the listings). */
+const openGuide = async (page) => {
+  await toHome(page); await hoverTab(page, 1);
+  await press(page, 'ArrowDown'); await press(page, 'ArrowDown', 1, 200); await wait(600);
+  await press(page, 'ArrowRight'); await page.waitForSelector('.b-channels .row-cell:focus', { timeout: 8000 });
+  await wait(300);
+  await press(page, 'ArrowRight'); await page.waitForSelector('.b-guide:focus', { timeout: 8000 });
+  await wait(1300);
+};
+
 export const SCREENS = {
   splash: { seed: false, steps: async () => { await wait(1000); } },
   login: { // first run: empty form, focus on the server field
@@ -245,6 +255,58 @@ export const SCREENS = {
       await press(page, 'ArrowRight'); await page.waitForSelector('.b-channels .row-cell:focus', { timeout: 8000 });
       await press(page, 'ArrowDown', 2); await wait(1300);
     },
+  },
+  // ---------------------------------------------------------------- TV guide (EpgGrid)
+  guide: { // ▶ from Favourite Channels: the guide, focus on what's on now
+    seed: true,
+    steps: async (page) => { await openGuide(page); },
+  },
+  'guide-future': { // ▶: the next programme ("· later" in the panel)
+    seed: true,
+    steps: async (page) => { await openGuide(page); await press(page, 'ArrowRight', 1, 200); await wait(400); },
+  },
+  'guide-gap': { // ▶ ▶: into a gap in the listings (nothing highlighted, "No guide information")
+    seed: true,
+    steps: async (page) => { await openGuide(page); await press(page, 'ArrowRight', 2, 200); await wait(400); },
+  },
+  'guide-details': { // Hold OK: the programme details dialog
+    seed: true,
+    steps: async (page) => { await openGuide(page); await press(page, 'ArrowRight', 1, 200); await holdOk(page); await wait(500); },
+  },
+  'guide-time': { // far along in time: the window has moved on, no "now" line
+    seed: true,
+    steps: async (page) => { await openGuide(page); await press(page, 'ArrowRight', 7, 150); await wait(500); },
+  },
+  'guide-down': { // a 3000-channel category, well down the channels
+    seed: true,
+    steps: async (page) => {
+      await toHome(page); await hoverTab(page, 1);
+      await press(page, 'ArrowDown'); await press(page, 'ArrowDown', 28, 70); await wait(600);
+      await press(page, 'ArrowRight'); await page.waitForSelector('.b-channels .row-cell:focus', { timeout: 8000 });
+      await press(page, 'ArrowDown', 4, 80); await wait(300);
+      await press(page, 'ArrowRight'); await wait(900);
+      await press(page, 'ArrowDown', 25, 90); await wait(1500);
+    },
+  },
+  'guide-nodata': { // a channel with no listings: "No information", "No guide information"
+    seed: true,
+    steps: async (page) => {
+      await openGuide(page);
+      for (let i = 0; i < 6; i++) {
+        const id = await page.evaluate(() => document.querySelector('.g-row.sel')?.dataset.ch);
+        if (id === '1051') break;
+        await press(page, 'ArrowDown', 1, 250);
+      }
+      await wait(900);
+    },
+  },
+  'guide-preview': { // the (stand-in) preview moved up into the guide's top strip
+    seed: true, video: true,
+    steps: async (page) => { await openGuide(page); await wait(1500); },
+  },
+  'guide-light': { // light theme
+    seed: true, light: true,
+    steps: async (page) => { await openGuide(page); await press(page, 'ArrowDown', 1, 200); await wait(500); },
   },
   'live-cats': { // the category list focused: glider, the open category marked, the hint underneath
     seed: true,

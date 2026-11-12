@@ -162,21 +162,37 @@ const SHOWS = ['Breakfast', 'Morning Live', 'Homes Under the Hammer', 'Bargain H
   'Escape to the Country', 'Pointless', 'The Chase', 'Evening News', 'The One Show', 'EastEnders', 'Match of the Day',
   'Newsnight', 'Film: The Iron Harbour', 'Weather'];
 
+/** Channels whose guide is empty (the TV guide's "No information" row). */
+export const noEpg = (id) => id === 1051 || id % 23 === 5;
+const DURS = [30, 60, 15, 45, 90, 30, 120, 25, 35, 60, 10, 50, 75, 20]; // minutes
+
+/**
+ * get_short_epg: varied lengths per channel (10 min to 2 h), a 20-minute gap on every third
+ * channel, an overlapping duplicate on some (Guide.tidy drops it), one programme already over (the
+ * API drops it) and nothing at all for noEpg() channels.
+ */
 export function shortEpg(streamId, limit = 4) {
+  const id = Number(streamId);
+  if (noEpg(id)) return { epg_listings: [] };
   const t0 = Math.floor(Date.now() / 1000);
-  const slot = 1800 * (1 + (Number(streamId) % 3));
-  let start = t0 - Math.floor(slot * 0.4);
+  const dur = (i) => 60 * DURS[(id * 31 + i * 5 + Math.floor(id / 7)) % DURS.length];
+  let start = t0 - Math.floor(dur(0) * (0.15 + ((id * 37) % 70) / 100));
   const out = [];
+  const add = (i, s, e, title) => out.push({
+    id: String(i), epg_id: `ch${id}`, title: b64(title), lang: 'en',
+    start: new Date(s * 1000).toISOString().replace('T', ' ').slice(0, 19),
+    end: new Date(e * 1000).toISOString().replace('T', ' ').slice(0, 19),
+    description: b64(`${title}: the latest from around the country, with guests and features.`),
+    channel_id: `ch${id}`, start_timestamp: String(s), stop_timestamp: String(e),
+  });
+  add(-1, start - 3600, start - 1800, 'Earlier'); // over already
   for (let i = 0; i < limit; i++) {
-    const title = SHOWS[(Number(streamId) + i) % SHOWS.length];
-    out.push({
-      id: String(i), epg_id: `ch${streamId}`, title: b64(title), lang: 'en',
-      start: new Date(start * 1000).toISOString().replace('T', ' ').slice(0, 19),
-      end: new Date((start + slot) * 1000).toISOString().replace('T', ' ').slice(0, 19),
-      description: b64(`${title}: the latest from around the country, with guests and features.`),
-      channel_id: `ch${streamId}`, start_timestamp: String(start), stop_timestamp: String(start + slot),
-    });
-    start += slot;
+    const title = SHOWS[(id + i) % SHOWS.length];
+    const d = dur(i);
+    add(i, start, start + d, title);
+    if (i === 1 && id % 5 === 2) add(i, start, start + d - 600, title); // a duplicate from a second source
+    start += d;
+    if (i === 1 && id % 3 === 0) start += 1200; // a gap
   }
   return { epg_listings: out };
 }
