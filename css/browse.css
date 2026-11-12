@@ -7,7 +7,7 @@
 
 .b-cats { display: flex; flex-direction: column; width: calc(300 * var(--u)); min-height: 0; }
 .browse-vod .b-cats { flex: none; }
-.browse-live .b-cats { position: absolute; left: calc(48 * var(--u)); top: calc(16 * var(--u)); bottom: calc(24 * var(--u)); }
+.browse-live .b-cats { position: absolute; left: calc(48 * var(--u)); top: calc(16 * var(--u)); height: calc(100% - 40 * var(--u)); }
 /* Rows may spill sideways (highlight) but not down over the hint */
 .b-catlist { position: relative; flex: 1; min-height: 0; overflow: hidden; padding: 0 calc(4 * var(--u)); }
 .b-cathint {
@@ -24,7 +24,7 @@
 .b-mid { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding-left: calc(36 * var(--u)); }
 .browse-vod .b-mid { flex: 1; }
 .browse-live .b-mid {
-  position: absolute; top: calc(16 * var(--u)); bottom: calc(24 * var(--u));
+  position: absolute; top: calc(16 * var(--u)); height: calc(100% - 40 * var(--u));
   left: calc((48 + 300 + 36) * var(--u));
   width: calc(100% - (2 * 48 + 300 + 400 + 2 * 36) * var(--u));
 }
@@ -61,13 +61,13 @@
 
 /* Live info panel (buildInfoPanel): 400u wide, SURFACE, radius 22, padding 28 */
 .b-info {
-  position: absolute; right: calc(48 * var(--u)); top: calc(16 * var(--u)); bottom: calc(24 * var(--u));
-  width: calc(400 * var(--u)); padding: calc(28 * var(--u));
-  display: flex; flex-direction: column;
+  position: absolute; left: calc(100% - (48 + 400) * var(--u)); top: calc(16 * var(--u)); height: calc(100% - 40 * var(--u));
+  width: calc(400 * var(--u));
 }
 .b-info-bg { position: absolute; inset: 0; border-radius: calc(22 * var(--u)); background: var(--surface); }
 .b-preview {
-  position: relative; flex: none; height: calc(194 * var(--u));
+  position: absolute; left: calc(28 * var(--u)); top: calc(28 * var(--u));
+  width: calc(100% - 56 * var(--u)); height: calc(194 * var(--u));
   border-radius: calc(16 * var(--u)); overflow: hidden; background: var(--surface-lo);
 }
 .b-logo {
@@ -77,7 +77,13 @@
 .b-logo img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .b-logo img[hidden] { display: none; }
 html.preview-on .b-preview { background: transparent; }
-.b-text { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.b-text {
+  position: absolute; left: calc(28 * var(--u)); top: calc((28 + 194) * var(--u));
+  width: calc(100% - 56 * var(--u)); height: calc(100% - (2 * 28 + 194) * var(--u));
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.b-text > * { flex: none; }
+.b-text > .b-spacer { flex: 1 0 0; }
 .b-name {
   padding: calc(22 * var(--u)) 0 calc(20 * var(--u));
   font-size: calc(26 * var(--u)); font-weight: 700; letter-spacing: -0.02em; color: var(--text);
@@ -93,7 +99,7 @@ html.preview-on .b-preview { background: transparent; }
 }
 .b-now.muted { color: var(--text2); }
 .b-time-row { display: flex; align-items: center; }
-.b-time { flex: none; font-size: calc(15 * var(--u)); font-weight: 500; color: var(--text2); }
+.b-time { flex: none; font-size: calc(15 * var(--u)); font-weight: 500; color: var(--text2); white-space: pre; }
 .b-progress { flex: 1; height: calc(4 * var(--u)); margin-left: calc(14 * var(--u)); border-radius: calc(3 * var(--u)); overflow: hidden; }
 .b-progress:not(:empty) { background: var(--progress-track); }
 .b-progress > i { display: block; height: 100%; background: #fff; border-radius: calc(3 * var(--u)); }
@@ -110,6 +116,78 @@ html.preview-on .b-preview { background: transparent; }
 .b-spacer { flex: 1; }
 .b-hint { padding-top: calc(10 * var(--u)); font-size: calc(14 * var(--u)); color: var(--text3); white-space: pre; }
 .b-guide[hidden] { display: none; }
+
+/* ------------------------------------------------------------------------------------------
+   TV guide (EpgGrid.java). Header 44, channel column 330, grid 8 to its right, rows the channel
+   list's pitch, cells inset by half the 3u gap, radius 10. Its list-layout bounds are where it
+   glides in from; in the guide layout js/views/browse.js places it (applyMode). */
+.b-guide, .b-guide-hint { position: absolute; left: calc(48 * var(--u)); top: calc(16 * var(--u)); width: calc(100% - 96 * var(--u)); }
+.b-guide { height: calc(100% - 40 * var(--u)); opacity: 0; outline: none; }
+.b-guide-hint {
+  height: calc(40 * var(--u)); opacity: 0; visibility: hidden; pointer-events: none;
+  display: flex; align-items: center;
+  font-size: calc(16 * var(--u)); font-weight: 500; color: var(--text2); white-space: pre; overflow: hidden;
+}
+.browse[data-mode="guide"] .b-guide-hint { visibility: visible; }
+.epg .g-head { position: absolute; left: 0; right: 0; top: 0; height: calc(44 * var(--u)); }
+/* Medium 14 TEXT2, baseline at 62 % of the header (top = baseline - 0.864 em for Inter at line-height 1) */
+.epg .g-date, .epg .g-time > span {
+  position: absolute; top: calc((44 * 0.62 - 14 * 0.864) * var(--u));
+  font-size: calc(14 * var(--u)); font-weight: 500; line-height: 1; color: var(--text2); white-space: pre;
+}
+.epg .g-date { left: calc(12 * var(--u)); }
+.epg .g-time { position: absolute; top: 0; height: 100%; width: 0; }
+.epg .g-time > span { left: calc(8 * var(--u)); }
+.epg .g-time > i {
+  position: absolute; left: calc(-1 * var(--u)); width: calc(2 * var(--u));
+  top: calc(44 * 0.78 * var(--u)); bottom: 0; background: var(--surface-hi);
+}
+.epg .g-rows { position: absolute; left: 0; right: 0; top: calc(44 * var(--u)); bottom: 0; overflow: hidden; }
+.epg .g-row { position: absolute; }
+.epg .g-ch {
+  position: absolute; left: 0; top: calc(1.5 * var(--u)); bottom: calc(1.5 * var(--u)); width: calc(330 * var(--u));
+  border-radius: calc(10 * var(--u)); background: var(--surface-lo);
+}
+.epg .g-row.sel .g-ch { background: var(--surface-hi); }
+.epg .g-num {
+  position: absolute; left: calc(14 * var(--u)); top: 0; bottom: 0; width: calc(48 * var(--u));
+  display: flex; align-items: center; overflow: hidden; white-space: nowrap;
+  font-size: calc(14 * var(--u)); font-weight: 500; color: var(--text2);
+}
+.epg .g-logo {
+  position: absolute; left: calc(64 * var(--u)); top: 50%; width: calc(64 * var(--u)); height: calc(40 * var(--u));
+  margin-top: calc(-20 * var(--u)); display: flex; align-items: center; justify-content: center;
+}
+.epg .g-logo img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.epg .g-name {
+  position: absolute; left: calc(140 * var(--u)); right: calc(10 * var(--u)); top: 0; bottom: 0;
+  font-size: calc(17 * var(--u)); font-weight: 500; color: var(--text);
+}
+.epg .g-name, .epg .g-prog > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.epg .g-name { line-height: var(--row-h, calc(72 * var(--u))); }
+.epg .g-row.sel .g-name { font-weight: 600; }
+.epg .g-progs { position: absolute; inset: 0; }
+.epg .g-prog {
+  position: absolute; top: calc(1.5 * var(--u)); bottom: calc(1.5 * var(--u));
+  border-radius: calc(10 * var(--u)); background: var(--surface);
+  display: flex; align-items: center; padding: 0 calc(12 * var(--u)); min-width: 0;
+  font-size: calc(17 * var(--u)); font-weight: 500; color: var(--text);
+}
+.epg .g-prog > span { flex: 1 1 auto; min-width: 0; }
+.epg .g-prog.on-now { background: var(--surface-hi); }
+.epg .g-prog.hl { background: var(--focus-bg); color: var(--on-focus); font-weight: 600; }
+.epg .g-prog.g-none { padding-left: calc(14 * var(--u)); font-size: calc(14 * var(--u)); color: var(--text3); }
+.epg .g-prog.g-none.hl { background: var(--focus-bg); color: var(--on-focus2); font-weight: 500; }
+/* "Now": ACCENT, 2u, from 70 % of the header down, with a 4u-radius dot on top; over the rows */
+.epg .g-now { position: absolute; top: calc(44 * 0.7 * var(--u)); bottom: 0; width: 0; pointer-events: none; }
+.epg .g-now[hidden] { display: none; }
+.epg .g-now::before {
+  content: ''; position: absolute; left: calc(-1 * var(--u)); top: 0; bottom: 0; width: calc(2 * var(--u)); background: var(--accent);
+}
+.epg .g-now > i {
+  position: absolute; left: calc(-4 * var(--u)); top: calc(-4 * var(--u));
+  width: calc(8 * var(--u)); height: calc(8 * var(--u)); border-radius: 50%; background: var(--accent);
+}
 
 /* The live preview: the video plane shows through a hole in the page (see js/live-preview.js). */
 html.preview-on, html.preview-on body { background: transparent; }

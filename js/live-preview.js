@@ -133,6 +133,16 @@ export function createPreview(o) {
       setMute(false);
       showLogo();
     },
+    /**
+     * The box moved or changed size (the TV guide's layout glide): the picture and the hole follow
+     * it, as the Android preview view moves with its parent.
+     */
+    relayout() {
+      if (!opened) return;
+      const r = o.box.getBoundingClientRect();
+      try { getAvplay().setDisplayRect(Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)); } catch { /* not ready */ }
+      if (document.documentElement.classList.contains('preview-on')) punch(true);
+    },
     /** releasePreview: before the full-screen player starts, or when leaving. */
     release() { api$.stop(); },
     get item() { return item; },

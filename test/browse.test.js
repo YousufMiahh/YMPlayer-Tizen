@@ -588,13 +588,4 @@ describe('Live TV info panel and preview', () => {
     expect(document.documentElement.classList.contains('preview-on')).toBe(false);
     expect(root.querySelector('.b-logo').style.opacity).toBe('1');
   });
-
-  it('▶ from the channel list is the TV guide hook (Phase 5): nothing moves yet', async () => {
-    await open('live');
-    press(K.DOWN); press(K.DOWN); press(K.DOWN); press(K.DOWN);
-    await ok();
-    press(K.RIGHT);
-    expect(focusedItem()).toBe('10');
-    expect(root.querySelector('.b-guide').dataset.phase5).toBe('tv-guide');
-  });
 });

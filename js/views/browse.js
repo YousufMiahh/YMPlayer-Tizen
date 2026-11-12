@@ -7,7 +7,10 @@
 //               ▲ on the top row = the current tab, Back = Home
 //   content     ▲▼◀▶ move, ◀ from the first column = back to the categories (on the open one),
 //               OK opens / plays, Hold OK or Menu = favourite, Back = categories,
-//               Live: ▶ = the TV guide (Phase 5 hook)
+//               Live: ▶ = the TV guide
+//   TV guide    ▲▼ / CH± channels (▲ on the first = the tab), ◀▶ programmes (◀ on what's on now =
+//               back to the list), OK = watch, Hold OK / Menu / Info = programme details,
+//               Back = channel list (EpgGrid.onKeyDown, BrowseActivity.enterGuide / exitGuide)
 //   search box  ▼ = results, Enter / IME Done = search now and go to the first result,
 //               Back = categories
 import * as api from '../api.js';
@@ -28,6 +31,9 @@ import { toast } from '../ui/toast.js';
 import { rowCell, pillInput } from '../ui/widgets.js';
 import { u, LONG_PRESS_MS } from '../ui/theme.js';
 import { createPreview } from '../live-preview.js';
+import { createEpgGrid, nowSec } from '../ui/epg-grid.js';
+import * as Guide from '../guide.js';
+import * as backdrop from '../ui/backdrop.js';
 
 const K = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, ENTER: 13, BACK: 10009, ESC: 27, MENU: 10133, IME_DONE: 65376, IME_CANCEL: 65385 };
 const DIRS = { [K.LEFT]: 'left', [K.UP]: 'up', [K.RIGHT]: 'right', [K.DOWN]: 'down' };
@@ -40,6 +46,45 @@ export const POSTER_COL_W = u(178);
 export const POSTER_CELL_H = u(12 + 225 + 10 + 12) + 2 * u(15) * 1.15; // image + two title lines
 export const POSTER_GAP = u(10);
 const SLIDE = u(56);
+
+// Live TV stage (BrowseActivity.applyMode) in px.
+const PAD = u(48); const GAP36 = u(36); const TOP = u(16); const BOTTOM = u(24);
+const CAT_W = u(300); const INFO_W = u(400); const INFO_PAD = u(28); const LOGO_H = u(194);
+const LABEL_H = u(44); const HINT_H = u(40);
+
+/**
+ * Where each piece of the Live TV stage goes (applyMode), for a stage W x H px.
+ * @param mode 'list' | 'guide'
+ */
+export function stageLayout(mode, W, H) {
+  const fullH = H - TOP - BOTTOM;
+  const r = (x, y, w, h) => ({ x, y, w: Math.max(0, w), h: Math.max(0, h) });
+  if (mode !== 'guide') {
+    return {
+      cats: r(PAD, TOP, CAT_W, fullH),
+      mid: r(PAD + CAT_W + GAP36, TOP, W - 2 * PAD - CAT_W - INFO_W - 2 * GAP36, fullH),
+      info: r(W - PAD - INFO_W, TOP, INFO_W, fullH),
+      label: r(PAD, TOP, W - 2 * PAD, LABEL_H),
+      guide: r(PAD, TOP, W - 2 * PAD, fullH),
+      logo: r(INFO_PAD, INFO_PAD, INFO_W - 2 * INFO_PAD, LOGO_H),
+      text: r(INFO_PAD, INFO_PAD + LOGO_H, INFO_W - 2 * INFO_PAD, fullH - 2 * INFO_PAD - LOGO_H),
+    };
+  }
+  const infoH = Math.round(H * 0.38);
+  const inner = infoH - 2 * INFO_PAD;
+  const listY = TOP + infoH + u(12);
+  const logoW = Math.round(inner * 16 / 9);
+  const infoW = W - 2 * PAD;
+  return {
+    cats: r(PAD - CAT_W - GAP36, TOP, CAT_W, fullH), // folds away off the left edge
+    info: r(PAD, TOP, infoW, infoH),
+    guide: r(PAD, listY, W - 2 * PAD, H - listY - BOTTOM - HINT_H),
+    label: r(PAD + u(8), H - BOTTOM - HINT_H + u(6), W - 2 * PAD, HINT_H),
+    mid: r(PAD, listY + LABEL_H, W - 2 * PAD, H - listY - LABEL_H - BOTTOM),
+    logo: r(INFO_PAD, INFO_PAD, logoW, inner),
+    text: r(INFO_PAD + logoW + u(32), INFO_PAD, infoW - 2 * INFO_PAD - logoW - u(32), inner),
+  };
+}
 
 export function browseView(type) {
   const live = type === LIVE;
@@ -56,6 +101,9 @@ export function browseView(type) {
     let pendingCat = null; let pendingEpg = null; let pendingSearch = null; let tourTimer = null; let cancelTour = null;
     let hold = null; // { zone, timer, held }
     let zoneNow = null;
+    let mode = 'list'; let guide = null; let guideEl = null; let guideHint = null; let browseEl = null;
+    let guideChannel = null; let guideProg; let guideLoaded = false; let guideDialog = false;
+    let layoutTimer = null; let followRaf = 0;
     const off = [];
 
     const alive = () => root !== null;
@@ -66,6 +114,7 @@ export function browseView(type) {
       if (catScroller.contains(el)) return 'cats';
       if (el === searchBox) return 'search';
       if (contentScroller.contains(el)) return 'content';
+      if (guideEl && guideEl.contains(el)) return 'guide';
       if (el.closest('[data-topbar]') || el.closest('.topbar')) return 'bar';
       return null;
     }
@@ -129,6 +178,7 @@ export function browseView(type) {
       const el = document.createElement('div');
       el.className = `browse browse-${live ? 'live' : 'vod'}`;
       el.dataset.mode = 'list';
+      browseEl = el;
 
       catsBox = document.createElement('div'); catsBox.className = 'b-cats';
       catScroller = document.createElement('div'); catScroller.className = 'b-catlist';
@@ -149,12 +199,19 @@ export function browseView(type) {
       el.append(catsBox, mid);
       if (live) {
         el.appendChild(buildInfo());
-        // ▶ TV GUIDE — PHASE 5 HOOK: the EPG grid (EpgGrid.java) mounts here, and enterGuide()
-        // below switches data-mode to "guide" (categories fold away, the info panel becomes the
-        // 38 % strip, the grid lines up with the channel list).
-        const guide = document.createElement('div');
-        guide.className = 'b-guide'; guide.hidden = true; guide.dataset.phase5 = 'tv-guide';
-        el.appendChild(guide);
+        // The TV guide (EpgGrid) and its line of button hints (focusLabel), hidden until ▶
+        guideHint = document.createElement('div');
+        guideHint.className = 'b-guide-hint'; guideHint.textContent = B.GUIDE_HINT;
+        guideEl = document.createElement('div');
+        guideEl.className = 'b-guide'; guideEl.hidden = true;
+        el.append(guideHint, guideEl);
+        guide = createEpgGrid({
+          el: guideEl,
+          size: () => { const L = stageLayout('guide', ...stageSize()).guide; return { w: L.w, h: L.h }; },
+          listener: guideListener,
+          keepFocus: () => guideDialog,
+          longPressMs: LONG_PRESS_MS,
+        });
       }
       page.appendChild(el);
 
@@ -197,7 +254,7 @@ export function browseView(type) {
       info = {
         el: p, bg: q('.b-info-bg'), box: q('.b-preview'), logo: q('.b-logo'), img: q('.b-logo img'),
         name: q('.b-name'), now: q('.b-now'), time: q('.b-time'), progress: q('.b-progress'),
-        desc: q('.b-desc'), next: q('.b-next'), hint: q('.b-hint'),
+        desc: q('.b-desc'), next: q('.b-next'), hint: q('.b-hint'), text: q('.b-text'),
       };
       info.img.onerror = () => { info.img.hidden = true; };
       preview = createPreview({
@@ -239,6 +296,9 @@ export function browseView(type) {
     }
 
     function focusTopCategory() {
+      // (Android asks the folded-away categories for focus here, which they can't take, so ▼ from
+      // the tab did nothing while the guide was open; it goes back to the guide instead.)
+      if (mode === 'guide' && guide) { guide.focus(); return; }
       if (!cats.length) return;
       clearTimeout(pendingCat); pendingCat = null;
       catList.select(0, { focus: true, scroll: 'top', silent: true });
@@ -472,15 +532,227 @@ export function browseView(type) {
     function schedulePreview() {
       if (!live || !preview) return;
       preview.schedule(() => {
-        if (!alive() || !content.hasFocus() || document.hidden) return null;
+        if (!alive() || document.hidden) return null;
+        if (guide && guide.hasFocus()) return guideChannel; // in the guide: the highlighted channel
+        if (!content.hasFocus()) return null;
         return items[content.selected] || null;
       }, B.PREVIEW_DELAY_MS);
     }
 
-    /** ▶ from the channel list — PHASE 5 HOOK: the TV guide. Until then ▶ stays put. */
-    function enterGuide() {
-      return false;
+    // ------------------------------------------------------------ Live TV layouts and the guide
+
+    function stageSize() {
+      const W = (browseEl && browseEl.clientWidth) || 1920;
+      const H = (browseEl && browseEl.clientHeight) || 1080 - u(92);
+      return [W, H];
     }
+
+    /** The hint under the programme info changes with the layout. */
+    function setPanelHint(inGuide) {
+      if (info) info.hint.textContent = inGuide ? B.GUIDE_PANEL_HINT : B.PANEL_HINT;
+    }
+
+    function setMode(m, animate = true) {
+      if (m === mode) return;
+      mode = m;
+      applyMode(animate);
+    }
+
+    const EASE = 'var(--ease-out-22)';
+    function boundsTransition(fadeMs) {
+      const b = `left ${B.LAYOUT_MS}ms ${EASE}, top ${B.LAYOUT_MS}ms ${EASE}, width ${B.LAYOUT_MS}ms ${EASE}, height ${B.LAYOUT_MS}ms ${EASE}`;
+      return fadeMs ? `${b}, opacity ${fadeMs}ms var(--ease-std)` : b;
+    }
+
+    /** place(): explicit bounds in px (null = back to the list layout in the CSS). */
+    function place(el, r, animate, fadeMs) {
+      el.style.transition = animate ? boundsTransition(fadeMs) : 'none';
+      for (const [k, v] of [['left', r && r.x], ['top', r && r.y], ['width', r && r.w], ['height', r && r.h]]) {
+        el.style[k] = r ? `${v}px` : '';
+      }
+    }
+
+    /** fade(): in 320 ms, out 220 ms; hidden ones end invisible (categories, list) or gone (guide, hint). */
+    function fade(el, show, animate) {
+      el.classList.toggle('faded', !show);
+      if (show) {
+        el.style.visibility = '';
+        if (el === guideEl) el.hidden = false;
+        el.style.opacity = '1';
+      } else {
+        el.style.opacity = '0';
+        if (!animate) { if (el === guideEl) el.hidden = true; else el.style.visibility = 'hidden'; }
+      }
+    }
+
+    /**
+     * Positions the pieces for the current layout. Bounds changes glide (preview moving to the top,
+     * categories folding away to the left, guide sliding over the list).
+     */
+    function applyMode(animate) {
+      const g = mode === 'guide';
+      const [W, H] = stageSize();
+      const L = stageLayout(mode, W, H);
+      browseEl.dataset.mode = mode;
+      clearTimeout(layoutTimer);
+      if (g) {
+        // The guide starts from where the list was (hidden), then glides and fades in
+        if (guideEl.hidden) {
+          const from = stageLayout('list', W, H).guide;
+          guideEl.hidden = false;
+          place(guideEl, from, false);
+          guideEl.style.opacity = '0';
+          void guideEl.offsetWidth;
+        }
+        place(catsBox, L.cats, animate, B.FADE_OUT_MS);
+        place(mid, L.mid, animate, B.FADE_OUT_MS);
+        place(info.el, L.info, animate);
+        place(info.box, L.logo, animate);
+        place(info.text, L.text, animate);
+        place(guideEl, L.guide, animate, B.FADE_IN_MS);
+        place(guideHint, L.label, false, 0);
+        guideHint.style.transition = animate ? `opacity ${B.FADE_IN_MS}ms var(--ease-std)` : 'none';
+      } else {
+        place(catsBox, animate ? L.cats : null, animate, B.FADE_IN_MS);
+        place(mid, animate ? L.mid : null, animate, B.FADE_IN_MS);
+        place(info.el, animate ? L.info : null, animate);
+        place(info.box, animate ? L.logo : null, animate);
+        place(info.text, animate ? L.text : null, animate);
+        place(guideEl, L.guide, animate, B.FADE_OUT_MS);
+        guideHint.style.transition = animate ? `opacity ${B.FADE_OUT_MS}ms var(--ease-std)` : 'none';
+      }
+      fade(catsBox, !g, animate);
+      fade(mid, !g, animate);
+      fade(guideEl, g, animate);
+      fade(guideHint, g, animate);
+      setPanelHint(g);
+      if (animate) {
+        followPreview();
+        layoutTimer = setTimeout(() => {
+          layoutTimer = null;
+          if (!alive()) return;
+          for (const el of [catsBox, mid, guideEl, guideHint]) {
+            if (!el.classList.contains('faded')) continue;
+            if (el === guideEl) el.hidden = true; else el.style.visibility = 'hidden';
+          }
+          if (!g) for (const el of [catsBox, mid, info.el, info.box, info.text]) place(el, null, false); // the CSS has it
+          if (preview) preview.relayout();
+          if (catGlider) catGlider.refresh(); // re-seat the gliding highlights
+          if (contentGlider) contentGlider.refresh();
+        }, B.LAYOUT_MS + 20);
+      } else if (!g) {
+        for (const el of [catsBox, mid, info.el, info.box, info.text]) place(el, null, false);
+        if (preview) preview.relayout();
+      } else if (preview) preview.relayout();
+    }
+
+    /** The preview picture follows its box while the layout glides. */
+    function followPreview() {
+      if (!preview || !preview.playing || typeof requestAnimationFrame !== 'function') return;
+      cancelAnimationFrame(followRaf);
+      const end = Date.now() + B.LAYOUT_MS + 40;
+      const step = () => {
+        if (!alive() || !preview) return;
+        preview.relayout();
+        if (Date.now() < end) followRaf = requestAnimationFrame(step);
+      };
+      followRaf = requestAnimationFrame(step);
+    }
+
+    /**
+     * ▶ from the channel list: the list becomes the TV guide, lined up row for row.
+     * @param saved  { sel, top, windowStart, cursor } coming back from the player
+     */
+    function enterGuide(saved = null, animate = true) {
+      if (!live || !content.count) return false;
+      const sel = saved ? Math.min(saved.sel, items.length - 1) : Math.max(0, content.selected);
+      const firstVisible = saved ? saved.top : Math.floor(content.scrollY / content.pitch);
+      guideChannel = null; guideProg = undefined; guideLoaded = false;
+      guide.setChannels(items, sel, firstVisible, content.pitch, saved ? { windowStart: saved.windowStart, cursor: saved.cursor } : {});
+      setMode('guide', animate);
+      guide.focus();
+      return true;
+    }
+
+    function exitGuide() {
+      const sel = guide.selected();
+      const topRow = guide.firstVisible();
+      guide.cancelHold();
+      guide.stop();
+      setMode('list'); // back to categories + channels + preview
+      content.select(sel, { focus: true, scroll: Math.max(0, (sel - topRow) * content.pitch), silent: true });
+      showChannelInfo(sel);
+    }
+
+    /** Full details for a programme (the info above can be cut short). */
+    function showProgrammeDetails(row, p) {
+      const l = items;
+      if (row < 0 || row >= l.length) return;
+      const ch = l[row];
+      const d = B.programmeDetails(ch, p, nowSec());
+      guideDialog = true;
+      guide.redraw();
+      showDialog({ title: d.title, message: d.message, positive: d.positive, negative: d.negative }).result.then((which) => {
+        guideDialog = false;
+        if (!alive()) return;
+        guide.redraw();
+        if (which === 'positive') openItem(row);
+      });
+    }
+
+    function showGuideInfo(ch, p) {
+      info.name.textContent = ch.name || '';
+      info.progress.replaceChildren();
+      const list = Guide.get(ch.id);
+      if (!p) {
+        info.now.textContent = list === null ? 'Loading guide…' : 'No guide information';
+        info.now.classList.add('muted');
+        info.time.textContent = ''; info.desc.textContent = ''; info.next.textContent = '';
+        return;
+      }
+      const now = nowSec();
+      const onNow = p.start <= now && now < p.stop;
+      info.now.classList.remove('muted');
+      info.now.textContent = p.title || '';
+      info.time.textContent = B.guideTime(p, now);
+      if (onNow) {
+        const fill = document.createElement('i');
+        fill.style.width = `${Math.max(0.02, Math.min(1, p.progress())) * 100}%`;
+        info.progress.appendChild(fill);
+      }
+      info.desc.textContent = p.desc || '';
+      info.next.textContent = '';
+      const i = list ? list.indexOf(p) : -1;
+      if (i >= 0 && i < list.length - 1) info.next.textContent = B.nextLine(list[i + 1]);
+    }
+
+    const guideListener = {
+      onHighlight(row, ch, p) {
+        const newChannel = ch !== guideChannel;
+        const loaded = Guide.get(ch.id) !== null;
+        // (Android also skips a repeat when only the listings arrived with nothing under the
+        // cursor, which leaves "Loading guide…" up; the loaded state is compared too.)
+        if (!newChannel && p === guideProg && loaded === guideLoaded) return;
+        guideChannel = ch; guideProg = p; guideLoaded = loaded;
+        clearTimeout(pendingEpg); pendingEpg = null;
+        showGuideInfo(ch, p);
+        if (newChannel) {
+          if (ch.icon) backdrop.tint(ch.icon);
+          const alreadyPlaying = preview.item && preview.item.id === ch.id && preview.item.type === ch.type;
+          if (!alreadyPlaying) { // same channel as the list: carry on without restarting
+            if (ch.icon) { info.img.hidden = false; info.img.src = ch.icon; } else { info.img.hidden = true; info.img.removeAttribute('src'); }
+            preview.stop();
+            schedulePreview();
+          }
+        }
+      },
+      onPlay(row) { if (row >= 0 && row < items.length) openItem(row); },
+      onExit() { exitGuide(); },
+      onDetails(row, p) { showProgrammeDetails(row, p); },
+      onNeedListings(channels) {
+        Guide.load(channels, () => { if (alive() && mode === 'guide') guide.listingsChanged(); });
+      },
+    };
 
     // ------------------------------------------------------------ search
 
@@ -525,6 +797,8 @@ export function browseView(type) {
       st.zone = zone() || st.zone;
       st.query = searchBox.value;
       st.results = searchResults;
+      st.guide = mode === 'guide' && guide
+        ? { sel: guide.selected(), top: guide.firstVisible(), windowStart: guide.windowStart, cursor: guide.cursor } : null;
       st.saved = true;
     }
 
@@ -541,7 +815,8 @@ export function browseView(type) {
       if (tab && cats.length && catList.selected !== 0) { clearTimeout(pendingCat); pendingCat = null; catList.select(0, { scroll: 'top', silent: true }); }
       if (live && was !== z) {
         if (z === 'content') schedulePreview();
-        else if (was === 'content') preview.stop(); // (Phase 5: not when going into the guide)
+        // Going into the TV guide: the preview keeps playing and just moves to the top
+        else if (was === 'content' && z !== 'guide') preview.stop();
       }
     }
 
@@ -557,6 +832,7 @@ export function browseView(type) {
     }
 
     function onKeyUp(e) {
+      if (guide && guide.onKeyUp(e)) return; // the guide times its own OK
       if (e.keyCode !== K.ENTER || !hold) return;
       const h = hold; hold = null;
       clearTimeout(h.timer);
@@ -585,6 +861,12 @@ export function browseView(type) {
         return false; // ◀ ▶ move the caret
       }
 
+      if (z === 'guide') {
+        if (k === K.BACK || k === K.ESC) { exitGuide(); return consume(); }
+        const r = guide.onKey(e);
+        if (r === 'up') { bar.focusCurrent(); return consume(); } // ▲ on the first channel: into the top bar
+        return r ? consume() : false;
+      }
       if (k === K.ENTER) {
         if (!e.repeat) startHold(z);
         return consume();
@@ -605,7 +887,7 @@ export function browseView(type) {
         return consume();
       }
       // content
-      if (dir === 'right' && live) { enterGuide(); return consume(); }
+      if (dir === 'right' && live) { if (!e.repeat) enterGuide(); return consume(); }
       if (content.move(dir)) return consume();
       if (dir === 'left') backToCategories();
       else if (dir === 'up') { if (!searchBox.hidden) searchBox.focus(); else bar.focusCurrent(); }
@@ -645,7 +927,7 @@ export function browseView(type) {
       listen(document, 'visibilitychange', () => {
         if (!live) return;
         if (document.hidden) preview.release(); // onPause: free the connection
-        else if (zone() === 'content') schedulePreview();
+        else if (zone() === 'content' || zone() === 'guide') schedulePreview();
       });
       nav.register(root);
 
@@ -685,6 +967,11 @@ export function browseView(type) {
       if (!alive()) return;
       if (content.count) content.select(Math.min(st.contentSel || 0, content.count - 1), { silent: true, scroll: st.contentOffset ?? 'minimal' });
       if (live) showChannelInfo(content.count ? content.selected : -1);
+      if (live && st.guide && content.count) { // the guide was open (the Activity kept it)
+        enterGuide(st.guide, false);
+        if (tabFocused()) guideEl.blur();
+        return;
+      }
       if (tabFocused()) return;
       if (st.zone === 'content' && content.count) content.focus();
       else if (st.zone === 'search' && !searchBox.hidden) catList.focus();
@@ -693,7 +980,9 @@ export function browseView(type) {
 
     function unmount() {
       if (root) saveState();
-      for (const t of [pendingCat, pendingEpg, pendingSearch, tourTimer]) clearTimeout(t);
+      for (const t of [pendingCat, pendingEpg, pendingSearch, tourTimer, layoutTimer]) clearTimeout(t);
+      if (followRaf && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(followRaf);
+      if (guide) guide.destroy();
       if (hold) clearTimeout(hold.timer);
       hold = null;
       if (cancelTour) cancelTour();
@@ -705,6 +994,7 @@ export function browseView(type) {
       if (content) content.destroy();
       loadToken++; searchToken++;
       root = null; info = null; preview = null; catList = null; content = null; catGlider = contentGlider = null;
+      guide = null; guideEl = null; guideHint = null; browseEl = null; mode = 'list'; guideChannel = null; guideDialog = false;
     }
 
     return {
@@ -712,7 +1002,7 @@ export function browseView(type) {
       onKey,
       unmount,
       // tests
-      _state: () => ({ cats, items, currentCat, activeIdx, picked, hideActive, zone: zone(), catSel: catList && catList.selected, contentSel: content && content.selected }),
+      _state: () => ({ cats, items, currentCat, activeIdx, picked, hideActive, zone: zone(), catSel: catList && catList.selected, contentSel: content && content.selected, mode, guide }),
     };
   };
 }

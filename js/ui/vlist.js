@@ -19,14 +19,16 @@
  * @param o.render     (index, cell?) => Element; with a cell (refresh), update it and return it
  * @param o.onSelect   (index, prev) => void, after the selection changes
  * @param o.overscan   rows kept either side of the visible window (default 3)
+ * @param o.freeScroll only clamp the scroll at the top (EpgGrid: the caller picks the first row and
+ *                     may leave space under the last one)
  */
 export function createVList(o) {
   const scroller = o.scroller;
   const body = document.createElement('div');
   body.className = 'vl-body';
   scroller.appendChild(body);
-  const pitch = o.pitch;
-  const cellH = o.cellHeight || pitch;
+  let pitch = o.pitch;
+  let cellH = o.cellHeight || pitch;
   const padTop = o.padTop || 0; const padBottom = o.padBottom || 0;
   const overscan = o.overscan ?? 3;
   const live = new Map(); // index -> element
@@ -102,6 +104,7 @@ export function createVList(o) {
   }
 
   function clampY(v) {
+    if (o.freeScroll) return Math.max(0, v);
     return Math.max(0, Math.min(v, Math.max(0, contentH() - viewH())));
   }
 
@@ -139,6 +142,8 @@ export function createVList(o) {
       paint();
       if (had && count) api.focus();
     },
+    /** A new row pitch (and cell height); call setCount or relayout after. */
+    setPitch(p, cellHeight = p) { pitch = p; cellH = cellHeight; },
     /** Re-draw the cells on screen (favourite marks changed…), keeping focus where it was. */
     refresh() { paint(true); },
     /** Re-measure after the scroller changed size. */

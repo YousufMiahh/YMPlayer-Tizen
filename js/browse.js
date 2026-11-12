@@ -85,6 +85,42 @@ export function emptyText(type, catId, size, query = '') {
 export const CAT_HINT = `${HOLD_OK}  Favourite or hide`;
 export const PANEL_HINT = `▶  TV guide      ${HOLD_OK}  Favourite`;
 export const GUIDE_PANEL_HINT = `OK  Watch      ${HOLD_OK}  Full programme details      ◀  Back to channels`;
+/** The TV guide's button hints, in a line along the bottom (applyMode, MODE_GUIDE). */
+export const GUIDE_HINT = `OK  Watch        ${HOLD_OK}  Full programme details        ▲▼  Channels        ◀ ▶  Programmes        Back  Channel list`;
+
+/** Live TV layout changes (applyMode): bounds glide 420 ms DecelerateInterpolator(2.2), fades in 320 / out 220 ms. */
+export const LAYOUT_MS = 420;
+export const FADE_IN_MS = 320;
+export const FADE_OUT_MS = 220;
+
+/** The guide's info panel time line: "HH:mm – HH:mm", plus "   ·   later" when it isn't on now. */
+export const guideTime = (p, now) => p.timeRange() + (p.start <= now && now < p.stop ? '' : '   ·   later');
+
+/** "HH:mm   Title" for the next programme (the first five characters of its time range). */
+export function nextLine(p) {
+  const t = p.timeRange();
+  return `${t ? `${t.slice(0, 5)}   ` : ''}${p.title || ''}`;
+}
+
+/**
+ * BrowseActivity.showProgrammeDetails: the dialog's title and message.
+ * @returns {{ title: string, message: string, positive: string, negative: string }}
+ */
+export function programmeDetails(ch, p, now) {
+  let b = ch.name || '';
+  if (p) {
+    b += `\n${p.timeRange()}`;
+    if (p.start <= now && now < p.stop) b += `   ·   On now, ${Math.floor((p.stop - now) / 60)} min left`;
+    else if (p.start > now) {
+      const m = Math.floor((p.start - now + 59) / 60);
+      b += `   ·   Starts in ${m >= 60 ? `${Math.floor(m / 60)} hr ${m % 60} min` : `${m} min`}`;
+    }
+    if (p.desc) b += `\n\n${p.desc}`;
+  } else {
+    b += '\n\nNo guide information for this time.';
+  }
+  return { title: p ? (p.title || '') : (ch.name || ''), message: b, positive: `Watch ${ch.name || ''}`, negative: 'Close' };
+}
 
 export const favCategoryToast = (now, name) => `${now ? 'Added to favourite categories — ' : 'Removed from favourite categories — '}${name}`;
 export const hiddenToast = (name) => `Hidden: ${name}  (Settings → Hidden Categories to bring it back)`;
