@@ -1,5 +1,5 @@
 // Minimal stack router. One view is mounted in the root at a time.
-// Back at depth 1 emits an `exit` CustomEvent on the root (and calls onExit).
+// Back at depth 1 emits an `exit` CustomEvent on the root (and calls onExit; the app exits there).
 import { isView } from './view.js';
 
 export function createRouter() {
@@ -63,6 +63,43 @@ export function createRouter() {
         if (prev) { try { mountEntry(prev); } catch { /* leave root empty */ } }
         throw err;
       }
+      stack.push(entry);
+    },
+    // Swap the top entry for a new view (the old one leaves the back stack, like finish()+start).
+    replace(name, params) {
+      if (!root) throw new Error('router.init(root) not called');
+      if (!factories.has(name)) throw new Error(`Unknown view "${name}"`);
+      const prev = stack[stack.length - 1];
+      const entry = { name, params, view: null };
+      unmountTop();
+      try {
+        mountEntry(entry);
+      } catch (err) {
+        if (prev) { try { mountEntry(prev); } catch { /* leave root empty */ } }
+        throw err;
+      }
+      if (prev) stack.pop();
+      stack.push(entry);
+    },
+    // Pop back to the nearest entry called `name` and remount it; if there is none, the whole
+    // stack is replaced by a fresh `name` (Home is always at the bottom).
+    backTo(name, params) {
+      let i = stack.length - 1;
+      while (i >= 0 && stack[i].name !== name) i--;
+      if (i < 0) { this.resetTo(name, params); return; }
+      if (i === stack.length - 1) return;
+      unmountTop();
+      stack.length = i + 1;
+      mountEntry(stack[i]);
+    },
+    // Clear the stack and start again at `name` (e.g. after logging in).
+    resetTo(name, params) {
+      if (!root) throw new Error('router.init(root) not called');
+      if (!factories.has(name)) throw new Error(`Unknown view "${name}"`);
+      unmountTop();
+      stack.length = 0;
+      const entry = { name, params, view: null };
+      mountEntry(entry);
       stack.push(entry);
     },
     back() {

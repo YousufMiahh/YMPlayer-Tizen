@@ -68,15 +68,15 @@ describe('login view', () => {
     expect(router.current().name).toBe('home');
   });
 
-  it('shows the account status line after a successful login (before leaving)', async () => {
+  it('a successful login leaves Home alone on the stack (LoginActivity finishes; no status chip)', async () => {
     api.login.mockResolvedValue(GOOD);
     router.go('login');
     fill('[name=server]', 'h'); fill('[name=user]', 'u'); fill('[name=pass]', 'p');
     submit();
     await tick();
-    // status is surfaced via the home params so a later view can show it
-    expect(router.current().params.status).toBe(api.describeAccount(GOOD));
-    expect(router.current().params.status).toContain('Connections: 1/2');
+    expect(router.current().name).toBe('home');
+    expect(router.stackDepth()).toBe(1); // Back on Home now exits the app
+    expect(router.current().params).toBeUndefined();
   });
 
   it('splits a pasted get.php M3U link into server/user/pass', async () => {

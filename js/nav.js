@@ -53,9 +53,19 @@ function center(r) {
   return { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 };
 }
 
+// Top bar rule (TopBar.TabRow.addFocusables): from the page, only the current section's tab is a
+// target, and only when moving up, so Up always lands on the current tab.
+function barFilter(all, cur, dir) {
+  if (!cur || !cur.closest || cur.closest('[data-topbar]')) return all;
+  return all.filter((el) => {
+    if (!el.closest('[data-topbar]')) return true;
+    return dir === 'up' && el.hasAttribute('data-current');
+  });
+}
+
 export function moveFocus(dir) {
   const cur = document.activeElement;
-  const all = allFocusables();
+  const all = barFilter(allFocusables(), cur, dir);
   if (!cur || !all.includes(cur)) {
     if (all[0]) { all[0].focus(); return document.activeElement === all[0]; }
     return false;

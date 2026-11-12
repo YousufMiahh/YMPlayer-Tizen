@@ -2,6 +2,10 @@
 import { router } from './router.js';
 import * as nav from './nav.js';
 import * as store from './store.js';
+import { applyTheme } from './ui/theme.js';
+import * as backdrop from './ui/backdrop.js';
+import { isSection, prepareBack } from './ui/topbar.js';
+import { splashView } from './views/splash.js';
 import { loginView } from './views/login.js';
 import { setupView } from './views/setup.js';
 import { liveView } from './views/live.js';
@@ -17,23 +21,9 @@ import { settingsView } from './views/settings.js';
 import { ambientView } from './views/ambient.js';
 import { phonelinkView } from './views/phonelink.js';
 
-const SPLASH_MS = 600;
-
-// Registry of views. Later tasks add entries here: name -> () => view.
+// Registry of views: name -> () => view.
 export const views = {
-  splash: () => {
-    let h; let timer;
-    return {
-      mount(root) {
-        h = document.createElement('h1');
-        h.textContent = 'YM Player';
-        root.appendChild(h);
-        // Brief logo, then route on account state (deferred: router.go must not run inside mount).
-        timer = setTimeout(() => router.go(store.hasAccount() ? 'home' : 'login'), SPLASH_MS);
-      },
-      unmount() { clearTimeout(timer); h = null; },
-    };
-  },
+  splash: splashView(),
   login: loginView,
   setup: setupView,
   live: liveView,
@@ -50,9 +40,23 @@ export const views = {
   phonelink: phonelinkView,
 };
 
+/** Back with nothing beneath (Home, or the first Login): close the app like Android's finish(). */
+export function exitApp() {
+  const t = globalThis.tizen;
+  try {
+    if (t && t.application && typeof t.application.getCurrentApplication === 'function') {
+      t.application.getCurrentApplication().exit();
+    }
+  } catch (err) {
+    console.error('exit failed', err);
+  }
+}
+
 // Returns a dispose function that removes the global listeners.
 export function boot(rootEl) {
-  router.init(rootEl);
+  applyTheme(store.dark());
+  if (globalThis.document && document.body) backdrop.install(document.body);
+  router.init(rootEl, { onExit: exitApp });
   for (const [name, factory] of Object.entries(views)) router.register(name, factory);
 
   // Active view gets the key first; nav only sees it if the view declines.
@@ -60,7 +64,13 @@ export function boot(rootEl) {
     if (router.onKey(e)) return;
     nav.onKey(e);
   };
-  const onBack = () => { router.back(); };
+  const onBack = () => {
+    const cur = router.current();
+    if (cur && cur.view && typeof cur.view.onBack === 'function' && cur.view.onBack() === true) return;
+    // Back from a section returns to Home with the tab slide (TopBar.back).
+    if (cur && isSection(cur.name) && cur.name !== 'home') prepareBack();
+    router.back();
+  };
   document.addEventListener('keydown', onKeydown);
   document.addEventListener('back', onBack);
 

@@ -5,6 +5,7 @@ import * as api from '../api.js';
 import { router } from '../router.js';
 import * as nav from '../nav.js';
 import { clearCache } from '../home-rows.js';
+import * as backdrop from '../ui/backdrop.js';
 
 const FIELDS = [
   ['server', 'Server or M3U link', 'text'],
@@ -71,12 +72,13 @@ export function loginView() {
     busy = false;
     clearCache(); // Home's cached rows belong to the previous account
     // Committed ok:true; a failure while mounting home must not undo the login.
-    router.go('home', { status: api.describeAccount(info) });
+    router.resetTo('home'); // LoginActivity finishes: Home is the bottom of the stack
   }
 
   return {
     mount(rootEl, params) {
       root = rootEl;
+      backdrop.setSection('home'); // Ambient.install(this, Ambient.HOME)
       const acc = pickAccount(params);
       const el = document.createElement('div');
       el.className = 'login';
