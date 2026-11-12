@@ -1,0 +1,185 @@
+/* Full-screen player (PlayerActivity.java). Sizes are Android design units: calc(N * var(--u)). */
+.player { position: fixed; inset: 0; overflow: hidden; color: var(--w1); font-family: var(--font); }
+.pl-host { position: absolute; left: 0; top: 0; width: 1px; height: 1px; outline: none; }
+
+/* PlayerActivity.fade: in 200 ms, out 250 ms */
+.pl-fade { opacity: 1; transition: opacity 200ms var(--ease-std); }
+.pl-fade.out { opacity: 0; transition-duration: 250ms; }
+.pl-fade[hidden] { display: none; }
+
+/* Ui.scrimBottom(): BOTTOM_TOP 0xF0000000 → 0x99000000 → transparent */
+.pl-vod, .pl-banner {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.941) 0%, rgba(0, 0, 0, 0.6) 50%, rgba(0, 0, 0, 0) 100%);
+}
+
+/* ---------------------------------------------------------------- VOD overlay */
+.pl-vod {
+  display: flex; flex-direction: column; justify-content: flex-end;
+  padding: calc(160 * var(--u)) calc(80 * var(--u)) calc(52 * var(--u));
+}
+.pl-vod-sub, .pl-vod-title, .pl-live-name, .pl-live-now, .pl-live-next { white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.pl-vod-sub { font-size: calc(18 * var(--u)); font-weight: 500; color: var(--w2); }
+.pl-vod-sub[hidden] { display: none; }
+.pl-vod-title {
+  font-size: calc(34 * var(--u)); font-weight: 700; letter-spacing: -0.02em; color: var(--w1);
+  padding: calc(4 * var(--u)) 0 calc(22 * var(--u)); min-height: calc((34 * 1.15 + 26) * var(--u));
+}
+.pl-bubble {
+  align-self: center; margin-bottom: calc(12 * var(--u));
+  font-size: calc(18 * var(--u)); font-weight: 600; color: var(--w1); white-space: pre;
+  background: rgba(255, 255, 255, 0.2); border-radius: calc(16 * var(--u));
+  padding: calc(6 * var(--u)) calc(16 * var(--u));
+}
+.pl-scrub-row { position: relative; }
+.pl-scrub-row[hidden] { display: none; }
+.pl-scrub-card { display: inline-block; will-change: transform; }
+.pl-scrub-time {
+  font-size: calc(22 * var(--u)); font-weight: 600; color: var(--w1); white-space: pre;
+  text-shadow: 0 0 calc(6 * var(--u)) rgba(0, 0, 0, 0.8);
+  padding: calc(10 * var(--u)) 0 calc(8 * var(--u));
+}
+.pl-vod-bar { margin: 0 calc(-14 * var(--u)); flex: none; }
+.pl-times { display: flex; padding-top: calc(12 * var(--u)); font-size: calc(17 * var(--u)); font-weight: 500; color: var(--w2); }
+.pl-times > div { flex: 1; min-height: calc(17 * 1.15 * var(--u)); }
+.pl-time-right { text-align: right; }
+.pl-hint { font-size: calc(14 * var(--u)); color: var(--w3); white-space: pre; padding-top: calc(18 * var(--u)); }
+.pl-vod-hint { text-align: center; }
+
+/* SeekBarView */
+.seekbar { position: relative; }
+.seekbar .sb-in { position: absolute; top: 0; bottom: 0; }
+.seekbar i { position: absolute; left: 0; display: block; }
+.seekbar .sb-track { right: 0; background: rgba(255, 255, 255, 0.251); }
+.seekbar .sb-buf { background: rgba(255, 255, 255, 0.4); }
+.seekbar .sb-ahead { background: rgba(255, 255, 255, 0.6); }
+.seekbar .sb-fill { background: #FFFFFF; }
+.seekbar .sb-knob { border-radius: 50%; background: #FFFFFF; box-shadow: 0 0 calc(6 * var(--u)) rgba(0, 0, 0, 0.5); }
+
+/* Centre play / pause icon (PlayPauseIcon), shown while paused */
+.pl-center {
+  position: absolute; left: 50%; top: 50%;
+  width: calc(120 * var(--u)); height: calc(120 * var(--u));
+  margin: calc(-60 * var(--u)) 0 0 calc(-60 * var(--u));
+  border-radius: 50%; background: rgba(0, 0, 0, 0.5);
+}
+.pl-center[hidden] { display: none; }
+.pl-center svg { display: block; width: 100%; height: 100%; fill: #FFFFFF; }
+.pl-center .pl-tri { display: none; }
+.pl-center.paused .pl-tri { display: inline; }
+.pl-center.paused .pl-bar { display: none; }
+
+/* ---------------------------------------------------------------- live banner */
+.pl-banner {
+  display: flex; align-items: flex-end;
+  padding: calc(150 * var(--u)) calc(80 * var(--u)) calc(52 * var(--u));
+}
+.pl-logo-box {
+  flex: none; width: calc(220 * var(--u)); height: calc(124 * var(--u)); margin-right: calc(32 * var(--u));
+  padding: calc(18 * var(--u)); border-radius: calc(18 * var(--u)); background: rgba(255, 255, 255, 0.149);
+  display: flex; align-items: center; justify-content: center;
+}
+.pl-logo { max-width: 100%; max-height: 100%; object-fit: contain; }
+.pl-logo[hidden] { display: none; }
+.pl-banner-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.pl-name-row { display: flex; align-items: flex-end; min-width: 0; }
+.pl-live-num { flex: none; font-size: calc(22 * var(--u)); font-weight: 500; color: var(--w2); padding: 0 calc(14 * var(--u)) calc(2 * var(--u)) 0; }
+.pl-live-num:empty { padding-right: 0; }
+.pl-live-name { min-width: 0; font-size: calc(32 * var(--u)); font-weight: 700; letter-spacing: -0.02em; color: var(--w1); }
+.pl-live-now {
+  font-size: calc(21 * var(--u)); font-weight: 600; color: var(--w1);
+  padding: calc(14 * var(--u)) 0 calc(8 * var(--u)); min-height: calc((21 * 1.15 + 22) * var(--u));
+}
+.pl-time-row { display: flex; align-items: center; min-height: calc(16 * 1.15 * var(--u)); }
+.pl-live-time { font-size: calc(16 * var(--u)); font-weight: 500; color: var(--w2); white-space: pre; }
+.pl-live-bar { width: calc(360 * var(--u)); margin-left: calc(16 * var(--u)); flex: none; }
+.pl-live-next { font-size: calc(17 * var(--u)); color: var(--w2); padding-top: calc(10 * var(--u)); min-height: calc((17 * 1.15 + 10) * var(--u)); }
+
+/* ---------------------------------------------------------------- spinner, error card, status pill */
+.pl-spinner {
+  position: absolute; left: 50%; top: 50%;
+  width: calc(64 * var(--u)); height: calc(64 * var(--u)); margin: calc(-32 * var(--u)) 0 0 calc(-32 * var(--u));
+  border-radius: 50%; border: calc(5 * var(--u)) solid transparent;
+  border-top-color: var(--w2); border-right-color: var(--w2);
+  animation: b-spin 1s linear infinite;
+}
+.pl-spinner[hidden] { display: none; }
+.pl-error {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: 90%;
+  font-size: calc(20 * var(--u)); color: var(--text); text-align: center; white-space: pre-wrap;
+  background: var(--sheet); border-radius: calc(22 * var(--u)); padding: calc(36 * var(--u));
+}
+.pl-error[hidden] { display: none; }
+.pl-status {
+  position: absolute; top: calc(40 * var(--u)); right: calc(40 * var(--u));
+  font-size: calc(16 * var(--u)); font-weight: 500; color: var(--text);
+  background: var(--sheet); border-radius: calc(20 * var(--u)); padding: calc(10 * var(--u)) calc(20 * var(--u));
+}
+.pl-status[hidden] { display: none; }
+
+/* ---------------------------------------------------------------- Next Episode card (NextUpCard) */
+.nextup { position: absolute; right: calc(72 * var(--u)); bottom: calc(64 * var(--u)); display: flex; align-items: center; }
+.nextup[hidden] { display: none; }
+.nextup button { font-family: var(--font); font-size: calc(20 * var(--u)); font-weight: 600; outline: none; }
+.nu-credits {
+  height: calc(60 * var(--u)); padding: 0 calc(28 * var(--u)); border-radius: calc(6 * var(--u));
+  background: rgba(255, 255, 255, 0.349); color: var(--w1);
+}
+.nu-credits:focus { background: #FFFFFF; color: #000000; }
+.nu-next {
+  position: relative; overflow: hidden; flex: none;
+  width: calc(250 * var(--u)); height: calc(60 * var(--u)); margin-left: calc(16 * var(--u));
+  border-radius: calc(6 * var(--u)); background: rgba(255, 255, 255, 0.349); padding: 0;
+  transition: transform 150ms var(--ease-std);
+}
+.nu-next:focus { transform: scale(1.05); }
+.nu-next:focus::after {
+  content: ''; position: absolute; inset: 0; z-index: 2; border-radius: calc(6 * var(--u));
+  box-shadow: inset 0 0 0 calc(3 * var(--u)) #FFFFFF;
+}
+.nu-label {
+  position: absolute; left: 0; top: 0; width: calc(250 * var(--u)); height: calc(60 * var(--u));
+  display: flex; align-items: center; justify-content: center; gap: calc(60 * 0.22 * var(--u));
+  color: #FFFFFF; white-space: pre;
+}
+.nu-tri {
+  width: 0; height: 0; flex: none;
+  border-left: calc(60 * 0.36 * 0.9 * var(--u)) solid currentColor;
+  border-top: calc(60 * 0.18 * var(--u)) solid transparent; border-bottom: calc(60 * 0.18 * var(--u)) solid transparent;
+}
+.nu-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; overflow: hidden; background: #FFFFFF; z-index: 1; }
+.nu-fill .nu-label { color: #000000; }
+
+/* ---------------------------------------------------------------- subtitles (ExoEngine.applySubtitleStyle) */
+.pl-subs {
+  position: absolute; left: 5%; right: 5%; bottom: 76px;
+  text-align: center; pointer-events: none;
+  font-weight: 600; line-height: 1.2;
+}
+.pl-sub-line {
+  font-size: var(--sub-size, 60px); color: var(--sub-color, #FFFFFF);
+  background: var(--sub-bg, transparent); text-shadow: var(--sub-shadow, none);
+  padding: 0 0.25em; white-space: pre-wrap;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+}
+
+/* ---------------------------------------------------------------- side panels */
+.pl-channels .sheet-body, .pl-tracks .sheet-body { position: relative; overflow: hidden; }
+.pl-tracks { padding: 0; } /* the padding scrolls with the rows (ScrollView > LinearLayout) */
+.pl-tracks .sheet-body { overflow-y: auto; scrollbar-width: none; padding: calc(22 * var(--u)); border-radius: var(--r-sheet); }
+.pl-tracks .sheet-body::-webkit-scrollbar { display: none; }
+.tp-header {
+  font-size: calc(13 * var(--u)); font-weight: 500; color: var(--text3); letter-spacing: 0.1em;
+  padding: calc(24 * var(--u)) 0 calc(8 * var(--u)) calc(14 * var(--u));
+}
+.tp-header.first { padding-top: calc(4 * var(--u)); }
+.tp-note { font-size: calc(16 * var(--u)); color: var(--text2); padding: calc(8 * var(--u)) 0 calc(8 * var(--u)) calc(14 * var(--u)); }
+.tp-opt {
+  display: flex; align-items: center; width: 100%;
+  padding: calc(14 * var(--u)) calc(18 * var(--u)); border-radius: calc(12 * var(--u));
+  font-family: var(--font); font-size: calc(19 * var(--u)); font-weight: 500; color: var(--text); text-align: left;
+  background: transparent; outline: none;
+}
+.tp-opt:focus { background: var(--focus-bg); color: var(--on-focus); }
+.tp-label { flex: 1; min-width: 0; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.tp-check { flex: none; }

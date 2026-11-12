@@ -57,52 +57,48 @@ describe('open', () => {
   });
 });
 
-describe('live fallback', () => {
-  it('a .ts failure retries .m3u8 once and emits no error if it works', () => {
-    const errors = [];
-    player.on('error', (e) => errors.push(e));
-    shim.failWhen = (u) => u.endsWith('.ts');
-    player.open(live);
-    expect(opens()).toEqual(['http://h.com:80/live/u/p/42.ts', 'http://h.com:80/live/u/p/42.m3u8']);
-    expect(errors).toEqual([]);
-    expect(shim.getState()).toBe('PLAYING');
-  });
-  it('runtime onerror falls back silently once, then a second error emits exactly one error', () => {
-    store.setLiveFormat('m3u8');
-    const errors = [];
-    player.on('error', (e) => errors.push(e));
-    player.open(live);
-    shim.emitError();
-    expect(opens()).toEqual(['http://h.com:80/live/u/p/42.m3u8', 'http://h.com:80/live/u/p/42.ts']);
-    expect(errors).toEqual([]);
-    shim.emitError();
-    expect(errors).toHaveLength(1);
-    expect(opens()).toHaveLength(2);
-  });
-  it('emits error only after the retry also fails, and retries exactly once', () => {
-    const errors = [];
-    player.on('error', (e) => errors.push(e));
-    shim.failWhen = () => true;
-    player.open(live);
-    expect(opens()).toHaveLength(2);
-    expect(errors).toHaveLength(1);
-  });
-  it('autoRecover=false emits error immediately without retrying', () => {
-    store.setAutoRecover(false);
+describe('errors and retry (the ladder itself lives in the player screen)', () => {
+  it('a prepare failure emits one error with the reason and does not retry by itself', () => {
     const errors = [];
     player.on('error', (e) => errors.push(e));
     shim.failWhen = () => true;
     player.open(live);
     expect(opens()).toEqual(['http://h.com:80/live/u/p/42.ts']);
-    expect(errors).toHaveLength(1);
+    expect(errors).toEqual([{ what: 'PLAYER_ERROR_CONNECTION_FAILED' }]);
   });
-  it('VOD errors are not retried', () => {
+  it('a runtime onerror emits the AVPlay error name', () => {
     const errors = [];
     player.on('error', (e) => errors.push(e));
-    shim.failWhen = () => true;
     player.open(movie);
-    expect(opens()).toHaveLength(1);
-    expect(errors).toHaveLength(1);
+    shim.emitError('PLAYER_ERROR_INVALID_URI');
+    expect(errors).toEqual([{ what: 'PLAYER_ERROR_INVALID_URI' }]);
+  });
+  it('format picks the live container (the screen flips .ts / .m3u8)', () => {
+    player.open(live, { format: 'm3u8' });
+    expect(opens()).toEqual(['http://h.com:80/live/u/p/42.m3u8']);
+    expect(player.format()).toBe('m3u8');
+  });
+  it('retry reopens the same stream; VOD from where it was', () => {
+    shim.duration = 600000;
+    player.open(movie);
+    shim.tick(42000);
+    player.retry();
+    expect(opens()).toHaveLength(2);
+    expect(shim.names().lastIndexOf('close')).toBeLessThan(shim.names().lastIndexOf('open'));
+    expect(shim.calls.filter((c) => c.name === 'seekTo').at(-1).args[0]).toBe(42000);
+    expect(shim.getState()).toBe('PLAYING');
+  });
+  it('the picture is letter-boxed (fit inside the screen, as on Android)', () => {
+    player.open(movie);
+    expect(shim.displayMethod).toBe('PLAYER_DISPLAY_MODE_LETTER_BOX');
+  });
+  it('buffering start / complete are passed on', () => {
+    const b = [];
+    player.on('buffering', (on) => b.push(on));
+    player.open(movie);
+    b.length = 0;
+    shim.buffering(true); shim.buffering(false);
+    expect(b).toEqual([true, false]);
   });
 });
 
@@ -123,7 +119,7 @@ describe('events and stop', () => {
     shim.tick(1);
     expect(t).toEqual([]);
   });
-  it('VOD stream completion emits ended and clears the resume point', () => {
+  it('VOD stream completion emits ended, clears the resume point and stores the real duration', () => {
     let ended = 0;
     player.on('ended', () => { ended++; });
     shim.duration = 90000;
@@ -132,7 +128,19 @@ describe('events and stop', () => {
     shim.complete();
     expect(ended).toBe(1);
     expect(store.position(movie)).toBe(0);
-    expect(store.duration(movie)).toBe(89000);
+    expect(store.duration(movie)).toBe(90000);
+  });
+  it('completion before any time tick never stores the start point (or 0) as the duration', () => {
+    store.setDuration(movie, 5400000);
+    store.setPosition(movie, 120000);
+    shim.duration = 0; // the player doesn't know the length
+    player.open(movie, { startMs: 120000 });
+    shim.complete();
+    expect(store.duration(movie)).toBe(5400000);
+    expect(store.position(movie)).toBe(0);
+    player.stop(); // nothing more saved for a finished stream
+    expect(store.duration(movie)).toBe(5400000);
+    expect(store.position(movie)).toBe(0);
   });
   it('stop persists position and duration for a movie', () => {
     shim.duration = 600000;
@@ -162,7 +170,10 @@ describe('events and stop', () => {
   it('controls are no-ops with no open session', () => {
     const playing = [];
     player.on('playing', () => playing.push(1));
-    expect(() => { player.play(); player.pause(); player.seek(1); player.setRate(2); player.stop(); }).not.toThrow();
+    expect(() => { player.play(); player.pause(); player.seek(1); player.retry(); player.subtitlesOff(); player.stop(); }).not.toThrow();
+    expect(player.tracks('AUDIO')).toEqual([]);
+    expect(player.position()).toBe(0);
+    expect(player.duration()).toBe(0);
     expect(playing).toEqual([]);
     expect(shim.calls).toEqual([]);
   });
@@ -198,15 +209,91 @@ describe('events and stop', () => {
     shim.tick(5);
     expect(t).toEqual([]);
   });
-  it('play/pause/seek/setRate delegate to AVPlay', () => {
+  it('play/pause/seek delegate to AVPlay and report playing changes', () => {
+    const p = [];
+    player.on('playing', (v) => p.push(v));
     player.open(movie);
     player.pause();
     expect(shim.getState()).toBe('PAUSED');
+    expect(player.isPlaying()).toBe(false);
     player.play();
     expect(shim.getState()).toBe('PLAYING');
+    expect(player.isPlaying()).toBe(true);
     player.seek(9000.7);
-    player.setRate(2);
-    expect(shim.calls.at(-2)).toEqual({ name: 'seekTo', args: [9000] });
-    expect(shim.calls.at(-1)).toEqual({ name: 'setSpeed', args: [2] });
+    expect(shim.calls.at(-1)).toEqual({ name: 'seekTo', args: [9000] });
+    expect(player.position()).toBe(9000);
+    expect(p).toEqual([true, false, true]);
+  });
+  it('stop reads the live position from AVPlay (not only the last tick)', () => {
+    shim.duration = 600000;
+    player.open(movie);
+    shim.tick(30000);
+    player.seek(200000); // no tick after the seek
+    player.stop();
+    expect(store.position(movie)).toBe(200000);
+  });
+});
+
+describe('tracks (getTotalTrackInfo / setSelectTrack)', () => {
+  const T = (index, type, info) => ({ index, type, extra_info: JSON.stringify(info) });
+  const TRACKS = [
+    T(0, 'VIDEO', { fourCC: 'H264' }),
+    T(1, 'AUDIO', { language: 'eng', fourCC: 'EAC3', channels: '6' }),
+    T(2, 'AUDIO', { language: 'fra', fourCC: 'AACL', channels: '2' }),
+    T(3, 'AUDIO', { language: 'und', fourCC: 'DTS', channels: '8' }),
+    T(4, 'TEXT', { track_lang: 'eng', subtitle_type: '0' }),
+    T(5, 'TEXT', { track_lang: 'spa', subtitle_type: '0' }),
+  ];
+  const open = (item = movie) => {
+    const o = shim.open.bind(shim);
+    shim.open = (u) => { o(u); shim.setTracks(TRACKS); };
+    player.open(item);
+    shim.open = o;
+  };
+
+  it('labels follow ExoEngine.trackName: language, codec, channels', () => {
+    open();
+    expect(player.tracks('AUDIO').map((t) => t.label)).toEqual([
+      'English  ·  Dolby Digital+  ·  5.1', 'French  ·  AAC  ·  Stereo', 'Audio 3  ·  DTS  ·  7.1']);
+    expect(player.tracks('TEXT').map((t) => t.label)).toEqual(['English', 'Spanish']);
+    expect(player.tracks('AUDIO')[0]).toMatchObject({ language: 'eng', selected: true, index: 1 });
+    expect(player.tracks('TEXT')[0]).toMatchObject({ language: 'eng', selected: true, index: 4 });
+  });
+  it('select switches the track on the device; Off silences subtitles and stops drawing them', () => {
+    const lines = [];
+    player.on('subtitle', (s) => lines.push(s.text));
+    open();
+    player.select(player.tracks('AUDIO')[1]);
+    expect(shim.calls.at(-1)).toEqual({ name: 'setSelectTrack', args: ['AUDIO', 2] });
+    expect(player.tracks('AUDIO').find((t) => t.selected).index).toBe(2);
+    player.select(player.tracks('TEXT')[1]);
+    expect(shim.selectedTrack('TEXT')).toBe(5);
+    shim.subtitle('Hola', 2000);
+    expect(lines).toEqual(['Hola']);
+    player.subtitlesOff();
+    expect(shim.isSilent()).toBe(true);
+    expect(player.subtitlesAreOff()).toBe(true);
+    expect(player.tracks('TEXT').some((t) => t.selected)).toBe(false);
+    expect(lines.at(-1)).toBe(''); // the line on screen goes
+    player.select(player.tracks('TEXT')[0]); // picking a track turns them back on
+    expect(shim.isSilent()).toBe(false);
+    expect(player.subtitlesAreOff()).toBe(false);
+  });
+  it('the remembered languages are applied at start; "off" starts silent', () => {
+    store.setAudioLanguage('fra');
+    store.setSubtitleLanguage('spa');
+    open();
+    expect(shim.selectedTrack('AUDIO')).toBe(2);
+    expect(shim.selectedTrack('TEXT')).toBe(5);
+    player.stop();
+    store.setSubtitleLanguage('off');
+    open();
+    expect(shim.isSilent()).toBe(true);
+    expect(player.subtitlesAreOff()).toBe(true);
+  });
+  it('languages match across code forms (en / eng)', () => {
+    expect(player.sameLanguage('en', 'eng')).toBe(true);
+    expect(player.sameLanguage('fre', 'fra')).toBe(true);
+    expect(player.sameLanguage('en', 'fr')).toBe(false);
   });
 });

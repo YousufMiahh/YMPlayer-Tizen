@@ -10,9 +10,7 @@ import { applyTheme } from '../ui/theme.js';
 import * as backdrop from '../ui/backdrop.js';
 import * as filterSettings from '../filter-settings.js';
 
-const COLORS = ['White', 'Yellow', 'Green', 'Cyan', 'Blue', 'Red'];
-const SIZES = ['Small', 'Medium', 'Large'];
-const OPACITY = ['25%', '50%', '75%', '100%'];
+import { SUB_COLOR_NAMES as COLORS, SUB_SIZE_NAMES as SIZES, SUB_OPACITY_NAMES as OPACITY } from '../ui/subtitles.js';
 const PREVIEW = ['Off', 'Muted', 'With sound'];
 // SettingsActivity LIBRARY: "Refresh Automatically" cycle order and texts.
 const REFRESH = [[12, 'Every 12 hours'], [24, 'Once a day'], [6, 'Every 6 hours'], [0, 'Every time the app opens'], [-1, 'Only when I ask']];
@@ -41,7 +39,7 @@ const CYCLES = [
   ]],
   ['Subtitles', [
     { key: 'sub_size', title: 'Size', get: store.subtitleSize, set: store.setSubtitleSize,
-      options: [0, 1, 2], text: (v) => SIZES[v] ?? String(v) },
+      options: [0, 1, 2, 3], text: (v) => SIZES[v] ?? String(v) },
     { key: 'sub_color', title: 'Colour', get: store.subtitleColor, set: store.setSubtitleColor,
       options: COLORS.map((_, i) => i), text: (v) => COLORS[v] },
     { key: 'sub_bg', title: 'Background', get: store.subtitleBackground, set: store.setSubtitleBackground,

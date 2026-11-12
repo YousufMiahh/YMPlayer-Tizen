@@ -55,7 +55,10 @@ export function movieDetailView() {
         if (a === 'fav') {
           b.textContent = store.toggleFav(item) ? '★ Favourited' : '☆ Favourite';
         } else {
-          router.go('player-vod', { item, startMs: a === 'resume' ? pos : 0 });
+          // The player resumes from the saved point by itself (PlayerActivity.play(true)); playing
+          // from the start forgets it first, as MovieActivity's Start Over does.
+          if (a !== 'resume') store.setPosition(item, 0);
+          router.go('player-vod', { queue: [item], index: 0 });
         }
       };
       onActivate = (e) => { e.target.closest('button')?.click(); };

@@ -10,13 +10,12 @@ import { splashView } from './views/splash.js';
 import { loginView } from './views/login.js';
 import { setupView } from './views/setup.js';
 import { liveView } from './views/live.js';
-import { playerLiveView } from './views/player-live.js';
+import { playerView } from './views/player.js';
 import { moviesView } from './views/movies.js';
 import { seriesView } from './views/series.js';
 import { movieDetailView } from './views/movie-detail.js';
 import { seriesDetailView } from './views/series-detail.js';
 import { homeView } from './views/home.js';
-import { playerVodView } from './views/player-vod.js';
 import { searchView } from './views/search.js';
 import { settingsView } from './views/settings.js';
 import { ambientView } from './views/ambient.js';
@@ -27,12 +26,12 @@ export const views = {
   login: loginView,
   setup: setupView,
   live: liveView,
-  'player-live': playerLiveView,
+  'player-live': playerView,
   movies: moviesView,
   series: seriesView,
   'movie-detail': movieDetailView,
   'series-detail': seriesDetailView,
-  'player-vod': playerVodView,
+  'player-vod': playerView,
   home: homeView,
   search: searchView,
   settings: settingsView,

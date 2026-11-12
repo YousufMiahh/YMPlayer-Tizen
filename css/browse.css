@@ -193,17 +193,10 @@ html.preview-on .b-preview { background: transparent; }
 html.preview-on, html.preview-on body { background: transparent; }
 
 /* Video plays on the AVPlay plane behind the page, so the page must be see-through. */
-body.video-on, body.video-on #root { background: transparent; }
+html.video-on, body.video-on, body.video-on #root { background: transparent; }
 #av { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
-.live-player { position: relative; width: 100%; height: 100%; }
-.live-info { position: absolute; left: 80px; right: 80px; bottom: 80px; padding: 28px 36px; border-radius: var(--r-panel); background: var(--sheet); color: var(--w1); font-size: calc(20 * var(--u)); }
-.live-info .ch { font-size: calc(26 * var(--u)); font-weight: 700; letter-spacing: -0.02em; margin-bottom: 12px; }
-.live-info .bar { height: calc(4 * var(--u)); background: var(--progress-track); border-radius: calc(3 * var(--u)); margin-bottom: 14px; overflow: hidden; }
-.live-info .bar > i { display: block; height: 100%; width: 0; background: #fff; border-radius: calc(3 * var(--u)); }
-.live-info .next { color: var(--w2); }
-.live-error { position: absolute; top: 80px; left: 0; right: 0; text-align: center; font-size: calc(20 * var(--u)); margin: 0; }
 
-/* Detail / episodes / player prompt: restyled to Android's buttons and rows (rebuilt in later phases). */
+/* Detail / episodes: restyled to Android's buttons and rows (rebuilt in later phases). */
 .detail { display: flex; gap: 64px; padding: 80px; }
 .detail .poster-big { width: 400px; aspect-ratio: 2 / 3; background: var(--surface); border-radius: var(--r-poster); overflow: hidden; flex: none; }
 .detail .poster-big img { width: 100%; height: 100%; object-fit: cover; }
@@ -211,13 +204,13 @@ body.video-on, body.video-on #root { background: transparent; }
 .detail .meta { font-size: calc(18 * var(--u)); color: var(--text2); margin: 0 0 24px; }
 .detail .plot { font-size: calc(18 * var(--u)); line-height: 1.4; color: var(--text2); max-width: 1000px; }
 .detail .actions { display: flex; gap: calc(16 * var(--u)); margin-top: 40px; }
-.detail button, .series-detail [data-action="next"], .vod-prompt button {
+.detail button, .series-detail [data-action="next"] {
   font-size: calc(18 * var(--u)); font-weight: 600;
   padding: calc(14 * var(--u)) calc(28 * var(--u));
   border-radius: var(--r-button); background: var(--surface-hi); color: var(--text);
   transition: transform var(--dur-focus) var(--ease-focus);
 }
-.detail button:focus, .series-detail [data-action="next"]:focus, .vod-prompt button:focus {
+.detail button:focus, .series-detail [data-action="next"]:focus {
   background: var(--focus-bg); color: var(--on-focus); transform: scale(1.06);
 }
 .series-detail .rail h1 { font-size: calc(26 * var(--u)); margin: 0 0 12px; }
@@ -231,5 +224,3 @@ body.video-on, body.video-on #root { background: transparent; }
 .series-detail .episode .mark { color: var(--text2); }
 .series-detail .episode:focus { background: var(--focus-bg); color: var(--on-focus); }
 .series-detail .episode:focus .mark { color: var(--on-focus2); }
-.vod-prompt { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; padding: 40px 56px; border-radius: var(--r-panel); background: var(--sheet); font-size: calc(20 * var(--u)); }
-.vod-prompt button { margin: 0 12px; }

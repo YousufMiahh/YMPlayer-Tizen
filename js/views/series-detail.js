@@ -40,9 +40,12 @@ export function seriesDetailView() {
 
   const flat = () => seasons.flatMap((s) => s.episodes);
 
+  // Open.play(eps, i) with the episode's own season (SeriesActivity:381): Next Episode stays in
+  // the season.
   function play(ep) {
-    const queue = flat();
-    router.go('player-vod', { item: ep, queue, index: queue.findIndex((e) => e.id === ep.id) });
+    const s = seasons.find((x) => x.episodes.some((e) => e.id === ep.id));
+    const queue = s ? s.episodes : flat();
+    router.go('player-vod', { queue, index: queue.findIndex((e) => e.id === ep.id) });
   }
 
   function renderEpisodes() {

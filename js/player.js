@@ -1,9 +1,17 @@
-// Single-engine video player on Tizen AVPlay (plays both .ts and HLS). Replaces the Android
-// ExoPlayer+VLC pair. Events: ready | playing | ended | error | timeupdate (ms position).
+// The one video engine on Tizen: Samsung AVPlay (plays .ts, HLS and VOD files). It plays the
+// part of Android's Engine interface (Engine.java) that the player screen relies on; the retry
+// ladder, freeze watchdog and overlays live in the screen (js/views/player.js), as in
+// PlayerActivity.
+//
+// Events (on/off): ready | playing (bool) | buffering (bool) | ended | error ({ what }) |
+// timeupdate (ms) | subtitle ({ text, duration }).
 import * as store from './store.js';
 import * as api from './api.js';
 import { LIVE } from './item.js';
 import { shim } from './avplay-shim.js';
+
+export const AUDIO = 'AUDIO';
+export const TEXT = 'TEXT';
 
 /** Real `webapis.avplay` on a TV; the shim in tests / desktop browsers. */
 export function getAvplay() {
@@ -24,85 +32,291 @@ function emit(event, data) {
 let s = null;
 let tokenSeq = 0;
 
-const otherFormat = (f) => (f === 'm3u8' ? 'ts' : 'm3u8');
-
 function teardown(av) {
   try { av.stop(); } catch { /* already idle */ }
   try { av.close(); } catch { /* already closed */ }
 }
 
-function start(av, session, format) {
-  const url = api.playUrl(session.item, format);
-  session.format = format;
+const state = (av) => { try { return av.getState(); } catch { return 'NONE'; } };
+const prepared = (av) => ['READY', 'PLAYING', 'PAUSED'].includes(state(av));
+
+function start(av, session, startMs) {
+  const url = api.playUrl(session.item, session.format);
   const token = ++tokenSeq;
   session.token = token;
+  session.ready = false;
+  session.buffering = false;
   const live = (fn) => (...a) => { if (s === session && session.token === token) fn(...a); };
 
   av.open(url);
   av.setListener({
     oncurrentplaytime: live((ms) => { session.pos = ms; emit('timeupdate', ms); }),
     onstreamcompleted: live(() => onCompleted(av, session)),
-    onerror: live((type) => onFailure(av, session, type)),
+    onerror: live((type) => onFailure(session, type)),
+    onbufferingstart: live(() => { session.buffering = true; emit('buffering', true); }),
+    onbufferingprogress: () => {},
+    onbufferingcomplete: live(() => { session.buffering = false; emit('buffering', false); }),
+    onsubtitlechange: live((duration, text) => {
+      if (session.subsOff) return;
+      emit('subtitle', { text: String(text ?? ''), duration: Number(duration) || 0 });
+    }),
+    onevent: () => {},
+    ondrmevent: () => {},
   });
   av.setDisplayRect(0, 0, 1920, 1080);
+  // Android draws the picture fitted inside the screen (PlayerView default / VLC best fit).
+  try { av.setDisplayMethod('PLAYER_DISPLAY_MODE_LETTER_BOX'); } catch { /* older firmware */ }
   // The webview drops fetch-layer User-Agent; AVPlay's own streaming property carries it.
   try { av.setStreamingProperty('USER_AGENT', store.userAgent()); } catch { /* property unsupported */ }
+  session.buffering = true;
+  emit('buffering', true);
   av.prepareAsync(live(() => {
-    if (session.startMs > 0 && session.item.type !== LIVE) av.seekTo(session.startMs);
-    av.play();
+    if (startMs > 0 && session.item.type !== LIVE) {
+      try { av.seekTo(startMs); } catch { /* seek refused: plays from the start */ }
+    }
+    applyPreferredTracks(av, session);
+    try { av.play(); } catch (e) { onFailure(session, e && (e.message || e.name)); return; }
+    session.ready = true;
+    session.buffering = false;
+    emit('buffering', false);
     emit('ready');
-    emit('playing');
-  }), live((err) => onFailure(av, session, err)));
+    emit('playing', true);
+  }), live((err) => onFailure(session, err && (err.message || err.name || err))));
 }
 
-function onFailure(av, session, err) {
-  const live = session.item.type === LIVE;
-  if (live && store.autoRecover() && !session.retried) {
-    session.retried = true;
-    teardown(av);
-    start(av, session, otherFormat(session.format));
-    return;
-  }
-  emit('error', err);
+function onFailure(session, what) {
+  session.ready = false;
+  session.buffering = false;
+  emit('buffering', false);
+  emit('error', { what: String(what || 'PLAYER_ERROR_UNKNOWN') });
 }
 
 function onCompleted(av, session) {
   if (session.item.type !== LIVE) {
-    // Finished: drop the resume point so it doesn't restart at the credits.
-    store.setDuration(session.item, session.pos || av.getDuration());
+    // Finished: drop the resume point so it doesn't restart at the credits. The duration comes
+    // from the player only (a stream that ends before any time tick must not store its start
+    // point, or a 0, as its length).
+    let d = 0;
+    try { d = av.getDuration(); } catch { /* not prepared */ }
+    if (d > 0) store.setDuration(session.item, d);
     store.setPosition(session.item, 0);
     session.pos = 0;
+    session.finished = true;
   }
   emit('ended');
 }
 
-/** Open and start `item`. Live starts with the configured format; VOD resumes at startMs. */
-export function open(item, { startMs = 0 } = {}) {
+/**
+ * Open and start `item` (ExoEngine.load). Live uses `format` (default: the Settings format); VOD
+ * starts at startMs. Any previous session is saved and released first.
+ */
+export function open(item, { startMs = 0, format } = {}) {
   const av = getAvplay();
-  if (s) teardown(av);
-  s = { item, startMs, pos: item.type === LIVE ? 0 : startMs, retried: false, format: null, token: 0 };
-  start(av, s, item.type === LIVE ? store.liveFormat() : 'ts');
+  if (s) stop();
+  const live = item.type === LIVE;
+  s = {
+    item, pos: live ? 0 : startMs, format: live ? (format || store.liveFormat()) : 'ts',
+    token: 0, ready: false, buffering: false, subsOff: store.subtitleLanguage() === 'off', seeking: false, pendingSeek: null,
+  };
+  start(av, s, live ? 0 : startMs);
 }
 
-export function play() { if (!s) return; getAvplay().play(); emit('playing'); }
-export function pause() { if (!s) return; getAvplay().pause(); }
-export function seek(ms) { if (!s) return; getAvplay().seekTo(Math.max(0, Math.floor(ms))); }
-export function setRate(r) { if (!s) return; getAvplay().setSpeed(r); }
+/** Engine.retry: the same stream again (VOD from where it was). */
+export function retry() {
+  if (!s) return;
+  const av = getAvplay();
+  const at = s.item.type === LIVE ? 0 : position();
+  teardown(av);
+  start(av, s, at);
+}
+
+export const current = () => (s ? s.item : null);
+export const format = () => (s ? s.format : null);
+export const isReady = () => !!s && s.ready && prepared(getAvplay());
+export const isPlaying = () => !!s && s.ready && state(getAvplay()) === 'PLAYING';
+export const isBuffering = () => !!s && s.buffering;
+
+export function play() {
+  if (!s) return;
+  const av = getAvplay();
+  if (state(av) !== 'READY' && state(av) !== 'PAUSED') return;
+  av.play();
+  emit('playing', true);
+}
+export function pause() {
+  if (!s) return;
+  const av = getAvplay();
+  if (state(av) !== 'PLAYING') return;
+  av.pause();
+  emit('playing', false);
+}
+
+/** Milliseconds into the stream. */
+export function position() {
+  if (!s) return 0;
+  const av = getAvplay();
+  if (!prepared(av)) return s.pos;
+  try {
+    const t = Number(av.getCurrentTime());
+    return Number.isFinite(t) && t >= 0 ? t : s.pos;
+  } catch { return s.pos; }
+}
+
+/** Milliseconds, or 0 if unknown / live. */
+export function duration() {
+  if (!s || s.item.type === LIVE) return 0;
+  try { const d = Number(getAvplay().getDuration()); return d > 0 ? d : 0; } catch { return 0; }
+}
+
+/** seekTo, one at a time: AVPlay refuses a seek while one is running, so the last asked wins. */
+export function seek(ms) {
+  if (!s) return;
+  const target = Math.max(0, Math.floor(ms));
+  if (s.seeking) { s.pendingSeek = target; return; }
+  const av = getAvplay();
+  if (!prepared(av)) return;
+  const session = s;
+  session.seeking = true;
+  session.pos = target;
+  const done = () => {
+    if (s !== session) return;
+    session.seeking = false;
+    if (session.pendingSeek != null) { const n = session.pendingSeek; session.pendingSeek = null; seek(n); }
+  };
+  try { av.seekTo(target, done, done); } catch { done(); }
+}
+
+// ---------------------------------------------------------------- tracks (ExoEngine.tracks/select)
+
+const parse = (x) => { try { return typeof x === 'string' ? JSON.parse(x) : (x || {}); } catch { return {}; } };
+
+let names = null;
+/** Locale.getDisplayLanguage(Locale.UK) for an ISO 639 code ("eng" → "English"). */
+export function languageName(code) {
+  if (!code) return '';
+  try {
+    names = names || new Intl.DisplayNames(['en-GB'], { type: 'language' });
+    const n = names.of(code);
+    return n && n !== code && n !== 'root' ? n : code;
+  } catch { return code; }
+}
+
+/** ExoEngine.trackName for an AVPlay track. */
+export function trackLabel(type, info, n) {
+  const lang = type === TEXT ? info.track_lang : info.language;
+  let name;
+  if (info.label && String(info.label).trim()) name = String(info.label).trim();
+  else if (lang && lang !== 'und') name = languageName(lang);
+  else name = `${type === AUDIO ? 'Audio' : 'Subtitles'} ${n}`;
+  const extra = [];
+  if (type === AUDIO) {
+    const f = String(info.fourCC || '').toLowerCase();
+    if (f.includes('eac3') || f.includes('ec-3') || f.includes('ec3')) extra.push('Dolby Digital+');
+    else if (f.includes('ac3') || f.includes('ac-3')) extra.push('Dolby Digital');
+    else if (f.includes('dts')) extra.push('DTS');
+    else if (f.includes('aac') || f.includes('mp4a')) extra.push('AAC');
+    const ch = Number(info.channels);
+    if (ch === 8) extra.push('7.1'); else if (ch === 6) extra.push('5.1'); else if (ch === 2) extra.push('Stereo'); else if (ch === 1) extra.push('Mono');
+  }
+  return [name, ...extra].join('  ·  ');
+}
+
+function allTracks(av) {
+  try { return av.getTotalTrackInfo() || []; } catch { return []; }
+}
+function selectedIndex(av, type) {
+  try {
+    const cur = (av.getCurrentStreamInfo() || []).find((t) => t.type === type);
+    return cur ? Number(cur.index) : null;
+  } catch { return null; }
+}
+
+/** Engine.tracks: [{ type, label, language, selected, index }]. */
+export function tracks(type) {
+  if (!s) return [];
+  const av = getAvplay();
+  if (!prepared(av)) return [];
+  const sel = selectedIndex(av, type);
+  const textOff = type === TEXT && subtitlesAreOff();
+  let n = 0;
+  return allTracks(av).filter((t) => t.type === type).map((t) => {
+    const info = parse(t.extra_info);
+    const language = (type === TEXT ? info.track_lang : info.language) || '';
+    return { type, label: trackLabel(type, info, ++n), language, selected: !textOff && Number(t.index) === sel, index: Number(t.index) };
+  });
+}
+
+/** Engine.select. Picking a subtitle track turns subtitles back on. */
+export function select(track) {
+  if (!s) return;
+  const av = getAvplay();
+  if (track.type === TEXT) {
+    s.subsOff = false;
+    try { av.setSilentSubtitle(false); } catch { /* unsupported */ }
+  }
+  try { av.setSelectTrack(track.type, track.index); } catch { /* not in this state */ }
+  emit('tracks');
+}
+
+/** Engine.subtitlesOff. */
+export function subtitlesOff() {
+  if (!s) return;
+  s.subsOff = true;
+  try { getAvplay().setSilentSubtitle(true); } catch { /* unsupported */ }
+  emit('subtitle', { text: '', duration: 0 });
+  emit('tracks');
+}
+
+export function subtitlesAreOff() {
+  if (!s) return true;
+  if (s.subsOff) return true;
+  const av = getAvplay();
+  return !prepared(av) || selectedIndex(av, TEXT) == null;
+}
+
+/** Same language, whichever ISO code form each side uses ("en" / "eng" / "English"). */
+export function sameLanguage(a, b) {
+  if (!a || !b) return false;
+  if (a.toLowerCase() === b.toLowerCase()) return true;
+  const na = languageName(a); const nb = languageName(b);
+  return !!na && na.toLowerCase() === nb.toLowerCase();
+}
+
+/** ExoEngine constructor: preferred subtitle / audio language, "off" honoured. */
+function applyPreferredTracks(av, session) {
+  const sl = store.subtitleLanguage();
+  const al = store.audioLanguage();
+  const list = allTracks(av).map((t) => ({ ...t, info: parse(t.extra_info) }));
+  if (sl === 'off') {
+    try { av.setSilentSubtitle(true); } catch { /* unsupported */ }
+    session.subsOff = true;
+  } else if (sl) {
+    const t = list.find((x) => x.type === TEXT && sameLanguage(x.info.track_lang, sl));
+    if (t) { try { av.setSelectTrack(TEXT, Number(t.index)); } catch { /* not now */ } }
+  }
+  if (al) {
+    const t = list.find((x) => x.type === AUDIO && sameLanguage(x.info.language, al));
+    if (t && selectedIndex(av, AUDIO) !== Number(t.index)) { try { av.setSelectTrack(AUDIO, Number(t.index)); } catch { /* not now */ } }
+  }
+}
+
+// ---------------------------------------------------------------- stop
 
 /** Stop and release. Persists resume position + duration for VOD/episodes (never live). */
 export function stop() {
   if (!s) return;
   const av = getAvplay();
   const session = s;
+  const p = position();
   s = null;
-  if (session.item.type !== LIVE) {
+  if (session.item.type !== LIVE && !session.finished) {
     let dur = 0;
-    try { dur = av.getDuration(); } catch { /* not prepared */ }
+    try { dur = prepared(av) ? Number(av.getDuration()) || 0 : 0; } catch { /* not prepared */ }
     // PlayerActivity.savePosition: within the last minute counts as watched (off Continue
     // Watching); otherwise only a point past 10 s is kept. A 0 never erases a resume point.
     if (dur > 0) store.setDuration(session.item, dur);
-    if (dur > 0 && session.pos > dur - 60000) store.setPosition(session.item, 0);
-    else if (session.pos > 10000) store.setPosition(session.item, session.pos);
+    if (dur > 0 && p > dur - 60000) store.setPosition(session.item, 0);
+    else if (p > 10000) store.setPosition(session.item, p);
   }
   teardown(av);
 }

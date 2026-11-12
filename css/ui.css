@@ -266,7 +266,7 @@ html.light .toast { background: rgba(238, 238, 238, 0.97); color: rgba(0, 0, 0, 
 .sheet-right { right: calc(40 * var(--u)); }
 .sheet-bottom { left: calc(40 * var(--u)); right: calc(40 * var(--u)); top: auto; }
 .sheet-title { font-size: calc(26 * var(--u)); font-weight: 700; letter-spacing: -0.02em; padding: calc(6 * var(--u)) 0 calc(2 * var(--u)) calc(10 * var(--u)); }
-.sheet-hint { font-size: calc(14 * var(--u)); color: var(--text2); padding: 0 0 calc(14 * var(--u)) calc(10 * var(--u)); }
+.sheet-hint { white-space: pre; font-size: calc(14 * var(--u)); color: var(--text2); padding: 0 0 calc(14 * var(--u)) calc(10 * var(--u)); }
 .sheet-body { flex: 1; min-height: 0; overflow-y: auto; }
 
 /* ---------------------------------------------------------------- Splash */

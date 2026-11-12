@@ -19,7 +19,7 @@ import { shim } from '../js/avplay-shim.js';
 import { liveView } from '../js/views/live.js';
 import { moviesView } from '../js/views/movies.js';
 import { seriesView } from '../js/views/series.js';
-import { playerLiveView } from '../js/views/player-live.js';
+import { playerLiveView } from '../js/views/player.js';
 import * as topbar from '../js/ui/topbar.js';
 import * as repo from '../js/repo.js';
 import { seedLibrary } from './helpers.js';

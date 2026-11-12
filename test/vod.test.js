@@ -5,7 +5,9 @@ vi.mock('../js/api.js', () => ({
   categories: vi.fn(), streams: vi.fn(), vodInfo: vi.fn(), seriesInfo: vi.fn(),
 }));
 vi.mock('../js/player.js', () => ({
-  open: vi.fn(), stop: vi.fn(), play: vi.fn(), pause: vi.fn(), seek: vi.fn(), on: vi.fn(), off: vi.fn(),
+  open: vi.fn(), stop: vi.fn(), play: vi.fn(), pause: vi.fn(), seek: vi.fn(), on: vi.fn(), off: vi.fn(), retry: vi.fn(),
+  isPlaying: vi.fn(() => false), isReady: vi.fn(() => false), position: vi.fn(() => 0), duration: vi.fn(() => 0),
+  tracks: vi.fn(() => []), subtitlesAreOff: vi.fn(() => true), select: vi.fn(), subtitlesOff: vi.fn(), TEXT: 'TEXT', AUDIO: 'AUDIO',
 }));
 
 import * as api from '../js/api.js';
@@ -15,7 +17,7 @@ import { router } from '../js/router.js';
 import { moviesView } from '../js/views/movies.js';
 import { movieDetailView } from '../js/views/movie-detail.js';
 import { seriesDetailView } from '../js/views/series-detail.js';
-import { playerVodView } from '../js/views/player-vod.js';
+import { playerVodView } from '../js/views/player.js';
 
 const MOVIES = [
   { type: 'movie', id: '100', name: 'Heat', icon: 'http://x/heat.jpg', ext: 'mkv', info: '8.2' },
@@ -66,7 +68,7 @@ describe('movie detail', () => {
     root.querySelector('[data-action="play"]').click();
     await tick();
     expect(router.current().name).toBe('player-vod');
-    expect(router.current().params).toMatchObject({ item: MOVIES[0], startMs: 0 });
+    expect(router.current().params).toEqual({ queue: [MOVIES[0]], index: 0 });
   });
 
   it('offers Resume with the stored position, and play-from-start', async () => {
@@ -77,64 +79,19 @@ describe('movie detail', () => {
     expect(resume.textContent).toContain('12:34');
     resume.click();
     await tick();
-    expect(router.current().params.startMs).toBe(754000);
-  });
-});
-
-describe('player-vod', () => {
-  const mountPlayer = (params) => { router.go('player-vod', params); };
-
-  it('shows the av object, opens with startMs, and cleans up on unmount', () => {
-    mountPlayer({ item: MOVIES[0], startMs: 5000 });
-    expect(av.hidden).toBe(false);
-    expect(player.open).toHaveBeenCalledWith(MOVIES[0], { startMs: 5000 });
-    expect(store.history(false).map((h) => h.id)).toEqual(['100']);
-    router.reset();
-    expect(player.stop).toHaveBeenCalled();
-    expect(av.hidden).toBe(true);
-    expect(player.off).toHaveBeenCalled();
+    // the player resumes from the saved point itself (PlayerActivity.play(true))
+    expect(router.current().params).toEqual({ queue: [MOVIES[0]], index: 0 });
+    expect(player.open).toHaveBeenCalledWith(MOVIES[0], expect.objectContaining({ startMs: 754000 }));
   });
 
-  it('prompts to resume when a position is stored and no startMs was given', () => {
-    store.setPosition(MOVIES[0], 90000);
-    mountPlayer({ item: MOVIES[0] });
-    expect(player.open).not.toHaveBeenCalled();
-    root.querySelector('[data-action="resume"]').click();
-    expect(player.stop).toHaveBeenCalled();
-    expect(player.open).toHaveBeenCalledWith(MOVIES[0], { startMs: 90000 });
-  });
-
-  it('Start over from the prompt opens at 0', () => {
-    store.setPosition(MOVIES[0], 90000);
-    mountPlayer({ item: MOVIES[0] });
-    root.querySelector('[data-action="restart"]').click();
-    expect(player.open).toHaveBeenCalledWith(MOVIES[0], { startMs: 0 });
-  });
-
-  it('left/right seek -10s/+30s from the current position', () => {
-    mountPlayer({ item: MOVIES[0], startMs: 60000 });
-    handler('timeupdate')(60000);
-    key(37);
-    expect(player.seek).toHaveBeenLastCalledWith(50000);
-    handler('timeupdate')(50000);
-    key(39);
-    expect(player.seek).toHaveBeenLastCalledWith(80000);
-  });
-
-  it('OK shows the controls', () => {
-    mountPlayer({ item: MOVIES[0], startMs: 1 });
-    const bar = root.querySelector('.vod-controls');
-    expect(bar.hidden).toBe(true);
-    key(13);
-    expect(bar.hidden).toBe(false);
-  });
-
-  it('movie end goes back', async () => {
-    router.go('movies', {});
+  it('play from the start forgets the saved point first (Start Over)', async () => {
+    store.setPosition(MOVIES[0], 754000);
+    router.go('movie-detail', { item: MOVIES[0] });
     await tick();
-    mountPlayer({ item: MOVIES[0], startMs: 1 });
-    handler('ended')();
-    expect(router.current().name).toBe('movies');
+    root.querySelector('[data-action="restart"], [data-action="play"]').click();
+    await tick();
+    expect(store.position(MOVIES[0])).toBe(0);
+    expect(player.open).toHaveBeenCalledWith(MOVIES[0], expect.objectContaining({ startMs: 0 }));
   });
 });
 
@@ -160,26 +117,24 @@ describe('series detail + auto-next', () => {
     root.querySelector('[data-episode="1001"]').click();
     await tick();
     expect(router.current().name).toBe('player-vod');
-    const { item } = router.current().params;
+    const { queue, index } = router.current().params;
+    const item = queue[index];
     expect(item).toMatchObject({ type: 'episode', id: '1001', parentId: '7', ext: 'mkv', parentName: 'Dark' });
-    expect(player.open).toHaveBeenCalledWith(item, { startMs: 0 });
-    expect(player.stop.mock.invocationCallOrder[0]).toBeLessThan(player.open.mock.invocationCallOrder[0]);
+    expect(queue.map((e) => e.id)).toEqual(['1001', '1002']); // the season only (SeriesActivity:381)
+    expect(player.open).toHaveBeenCalledWith(item, expect.objectContaining({ startMs: 0 }));
   });
 
-  it('on ended, opens the next episode then crosses into the next season', async () => {
+  it("on ended, opens the next episode of the season; the season's last one goes back", async () => {
     router.go('series-detail', { item: SERIES });
     await tick();
     root.querySelector('[data-episode="1001"]').click();
     await tick();
-    player.open.mockClear(); player.stop.mockClear();
+    player.open.mockClear();
     handler('ended')();
-    expect(player.stop).toHaveBeenCalled();
     expect(player.open.mock.calls[0][0]).toMatchObject({ id: '1002', parentId: '7' });
-    expect(player.open.mock.calls[0][1]).toEqual({ startMs: 0 });
-    expect(player.stop.mock.invocationCallOrder[0]).toBeLessThan(player.open.mock.invocationCallOrder[0]);
-    handler('ended')();
-    expect(player.open.mock.calls[1][0]).toMatchObject({ id: '2001', parentId: '7' });
-    handler('ended')(); // last episode: back to the series detail
+    expect(player.open.mock.calls[0][1]).toMatchObject({ startMs: 0 });
+    handler('ended')(); // last episode of season 1: no crossing into season 2
+    expect(player.open).toHaveBeenCalledTimes(1);
     expect(router.current().name).toBe('series-detail');
   });
 
@@ -189,6 +144,7 @@ describe('series detail + auto-next', () => {
     await tick();
     root.querySelector('[data-action="next"]').click();
     await tick();
-    expect(router.current().params.item.id).toBe('1002');
+    const { queue, index } = router.current().params;
+    expect(queue[index].id).toBe('1002');
   });
 });
