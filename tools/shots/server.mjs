@@ -43,6 +43,14 @@ function api(q, origin) {
   }
 }
 
+/**
+ * Per-action behaviour for screens that need a slow or failing provider (Setup):
+ *   { get_vod_streams: { trickleMs: 30000 }, get_series: { holdMs: 60000 }, get_live_streams: { status: 502 } }
+ * trickle = send the body in small pieces over that time; hold = say nothing for that long.
+ */
+let behaviour = {};
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 export function startServer(port = 0) {
   const server = http.createServer(async (req, res) => {
     const origin = `http://${req.headers.host}`;
@@ -56,6 +64,16 @@ export function startServer(port = 0) {
       if (url.pathname === '/player_api.php') {
         // Providers return absolute artwork URLs; mirror that so the app fetches them like real ones.
         const body = JSON.stringify(api(url.searchParams, origin)).replaceAll('"/art/', `"${origin}/art/`);
+        const b = behaviour[url.searchParams.get('action')] || {};
+        if (b.holdMs) await sleep(b.holdMs);
+        if (b.status) { send(b.status, 'text/plain', 'Bad Gateway'); return; }
+        if (b.trickleMs) {
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' });
+          const parts = 200; const size = Math.ceil(body.length / parts);
+          for (let i = 0; i < parts && !res.destroyed; i++) { res.write(body.slice(i * size, (i + 1) * size)); await sleep(b.trickleMs / parts); }
+          res.end();
+          return;
+        }
         send(200, 'application/json', body);
         return;
       }
@@ -75,7 +93,11 @@ export function startServer(port = 0) {
   return new Promise((resolve) => {
     server.listen(port, '127.0.0.1', () => {
       const { port: p } = server.address();
-      resolve({ url: `http://127.0.0.1:${p}`, close: () => new Promise((r) => server.close(r)) });
+      resolve({
+        url: `http://127.0.0.1:${p}`,
+        set(b) { behaviour = b || {}; },
+        close: () => { server.closeAllConnections?.(); return new Promise((r) => server.close(r)); },
+      });
     });
   });
 }

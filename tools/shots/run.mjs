@@ -42,8 +42,25 @@ async function seed(page, url) {
     d.favLive.forEach((i) => s.toggleFav(i));
     d.favMovies.forEach((i) => s.toggleFav(i));
     d.favSeries.forEach((i) => s.toggleFav(i));
+    // The saved library (js/repo.js, IndexedDB), as after the first Setup.
+    const repo = await import('/js/repo.js');
+    await repo.refreshAll();
   }, data);
 }
+
+/** A signed-in account with nothing saved yet: launch goes splash -> Setup. */
+async function seedAccountOnly(page, url) {
+  await page.evaluate(async (acc) => {
+    const s = await import('/js/store.js');
+    localStorage.clear();
+    s.saveAccount(acc); s.setCurrent('');
+  }, { id: '', name: 'Demo', server: url, user: USER, pass: PASS, ua: '', ok: true });
+}
+
+const fillLogin = async (page, f) => {
+  await page.waitForSelector('.login input:focus', { timeout: 8000 });
+  for (const [k, v] of Object.entries(f)) await page.fill(`.login [name=${k}]`, v);
+};
 
 const press = async (page, key, times = 1, gap = 120) => {
   for (let i = 0; i < times; i++) { await page.keyboard.press(key); await wait(gap); }
@@ -58,13 +75,41 @@ const hoverTab = async (page, steps) => {
 
 export const SCREENS = {
   splash: { seed: false, steps: async () => { await wait(1000); } },
-  login: {
+  login: { // first run: empty form, focus on the server field
+    seed: false,
+    steps: async (page) => { await page.waitForSelector('.login input:focus', { timeout: 8000 }); await wait(400); },
+  },
+  'login-filled': { // details typed, focus on "Log in"
     seed: false,
     steps: async (page) => {
-      await page.waitForSelector('.login input:focus', { timeout: 8000 });
-      await page.keyboard.type('http://demo.example:8080');
+      await fillLogin(page, { name: 'Home', server: 'http://demo.example:8080', user: 'demo', pass: 'demo' });
+      await page.focus('.login [name=pass]');
+      await press(page, 'ArrowDown'); await wait(400);
+    },
+  },
+  'login-error': { // unreachable server: the detailed error, after every candidate address
+    seed: false,
+    steps: async (page) => {
+      await fillLogin(page, { server: 'http://127.0.0.1:9/xtream', user: 'demo', pass: 'demo' });
+      await page.focus('.login [name=pass]');
+      await press(page, 'ArrowDown'); await press(page, 'Enter');
+      await page.waitForFunction(() => /Last address tried/.test(document.querySelector('.login-status')?.textContent || ''), null, { timeout: 15000 });
       await wait(300);
     },
+  },
+  setup: { // Live TV done, Movies counting, Series waiting for the provider
+    seed: 'account',
+    provider: { get_vod_streams: { trickleMs: 40000 }, get_series: { holdMs: 60000 } },
+    steps: async (page) => {
+      await page.waitForSelector('.setup-row[data-type="movie"] .setup-count', { timeout: 8000 });
+      await page.waitForFunction(() => /so far/.test(document.querySelector('.setup-row[data-type="movie"] .setup-count').textContent), null, { timeout: 20000 });
+      await wait(1500);
+    },
+  },
+  'setup-error': { // Movies failed: reason, "Try Again" / "Continue Anyway"
+    seed: 'account',
+    provider: { get_vod_streams: { status: 502 } },
+    steps: async (page) => { await page.waitForSelector('.setup-actions [data-action=retry]:focus', { timeout: 15000 }); await wait(400); },
   },
   home: {
     seed: true,
@@ -141,7 +186,11 @@ export async function shoot(names, { log = console.log } = {}) {
       page.on('pageerror', (e) => log(`  [${name}] page error: ${e.message}`));
       page.on('console', (m) => { if (m.type() === 'error') log(`  [${name}] console: ${m.text()}`); });
       await page.goto(`${server.url}/index.html`);
-      if (scr.seed) {
+      server.set(scr.provider);
+      if (scr.seed === 'account') {
+        await seedAccountOnly(page, server.url);
+        await page.reload();
+      } else if (scr.seed) {
         await seed(page, server.url);
         if (scr.light) await page.evaluate(() => localStorage.setItem('dark', 'false'));
         await page.reload();
