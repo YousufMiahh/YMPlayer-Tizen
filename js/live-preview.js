@@ -113,6 +113,9 @@ export function createPreview(o) {
         const r = o.box.getBoundingClientRect();
         av.setDisplayRect(Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height));
         try { av.setStreamingProperty('USER_AGENT', store.userAgent()); } catch { /* unsupported */ }
+        // PlayerFactory.create(preview): show the picture after a short buffer (Android 0.3 s;
+        // AVPlay counts in whole seconds, so 1 s)
+        try { if (typeof av.setBufferingParam === 'function') av.setBufferingParam('PLAYER_BUFFER_FOR_PLAY', 'PLAYER_BUFFER_SIZE_IN_SECOND', 1); } catch { /* unsupported */ }
         setMute(store.previewMode() === 1);
         av.prepareAsync(() => {
           if (my !== seq) return;

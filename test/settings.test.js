@@ -381,6 +381,30 @@ describe('Settings: Clear Watch History and Show Tutorial', () => {
   });
 });
 
+describe('Settings: the end of the list', () => {
+  it('▼ on the last row scrolls on by up to half the screen, so Version and the credit come into view', () => {
+    vi.stubGlobal('requestAnimationFrame', undefined); // no glide: the scroll lands at once
+    addAccounts();
+    router.go('settings', {});
+    const screen = root.querySelector('.section-settings');
+    Object.defineProperty(screen, 'scrollHeight', { value: 3000, configurable: true });
+    Object.defineProperty(screen, 'clientHeight', { value: 1080, configurable: true });
+    screen.scrollTop = 1600;
+    const view = router.current().view;
+    const down = () => { const e = new KeyboardEvent('keydown', { keyCode: 40, cancelable: true }); return [view.onKey(e), e.defaultPrevented]; };
+    row('clear_history').focus();
+    expect(down()[0]).toBe(false); // not the last row: ordinary focus movement
+    row('tutorial').focus();
+    screen.scrollTop = 1600;
+    expect(down()).toEqual([true, true]);
+    expect(screen.scrollTop).toBe(1920); // 3000 − 1080: the end
+    screen.scrollTop = 1000;
+    down();
+    expect(screen.scrollTop).toBe(1540); // half a screen at most
+    vi.unstubAllGlobals();
+  });
+});
+
 describe('Settings: coming back', () => {
   it('returns to the row you left (Login and back)', () => {
     addAccounts();
