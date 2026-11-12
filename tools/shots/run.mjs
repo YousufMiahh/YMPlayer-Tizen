@@ -504,7 +504,7 @@ const SCREENS = {
       await press(page, 'ArrowDown', 6, 150); await press(page, 'ArrowRight', 2); await wait(1100);
     },
   },
-  series: { // Continue Watching (one entry per series), then into a provider category
+  'series-browse': { // Continue Watching (one entry per series), then into a provider category
     seed: true,
     steps: async (page) => {
       await toHome(page); await hoverTab(page, 3);
