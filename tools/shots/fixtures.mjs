@@ -92,6 +92,22 @@ seriesCats.forEach((c) => {
   }
 });
 
+// One very long category (Browse windows its list: only the rows on screen are in the page).
+// Built last, from its own random stream, so the data above stays the same.
+export const BIG_CAT = '199';
+{
+  const r2 = rng(77);
+  liveCats.push({ category_id: BIG_CAT, category_name: 'UK | Every Channel A–Z', parent_id: 0 });
+  for (let i = 0; i < 3000; i++) {
+    const id = 20000 + i;
+    live.push({
+      num: num++, name: `UK: ${CHANNEL_BRANDS[Math.floor(r2() * CHANNEL_BRANDS.length)]} ${CHANNEL_WORDS[Math.floor(r2() * CHANNEL_WORDS.length)]} ${i + 1}`,
+      stream_type: 'live', stream_id: id, stream_icon: r2() < 0.9 ? `/art/logo/${id}.svg` : '', epg_channel_id: `ch${id}`,
+      added: String(now - Math.floor(r2() * 9e6)), category_id: BIG_CAT, tv_archive: 0,
+    });
+  }
+}
+
 const byId = new Map();
 for (const s of live) byId.set(`live:${s.stream_id}`, s);
 for (const s of movies) byId.set(`movie:${s.stream_id}`, s);
