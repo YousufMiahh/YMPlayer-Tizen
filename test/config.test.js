@@ -38,4 +38,13 @@ describe('config.xml', () => {
     const csp = doc.getElementsByTagName('tizen:content-security-policy')[0].textContent;
     expect(csp).toMatch(/frame-src[^;]*https:\/\/www\.youtube-nocookie\.com/);
   });
+
+  it('js/version.js carries the same version (Settings → About shows it)', async () => {
+    const { VERSION, appVersion } = await import('../js/version.js');
+    expect(VERSION).toBe(doc.documentElement.getAttribute('version'));
+    expect(appVersion()).toBe(VERSION); // no tizen here
+    globalThis.tizen = { application: { getAppInfo: () => ({ version: '9.9.9' }) } };
+    expect(appVersion()).toBe('9.9.9');
+    delete globalThis.tizen;
+  });
 });

@@ -2,7 +2,7 @@
 // Theme_Material_Dialog_Alert (dark) / Theme_Material_Light_Dialog_Alert (light). Title, message,
 // then the button bar (neutral … negative, positive) or a list of items (Builder.setItems).
 // D-pad moves between buttons/items, OK picks, Back closes (resolves null).
-export const KEY = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, ENTER: 13, BACK: 10009, ESC: 27 };
+export const KEY = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, ENTER: 13, BACK: 10009, ESC: 27, IME_DONE: 65376, IME_CANCEL: 65385 };
 
 let openCount = 0;
 export const isOpen = () => openCount > 0;
@@ -17,9 +17,11 @@ export const isOpen = () => openCount > 0;
  * @param o.multi     { labels: string[], checked: boolean[] } (setMultiChoiceItems): OK ticks an item
  * @param o.onItemToggle (index, on) after an item is ticked / unticked
  * @param o.onNeutral (dialog) => void: the neutral button runs this and the dialog stays open
+ * @param o.input     { value, hint } (setView(EditText)): a text field under the message; ▼ / Enter /
+ *                    the IME's Done go to the buttons, ▲ from a button comes back
  * @param o.focus     'positive'|'negative'|'neutral'|number  initial focus (default: first)
  * @returns {{ el, result: Promise<string|number|null>, close(value?), checked(): boolean[],
- *             setChecked(i, on), setButton(key, label) }}
+ *             setChecked(i, on), setButton(key, label), value(): string }}
  */
 export function showDialog(o = {}) {
   const prevFocus = document.activeElement;
@@ -46,6 +48,15 @@ export function showDialog(o = {}) {
   if (o.content) box.appendChild(o.content);
 
   const targets = []; // focusable things in D-pad order
+  let field = null;
+  if (o.input) {
+    field = document.createElement('input');
+    field.type = 'text'; field.className = 'dialog-input'; field.autocomplete = 'off'; field.spellcheck = false;
+    field.value = o.input.value || '';
+    if (o.input.hint) field.placeholder = o.input.hint;
+    box.appendChild(field);
+    targets.push(field);
+  }
   let vertical = false;
   if (Array.isArray(o.items) && o.items.length) {
     vertical = true;
@@ -136,11 +147,23 @@ export function showDialog(o = {}) {
   function onKey(e) {
     const k = e.keyCode;
     const i = targets.indexOf(document.activeElement);
+    if (field && document.activeElement === field) {
+      if (k === KEY.LEFT || k === KEY.RIGHT || (k >= 32 && k <= 126 && k !== KEY.UP && k !== KEY.DOWN && k !== KEY.ENTER)) return; // the caret / typing
+      if (k === KEY.BACK || k === KEY.ESC || k === KEY.IME_CANCEL) close(null);
+      else if (k === KEY.DOWN || k === KEY.ENTER || k === KEY.IME_DONE) {
+        const last = targets[targets.length - 1];
+        if (last && last !== field) { field.blur(); last.focus(); }
+      } else if (k !== KEY.UP) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      return;
+    }
+    if (field && !vertical && k === KEY.UP && i > 0) { field.focus(); e.preventDefault(); e.stopImmediatePropagation(); return; }
     const step = (d) => { const t = targets[Math.max(0, Math.min(targets.length - 1, (i < 0 ? 0 : i) + d))]; if (t) t.focus(); };
     if (k === KEY.BACK || k === KEY.ESC) close(null);
-    else if (k === KEY.ENTER) { if (!e.repeat && i >= 0) pick(targets[i]); else if (i < 0 && targets[0]) targets[0].focus(); }
+    else if (k === KEY.ENTER) { if (!e.repeat && i >= 0 && targets[i] !== field) pick(targets[i]); else if (i < 0 && targets[0]) targets[0].focus(); }
     else if (k === (vertical ? KEY.DOWN : KEY.RIGHT)) step(1);
-    else if (k === (vertical ? KEY.UP : KEY.LEFT)) step(-1);
+    else if (k === (vertical ? KEY.UP : KEY.LEFT)) { if (!field || i > 1) step(-1); }
     else if (vertical && (k === KEY.RIGHT || k === KEY.LEFT)) {
       // in the button bar under a list, ◀ ▶ move between the buttons
       const t = targets[i];
@@ -172,6 +195,7 @@ export function showDialog(o = {}) {
     checked: () => (checks ? [...checks] : []),
     setChecked(i, on) { if (checks && i >= 0 && i < checks.length) { checks[i] = !!on; paintChecks(); } },
     setButton(key, label) { const b = box.querySelector(`.dialog-button[data-value="${key}"]`); if (b) b.textContent = label; },
+    value: () => (field ? field.value : ''),
   };
   return handle;
 }

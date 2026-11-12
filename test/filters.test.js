@@ -208,10 +208,13 @@ describe('FilterSettings', () => {
     const { settingsView } = await import('../js/views/settings.js');
     const v = settingsView();
     v.mount(document.getElementById('root'));
-    const heads = [...document.querySelectorAll('.settings-col h2')].map((h) => h.textContent);
-    expect(heads.indexOf("Hide What You Don't Watch")).toBe(heads.indexOf('Playback') + 1);
-    expect(document.querySelector('[data-filter="countries"]').textContent).toBe('Showing everything');
-    expect(document.querySelector('[data-filter="hidden"]').textContent).toBe('None');
+    const heads = [...document.querySelectorAll('.settings-col .section-heading')].map((h) => h.textContent);
+    expect(heads.indexOf("HIDE WHAT YOU DON'T WATCH")).toBe(heads.indexOf('APPEARANCE') + 1);
+    const val = (k) => document.querySelector(`.srow[data-key="${k}"] .srow-value`).textContent;
+    expect(document.querySelector('.srow[data-key="countries"] .srow-label').textContent).toBe('Countries & Languages');
+    expect(document.querySelector('.srow[data-key="hidden"] .srow-label').textContent).toBe('Hidden Categories');
+    expect(val('countries')).toBe('Showing everything');
+    expect(val('hidden')).toBe('None');
     v.unmount();
   });
 });

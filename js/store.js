@@ -224,6 +224,23 @@ export function addHistory(item) {
   setJson(`${ns()}hist_${live ? 'live' : 'vod'}`, list.slice(0, HISTORY_MAX).map(toJson));
 }
 
+/**
+ * Prefs.clearHistory: the current account's resume points, durations and watch history
+ * (pos_ / dur_ / hist_). The first account's keys have no prefix, so another account's
+ * "a123_…" keys are skipped there.
+ */
+export function clearHistory() {
+  const n = ns();
+  const keys = [];
+  for (let i = 0; i < ls().length; i++) keys.push(ls().key(i));
+  for (const k of keys) {
+    const rest = n === '' ? k : (k.startsWith(n) ? k.slice(n.length) : null);
+    if (rest === null) continue;
+    if (n === '' && /^a\d+_/.test(rest)) continue;
+    if (rest.startsWith('pos_') || rest.startsWith('dur_') || rest.startsWith('hist_')) ls().removeItem(k);
+  }
+}
+
 /** Prefs.continueWatching: movies and episodes started but not finished. */
 export function continueWatching() {
   return history(false).filter((i) => position(i) > 0);

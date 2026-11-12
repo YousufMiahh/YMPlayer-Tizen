@@ -1,40 +1,56 @@
-/* Settings (SettingsActivity): 900u column centred under the top bar; rows are SURFACE pills,
-   label medium 19u TEXT, value 18u TEXT2; the focused row turns white with dark text. Rebuilt later. */
-.settings { height: 100%; overflow-y: auto; scrollbar-width: none; }
-.settings::-webkit-scrollbar { display: none; }
-.settings-col { width: calc(900 * var(--u)); margin: 0 auto; padding: 0 calc(16 * var(--u)) calc(60 * var(--u)); }
-.settings h1 { display: none; }
-.settings h2, .settings .section-heading {
-  margin: 0; font-size: calc(14 * var(--u)); font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase;
-  color: var(--text3); padding: calc(34 * var(--u)) 0 calc(10 * var(--u)) calc(22 * var(--u));
+/* Settings (SettingsActivity): ONE vertical ScrollView holding the top bar and a 900u list,
+   centred, 16u side padding, 60u below. The screen moves its own scroll (data-own-scroll). */
+.section-screen.section-settings { display: block; overflow-x: hidden; overflow-y: auto; position: relative; scrollbar-width: none; }
+.section-settings::-webkit-scrollbar { display: none; }
+.section-settings .section-page { flex: none; min-height: 0; }
+.settings-col {
+  display: flex; flex-direction: column;
+  width: calc(900 * var(--u)); margin: 0 auto calc(60 * var(--u)); padding: 0 calc(16 * var(--u));
 }
-.settings .setting, .settings .account {
-  display: flex; align-items: center; justify-content: space-between; gap: calc(24 * var(--u));
-  margin-bottom: calc(6 * var(--u));
-  padding: calc(4 * var(--u)) calc(4 * var(--u)) calc(4 * var(--u)) calc(22 * var(--u));
-  border-radius: var(--r-button); background: var(--surface);
-  font-size: calc(19 * var(--u)); font-weight: 500; color: var(--text);
+.settings-accounts { display: flex; flex-direction: column; }
+
+/* section(): Medium 14u TEXT3, upper case, letter-spacing .1em, padding 22/34/0/10u */
+.settings .section-heading {
+  margin: 0; padding: calc(34 * var(--u)) 0 calc(10 * var(--u)) calc(22 * var(--u));
+  font-size: calc(14 * var(--u)); font-weight: 500; line-height: var(--lh); letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--text3);
+}
+
+/* row(): padding 22/18u, 6u apart, radius 12u. Actionable = SURFACE pill, white when focused with
+   ON_FOCUS / ON_FOCUS2 text and a 1.02 lift; info = SURFACE_LO, never focused. */
+.srow {
+  display: flex; align-items: center; width: 100%; margin: 0 0 calc(6 * var(--u));
+  padding: calc(18 * var(--u)) calc(22 * var(--u)); border: 0; border-radius: calc(12 * var(--u));
+  background: var(--surface); text-align: left; font-family: inherit;
   transition: transform var(--dur-focus) var(--ease-focus);
 }
-.settings .setting:focus-within, .settings .account:focus-within { transform: scale(1.02); }
-.settings .setting:focus-within { background: var(--focus-bg); color: var(--on-focus); }
-.settings .setting button, .settings .setting input {
-  min-width: calc(200 * var(--u)); padding: calc(14 * var(--u)) calc(18 * var(--u));
-  border: 0; border-radius: var(--r-button); background: transparent;
-  font-size: calc(18 * var(--u)); font-weight: 400; color: var(--text2); text-align: right;
+.srow.info { background: var(--surface-lo); }
+.srow-label { flex: none; font-size: calc(19 * var(--u)); font-weight: 500; line-height: var(--lh); color: var(--text); white-space: pre; }
+.srow-value {
+  flex: 1; min-width: 0; margin-left: calc(24 * var(--u));
+  font-size: calc(18 * var(--u)); font-weight: 400; line-height: var(--lh); color: var(--text2); text-align: right;
+  white-space: pre-wrap; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
 }
-.settings .setting:focus-within button, .settings .setting:focus-within input { color: var(--on-focus2); }
-.settings .account span { flex: 1; }
-.settings .account button {
-  min-width: 0; margin-left: calc(8 * var(--u)); padding: calc(14 * var(--u)) calc(22 * var(--u));
-  border-radius: var(--r-button); font-size: calc(18 * var(--u)); font-weight: 600; color: var(--text2);
+.srow-value:empty::before { content: "\200b"; } /* an empty TextView keeps one line */
+.srow:focus, .srow.keep-focus { background: var(--focus-bg); transform: scale(1.02); }
+.srow:focus .srow-label, .srow.keep-focus .srow-label { color: var(--on-focus); }
+.srow:focus .srow-value, .srow.keep-focus .srow-value { color: var(--on-focus2); }
+
+/* addSample(): a mock video frame, 170u high, 6u above and below, radius 12u; the line sits 22u
+   from the bottom, centred, padding 10/4u, SemiBold. */
+.srow-sample {
+  position: relative; flex: none; height: calc(170 * var(--u)); margin: calc(6 * var(--u)) 0 calc(6 * var(--u));
+  border-radius: calc(12 * var(--u)); overflow: hidden;
+  background: linear-gradient(135deg, #3B5B8C, #6C4A7E, #B0705A);
+  display: flex; align-items: flex-end; justify-content: center;
 }
-.settings .account button:focus { background: var(--focus-bg); color: var(--on-focus); }
-.settings .actions { padding: calc(8 * var(--u)) 0; }
-.settings .actions button {
-  font-size: calc(18 * var(--u)); font-weight: 600; padding: calc(14 * var(--u)) calc(28 * var(--u));
-  border-radius: var(--r-button); background: var(--surface-hi); color: var(--text);
-  transition: transform var(--dur-focus) var(--ease-focus);
+.srow-sample span {
+  margin-bottom: calc(22 * var(--u)); padding: calc(4 * var(--u)) calc(10 * var(--u));
+  font-weight: 600; line-height: var(--lh); white-space: pre;
 }
-.settings .actions button:focus { background: var(--focus-bg); color: var(--on-focus); transform: scale(1.06); }
-.settings .setting button:empty::before { content: "\200b"; } /* empty value: keep the row height */
+
+/* "Developed by Yousuf Miah": Medium 16u TEXT2, centred, padding 22u above, 10u below */
+.settings-credit {
+  margin: 0; padding: calc(22 * var(--u)) 0 calc(10 * var(--u));
+  font-size: calc(16 * var(--u)); font-weight: 500; line-height: var(--lh); color: var(--text2); text-align: center;
+}

@@ -1,6 +1,6 @@
-// Settings -> ACCOUNTS rows (SettingsActivity.build, switchTo, confirmRemove). Phase 8 restyles
-// Settings; the behaviour here is already Android's:
-//   {label}             "✓  In use" (current, not actionable) / "Switch" -> restart at Home
+// Settings -> ACCOUNTS rows (SettingsActivity.build, switchTo, confirmRemove):
+//   {label}             "✓  In use" (current, an info row) / "Switch" -> restart at Home
+//   Subscription        "Checking…" -> the account's status (an info row)
 //   Add Account         -> Login (add)
 //   Edit This Account   -> Login (edit the current account)
 //   Remove This Account -> "Remove {label}?" dialog -> delete its library and data, restart Home
@@ -43,43 +43,22 @@ export async function confirmRemove(acc) {
   return true;
 }
 
-function row(text, value, attrs) {
-  const r = document.createElement('div');
-  r.className = 'setting';
-  const l = document.createElement('span');
-  l.textContent = text;
-  r.appendChild(l);
-  const b = document.createElement('button');
-  b.type = 'button';
-  b.textContent = value;
-  for (const [k, v] of Object.entries(attrs)) b.dataset[k] = v;
-  r.appendChild(b);
-  return r;
-}
-
-/** Builds the ACCOUNTS rows into `host`. Returns { dispose }. */
-export function mountAccounts(host) {
+/**
+ * Builds the ACCOUNTS rows into `host` with SettingsActivity's row builder
+ * `makeRow(label, value, action | null, key)`. Returns { statusValue, dispose }: statusValue is
+ * the Subscription row's value element ("Checking…" until the caller fills it in).
+ */
+export function mountAccounts(host, makeRow) {
   const cur = store.current();
+  const add = (label_, value, action, key) => { const r = makeRow(label_, value, action, key); host.appendChild(r); return r; };
   for (const a of store.accounts()) {
     const isCur = !!cur && cur.id === a.id;
-    const r = row(label(a), isCur ? '✓  In use' : 'Switch', { action: isCur ? 'in-use' : 'switch' });
+    const r = add(label(a), isCur ? '✓  In use' : 'Switch', isCur ? null : () => switchTo(a.id), `account_${a.id}`);
     r.dataset.account = a.id;
-    if (isCur) r.querySelector('button').setAttribute('aria-disabled', 'true'); // info row: not focusable
-    host.appendChild(r);
   }
-  host.appendChild(row('Add Account', '', { action: 'add' }));
-  host.appendChild(row('Edit This Account', '', { action: 'edit' }));
-  if (cur) host.appendChild(row('Remove This Account', '', { action: 'remove' }));
-
-  function onClick(e) {
-    const b = e.target.closest && e.target.closest('[data-action]');
-    if (!b || !host.contains(b)) return;
-    const action = b.dataset.action;
-    if (action === 'switch') switchTo(b.closest('[data-account]').dataset.account);
-    else if (action === 'add') router.go('login', { add: true });
-    else if (action === 'edit') router.go('login', { edit: true });
-    else if (action === 'remove') { const c = store.current(); if (c) confirmRemove(c); }
-  }
-  host.addEventListener('click', onClick);
-  return { dispose() { host.removeEventListener('click', onClick); } };
+  const status = add('Subscription', 'Checking…', null, 'subscription');
+  add('Add Account', '', () => router.go('login', { add: true }), 'add_account');
+  add('Edit This Account', '', () => router.go('login', { edit: true }), 'edit_account');
+  if (cur) add('Remove This Account', '', () => { const c = store.current(); if (c) confirmRemove(c); }, 'remove_account');
+  return { statusValue: status.querySelector('.srow-value'), dispose() {} };
 }

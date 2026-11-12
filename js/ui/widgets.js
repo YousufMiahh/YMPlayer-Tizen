@@ -29,6 +29,23 @@ export function sectionHeading(text) {
   return h;
 }
 
+/**
+ * SettingsActivity.row(): the whole row is one pill, label on the left (Medium 19u), value on the
+ * right (18u, TEXT2, up to 2 lines). Actionable rows take focus and OK; info rows are SURFACE_LO
+ * and can't be focused.
+ */
+export function settingsRow(label, value = '', actionable = true) {
+  const r = document.createElement(actionable ? 'button' : 'div');
+  if (actionable) r.type = 'button';
+  r.className = `srow${actionable ? '' : ' info'}`;
+  const l = document.createElement('span');
+  l.className = 'srow-label'; l.textContent = label;
+  const v = document.createElement('span');
+  v.className = 'srow-value'; v.textContent = value;
+  r.append(l, v);
+  return r;
+}
+
 /** Cards.shelf() title: SemiBold 22u, TEXT2. Optional hint in TEXT3 after a 6-space gap. */
 export function shelfTitle(text, hint) {
   const h = document.createElement('h2');

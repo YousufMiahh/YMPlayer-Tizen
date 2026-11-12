@@ -213,6 +213,11 @@ html.light .dialog-scrim {
 }
 .dialog-title { flex: none; padding: 36px 48px 0; font-size: 40px; font-weight: 500; color: var(--dlg-title); }
 .dialog-message { padding: 28px 48px 0; font-size: 32px; line-height: 1.5; color: var(--dlg-msg); white-space: pre-wrap; overflow-y: auto; }
+.dialog-input {
+  margin: 24px 48px 0; padding: 12px 4px; border: 0; border-bottom: 2px solid var(--dlg-msg); border-radius: 0;
+  background: transparent; font-size: 32px; color: var(--dlg-title); outline: none;
+}
+.dialog-input:focus { border-bottom-color: var(--dlg-accent); }
 .dialog-items { padding: 16px 0; margin-top: 12px; overflow-y: auto; }
 .dialog-item { display: flex; align-items: center; width: 100%; min-height: 96px; padding: 0 48px; font-size: 32px; color: var(--dlg-item); text-align: left; }
 .dialog-item:focus { background: var(--dlg-hl); }
