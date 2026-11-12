@@ -17,7 +17,7 @@ export function createGlider(list, opts = {}) {
   list.classList.add('glider-host');
   list.insertBefore(pill, list.firstChild);
 
-  let shown = false; let lastRow = null; let y = -1;
+  let shown = false; let lastRow = null; let y = -1; let frozen = false;
 
   function place(row, glide) {
     const top = row.offsetTop;
@@ -57,6 +57,7 @@ export function createGlider(list, opts = {}) {
     if (r && list.contains(r)) update(r); else hide();
   };
   const onOut = (e) => {
+    if (frozen) return;
     if (!e.relatedTarget || !list.contains(e.relatedTarget)) hide();
   };
   list.addEventListener('focusin', onIn);
@@ -72,6 +73,15 @@ export function createGlider(list, opts = {}) {
       list.removeEventListener('focusout', onOut);
       pill.remove();
       list.classList.remove('glider-host');
+    },
+    /**
+     * Keep the highlight where it is while a dialog has focus (the Android list stays focused
+     * under the dialog window). The row gets .keep-focus for its focused colours meanwhile.
+     */
+    freeze(on) {
+      frozen = !!on;
+      if (lastRow) lastRow.classList.toggle('keep-focus', frozen);
+      if (!frozen && !list.contains(document.activeElement)) hide();
     },
     state: () => ({ shown, row: lastRow, y }),
     pill,

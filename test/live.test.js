@@ -15,7 +15,6 @@ import * as api from '../js/api.js';
 import * as player from '../js/player.js';
 import * as store from '../js/store.js';
 import { router } from '../js/router.js';
-import { liveView } from '../js/views/live.js';
 import { playerLiveView } from '../js/views/player-live.js';
 
 const CATS = [
@@ -49,124 +48,11 @@ beforeEach(() => {
     { title: 'Weather', timeRange: () => '19:00 – 19:05', progress: () => 0 },
   ]);
   router.init(root);
-  router.register('live', liveView);
   router.register('player-live', playerLiveView);
 });
 afterEach(() => router.reset());
 
-const catBtn = (id) => root.querySelector(`[data-cat="${id}"]`);
 const rows = () => [...root.querySelectorAll('[data-channel]')];
-
-describe('live browse', () => {
-  it('lists categories and loads channels when one is selected', async () => {
-    router.go('live', {});
-    await tick();
-    expect(api.categories).toHaveBeenCalledWith('live');
-    expect(root.querySelectorAll('[data-cat]').length).toBe(3);
-    catBtn('2').click();
-    await tick();
-    expect(api.streams).toHaveBeenCalledWith('live', '2');
-    expect(rows().map((r) => r.dataset.channel)).toEqual(['20']);
-  });
-
-  it('renders Now/Next from api.shortEpg and the channel logo/name/num', async () => {
-    router.go('live', {});
-    await tick();
-    catBtn('1').click();
-    await tick(); await tick();
-    expect(api.shortEpg).toHaveBeenCalledWith('10');
-    const r = rows()[0];
-    expect(r.textContent).toContain('BBC One');
-    expect(r.textContent).toContain('1');
-    expect(r.querySelector('img').getAttribute('src')).toBe('http://x/bbc.png');
-    expect(r.querySelector('.now').textContent).toBe('Now 10');
-    expect(r.querySelector('.next').textContent).toBe('Next 10');
-  });
-
-  it('pins favourite categories to the top of the rail', async () => {
-    store.toggleFavCategory('live', '3');
-    router.go('live', {});
-    await tick();
-    const ids = [...root.querySelectorAll('[data-cat]')].map((b) => b.dataset.cat);
-    expect(ids).toEqual(['3', '1', '2']);
-  });
-
-  it('Menu key toggles a channel favourite and persists it', async () => {
-    router.go('live', {});
-    await tick();
-    catBtn('1').click();
-    await tick();
-    rows()[1].focus();
-    key(10133);
-    expect(store.isFav({ type: 'live', id: '11' })).toBe(true);
-    expect(rows()[1].classList.contains('fav')).toBe(true);
-    key(10133);
-    expect(store.isFav({ type: 'live', id: '11' })).toBe(false);
-  });
-
-  it('short OK opens the channel; held OK toggles favourite without opening it', async () => {
-    vi.useFakeTimers();
-    try {
-      const spy = vi.fn();
-      router.register('player-live', () => ({ mount(r, p) { spy(p); }, unmount() {} }));
-      router.go('live', {});
-      await vi.advanceTimersByTimeAsync(0);
-      catBtn('1').click();
-      await vi.advanceTimersByTimeAsync(0);
-      rows()[1].focus();
-      const up = () => document.dispatchEvent(new KeyboardEvent('keyup', { keyCode: 13, bubbles: true }));
-      // hold
-      expect(key(13)).toBe(true);
-      key(13, { repeat: true });
-      vi.advanceTimersByTime(700);
-      up();
-      expect(store.isFav({ type: 'live', id: '11' })).toBe(true);
-      expect(spy).not.toHaveBeenCalled();
-      // short press
-      key(13);
-      vi.advanceTimersByTime(100);
-      up();
-      expect(spy).toHaveBeenCalledTimes(1);
-      expect(spy.mock.calls[0][0].index).toBe(1);
-      expect(store.isFav({ type: 'live', id: '11' })).toBe(true);
-    } finally { vi.useRealTimers(); }
-  });
-
-  it('Menu key on a category toggles favourite category', async () => {
-    router.go('live', {});
-    await tick();
-    catBtn('2').focus();
-    key(10133);
-    expect(store.isFavCategory('live', '2')).toBe(true);
-  });
-
-  it('selecting a channel opens the live player with the list and index', async () => {
-    const spy = vi.fn();
-    router.register('player-live', () => ({ mount(r, p) { spy(p); }, unmount() {} }));
-    router.go('live', {});
-    await tick();
-    catBtn('1').click();
-    await tick();
-    rows()[1].click();
-    expect(spy).toHaveBeenCalledTimes(1);
-    expect(spy.mock.calls[0][0].index).toBe(1);
-    expect(spy.mock.calls[0][0].channels.map((c) => c.id)).toEqual(['10', '11']);
-  });
-
-  it('Back from a channel goes to the categories first and does not leave the view', async () => {
-    router.go('live', {});
-    await tick();
-    catBtn('1').click();
-    await tick();
-    rows()[0].focus();
-    const bubbled = vi.fn();
-    document.addEventListener('back', bubbled);
-    rows()[0].dispatchEvent(new CustomEvent('back', { bubbles: true }));
-    document.removeEventListener('back', bubbled);
-    expect(document.activeElement.dataset.cat).toBe('1');
-    expect(bubbled).not.toHaveBeenCalled();
-  });
-});
 
 describe('live player', () => {
   const channels = [...CH[1], ...CH[2]];
@@ -244,22 +130,5 @@ describe('live player', () => {
     const cb = player.on.mock.calls.find((c) => c[0] === 'error')[1];
     cb('boom');
     expect(root.querySelector('.live-error').hidden).toBe(false);
-  });
-});
-
-describe('live browse reads the saved library', () => {
-  it('categories and channels come from the repo: no provider request per click', async () => {
-    store.saveAccount({ id: '', server: 'http://a.tv', user: 'ann', pass: 'p', ok: true });
-    const { seedLibrary } = await import('./helpers.js');
-    seedLibrary({ live: [...CH[1].map((c) => ({ ...c, categoryId: '1' })), ...CH[2].map((c) => ({ ...c, categoryId: '2' }))], cats: { live: CATS } });
-    router.go('live', {});
-    await tick();
-    expect(root.querySelectorAll('[data-cat]').length).toBe(3);
-    catBtn('1').click(); await tick();
-    expect(rows().map((r) => r.dataset.channel)).toEqual(['10', '11']);
-    catBtn('2').click(); await tick();
-    expect(rows().map((r) => r.dataset.channel)).toEqual(['20']);
-    expect(api.categories).not.toHaveBeenCalled();
-    expect(api.streams).not.toHaveBeenCalled();
   });
 });

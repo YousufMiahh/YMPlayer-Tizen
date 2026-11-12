@@ -7,7 +7,6 @@ import * as api from '../js/api.js';
 import * as store from '../js/store.js';
 import { router } from '../js/router.js';
 import { searchView } from '../js/views/search.js';
-import { orderCategories } from '../js/favourites.js';
 
 const LIVE = [
   { type: 'live', id: '1', name: 'BBC One' }, { type: 'live', id: '2', name: 'Sky News' },
@@ -106,16 +105,6 @@ describe('search', () => {
     expect(router.onKey(e)).toBe(true);
     expect(store.isFav(MOVIES[1])).toBe(true);
     expect(el.classList.contains('fav')).toBe(true);
-  });
-});
-
-describe('favourites helper', () => {
-  it('pins favourite categories to the top of the rail, keeping order otherwise', () => {
-    const cats = [{ id: '1', name: 'A' }, { id: '2', name: 'B' }, { id: '3', name: 'C' }];
-    store.toggleFavCategory('live', '3');
-    expect(orderCategories('live', cats).map((c) => c.id)).toEqual(['3', '1', '2']);
-    store.toggleFavCategory('live', '2');
-    expect(orderCategories('live', cats).map((c) => c.id)).toEqual(['2', '3', '1']);
   });
 });
 

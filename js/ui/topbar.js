@@ -35,7 +35,9 @@ export const isSection = (name) => SECTIONS.includes(name);
 /** Default stack model (TopBar.go). Tests may replace it. */
 function defaultNavigate(from, target) {
   if (target === 'home') { router.backTo('home'); return; }
-  if (from === 'home') router.go(target); else router.replace(target);
+  // Each visit gets its own params object: screens keep their focus memory in it while the
+  // player or a details screen is on top of them.
+  if (from === 'home') router.go(target, {}); else router.replace(target, {});
 }
 let navigate = defaultNavigate;
 export function setNavigator(fn) { navigate = fn || defaultNavigate; }

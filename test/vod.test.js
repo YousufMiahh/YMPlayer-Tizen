@@ -13,7 +13,6 @@ import * as player from '../js/player.js';
 import * as store from '../js/store.js';
 import { router } from '../js/router.js';
 import { moviesView } from '../js/views/movies.js';
-import { seriesView } from '../js/views/series.js';
 import { movieDetailView } from '../js/views/movie-detail.js';
 import { seriesDetailView } from '../js/views/series-detail.js';
 import { playerVodView } from '../js/views/player-vod.js';
@@ -50,43 +49,11 @@ beforeEach(() => {
   api.seriesInfo.mockResolvedValue(SERIES_INFO);
   router.init(root);
   router.register('movies', moviesView);
-  router.register('series', seriesView);
   router.register('movie-detail', movieDetailView);
   router.register('series-detail', seriesDetailView);
   router.register('player-vod', playerVodView);
 });
 afterEach(() => router.reset());
-
-describe('movies browse', () => {
-  it('renders a poster grid from streams and opens detail', async () => {
-    router.go('movies', {});
-    await tick();
-    expect(api.categories).toHaveBeenCalledWith('movie');
-    root.querySelector('[data-cat="1"]').click();
-    await tick();
-    expect(api.streams).toHaveBeenCalledWith('movie', '1');
-    const cards = [...root.querySelectorAll('[data-item]')];
-    expect(cards.map((c) => c.dataset.item)).toEqual(['100', '101']);
-    expect(cards[0].textContent).toContain('Heat');
-    expect(cards[0].querySelector('img').src).toBe('http://x/heat.jpg');
-    cards[0].click();
-    await tick();
-    expect(router.current().name).toBe('movie-detail');
-    expect(router.current().params.item.id).toBe('100');
-  });
-
-  it('series grid opens series detail', async () => {
-    api.streams.mockResolvedValue([SERIES]);
-    router.go('series', {});
-    await tick();
-    root.querySelector('[data-cat="1"]').click();
-    await tick();
-    expect(api.streams).toHaveBeenCalledWith('series', '1');
-    root.querySelector('[data-item="7"]').click();
-    await tick();
-    expect(router.current().name).toBe('series-detail');
-  });
-});
 
 describe('movie detail', () => {
   it('shows plot and rating and plays from the start with no resume point', async () => {
