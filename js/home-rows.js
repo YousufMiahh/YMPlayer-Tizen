@@ -2,6 +2,7 @@
 // Pure functions over js/store.js (history, favourites, positions) and js/repo.js (the library).
 import * as store from './store.js';
 import * as repo from './repo.js';
+import * as filters from './filters.js';
 import { LIVE, MOVIE, SERIES, EPISODE, key } from './item.js';
 
 /** Card shapes (Cards.Shape). */
@@ -36,7 +37,7 @@ export const WELCOME = 'Welcome to YM Player\nPick Live TV, Movies or Series abo
 
 /** Prefs.continueWatching: movies and episodes started but not finished (history order, newest first). */
 export function continueWatching() {
-  return store.history(false).filter((i) => store.position(i) > 0);
+  return store.continueWatching();
 }
 
 /** SeriesActivity.fmt: m:ss, or h:mm:ss from an hour. */
@@ -99,14 +100,13 @@ export function remoteRows(data = {}) {
   return out;
 }
 
-// Filters.items (hidden categories and countries) arrives with the Browse filters; until then
-// this hook keeps everything.
-let filterItems = (type, list) => list;
-export function setFilter(fn) { filterItems = fn || ((type, list) => list); }
+// Filters.items: hidden categories and countries are left out (js/filters.js). Tests may swap it.
+let filterItems = filters.items;
+export function setFilter(fn) { filterItems = fn || filters.items; }
 
 /** HomeActivity.recent: the newest 300, minus hidden categories and countries, then 24. */
 export async function recentlyAdded(type) {
-  const l = filterItems(type, await repo.recentlyAdded(type, RECENT_POOL));
+  const l = await filterItems(type, await repo.recentlyAdded(type, RECENT_POOL));
   return l.slice(0, RECENT_KEEP);
 }
 

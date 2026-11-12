@@ -74,7 +74,7 @@ export function saveAccount(acc) {
 }
 
 function isAccountData(k) {
-  return /^(fav_|favcat_|pos_|dur_|hist_|lib_time)/.test(k);
+  return /^(fav_|favcat_|pos_|dur_|hist_|lib_time|hide_tags|hide_cat_|show_cat_)/.test(k);
 }
 
 export function removeAccount(id) {
@@ -170,6 +170,9 @@ export function toggleFav(item) {
   return !removed;
 }
 
+/** The ids of one type's favourites, for drawing many cells at once (one read instead of one per cell). */
+export const favIds = (type) => new Set(favs(type).map((f) => f.id));
+
 export const favCategories = (type) => getArr(`${ns()}favcat_${type}`);
 export const isFavCategory = (type, id) => favCategories(type).includes(String(id));
 
@@ -182,6 +185,14 @@ export function toggleFavCategory(type, id) {
   setJson(`${ns()}favcat_${type}`, l);
   return i < 0;
 }
+
+// ================================================================ per-account lists (Filters.readSet / writeSet)
+
+/** A saved list of strings for the current account (hide_tags, hide_cat_<type>, show_cat_<type>). */
+export const accountList = (k) => getArr(`${ns()}${k}`).map(String);
+export const setAccountList = (k, list) => setJson(`${ns()}${k}`, [...list].map(String));
+/** Key prefix of the current account, so caches can tell accounts apart. */
+export const accountNs = () => ns();
 
 // ================================================================ home screen toggles
 
@@ -211,4 +222,26 @@ export function addHistory(item) {
   const list = history(live).filter((h) => key(h) !== k);
   list.unshift(fromJson(item));
   setJson(`${ns()}hist_${live ? 'live' : 'vod'}`, list.slice(0, HISTORY_MAX).map(toJson));
+}
+
+/** Prefs.continueWatching: movies and episodes started but not finished. */
+export function continueWatching() {
+  return history(false).filter((i) => position(i) > 0);
+}
+
+/** Prefs.continueMovies. */
+export function continueMovies() {
+  return continueWatching().filter((i) => i.type === 'movie');
+}
+
+/** Prefs.continueSeries: series you've been watching, most recent first (one entry per series). */
+export function continueSeries() {
+  const m = new Map();
+  for (const ep of history(false)) {
+    if (ep.type !== 'episode' || !ep.parentId || m.has(ep.parentId)) continue;
+    const s = { type: 'series', id: String(ep.parentId), name: ep.parentName || '' };
+    if (ep.parentIcon) s.icon = ep.parentIcon;
+    m.set(ep.parentId, s);
+  }
+  return [...m.values()];
 }

@@ -14,8 +14,12 @@ export const isOpen = () => openCount > 0;
  * @param o.negative  label                        -> resolves 'negative'
  * @param o.neutral   label (left-most button)     -> resolves 'neutral'
  * @param o.items     string[] (setItems)          -> resolves the item index
+ * @param o.multi     { labels: string[], checked: boolean[] } (setMultiChoiceItems): OK ticks an item
+ * @param o.onItemToggle (index, on) after an item is ticked / unticked
+ * @param o.onNeutral (dialog) => void: the neutral button runs this and the dialog stays open
  * @param o.focus     'positive'|'negative'|'neutral'|number  initial focus (default: first)
- * @returns {{ el, result: Promise<string|number|null>, close(value?) }}
+ * @returns {{ el, result: Promise<string|number|null>, close(value?), checked(): boolean[],
+ *             setChecked(i, on), setButton(key, label) }}
  */
 export function showDialog(o = {}) {
   const prevFocus = document.activeElement;
@@ -56,6 +60,33 @@ export function showDialog(o = {}) {
     });
     box.appendChild(list);
   }
+  let checks = null;
+  if (o.multi && Array.isArray(o.multi.labels) && o.multi.labels.length) {
+    vertical = true;
+    checks = o.multi.labels.map((_, i) => !!(o.multi.checked && o.multi.checked[i]));
+    const list = document.createElement('div');
+    list.className = 'dialog-items multi';
+    o.multi.labels.forEach((label, i) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'dialog-item dialog-check'; b.dataset.check = String(i);
+      b.setAttribute('role', 'checkbox');
+      const box = document.createElement('span'); box.className = 'dialog-box';
+      const t = document.createElement('span'); t.className = 'dialog-check-label'; t.textContent = label;
+      b.append(box, t);
+      list.appendChild(b);
+      targets.push(b);
+    });
+    box.appendChild(list);
+  }
+  const paintChecks = () => {
+    if (!checks) return;
+    box.querySelectorAll('[data-check]').forEach((b) => {
+      const on = checks[Number(b.dataset.check)];
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-checked', String(on));
+    });
+  };
+  paintChecks();
   const btns = [['neutral', o.neutral], ['negative', o.negative], ['positive', o.positive]].filter(([, l]) => l);
   if (btns.length) {
     const bar = document.createElement('div');
@@ -90,7 +121,15 @@ export function showDialog(o = {}) {
   }
 
   function pick(el) {
+    if (el.dataset.check !== undefined) {
+      const i = Number(el.dataset.check);
+      checks[i] = !checks[i];
+      paintChecks();
+      if (o.onItemToggle) o.onItemToggle(i, checks[i]);
+      return;
+    }
     const v = el.dataset.value;
+    if (v === 'neutral' && o.onNeutral) { o.onNeutral(handle); return; }
     close(/^\d+$/.test(v) ? Number(v) : v);
   }
 
@@ -102,13 +141,17 @@ export function showDialog(o = {}) {
     else if (k === KEY.ENTER) { if (!e.repeat && i >= 0) pick(targets[i]); else if (i < 0 && targets[0]) targets[0].focus(); }
     else if (k === (vertical ? KEY.DOWN : KEY.RIGHT)) step(1);
     else if (k === (vertical ? KEY.UP : KEY.LEFT)) step(-1);
-    else if (vertical && (k === KEY.RIGHT || k === KEY.LEFT)) { /* stay */ } else if (!vertical && (k === KEY.UP || k === KEY.DOWN)) { /* stay */ } else return;
+    else if (vertical && (k === KEY.RIGHT || k === KEY.LEFT)) {
+      // in the button bar under a list, ◀ ▶ move between the buttons
+      const t = targets[i];
+      if (t && t.classList.contains('dialog-button')) step(k === KEY.RIGHT ? 1 : -1);
+    } else if (!vertical && (k === KEY.UP || k === KEY.DOWN)) { /* stay */ } else return;
     e.preventDefault();
     e.stopImmediatePropagation();
   }
 
   box.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-value]');
+    const b = e.target.closest('[data-value], [data-check]');
     if (b) pick(b);
   });
 
@@ -124,7 +167,13 @@ export function showDialog(o = {}) {
   else if (o.focus) first = targets.find((t) => t.dataset.value === o.focus) || first;
   if (first) first.focus();
 
-  return { el: scrim, result, close };
+  const handle = {
+    el: scrim, result, close,
+    checked: () => (checks ? [...checks] : []),
+    setChecked(i, on) { if (checks && i >= 0 && i < checks.length) { checks[i] = !!on; paintChecks(); } },
+    setButton(key, label) { const b = box.querySelector(`.dialog-button[data-value="${key}"]`); if (b) b.textContent = label; },
+  };
+  return handle;
 }
 
 /** Builder-style shorthand: resolves the chosen value (or null on Back). */

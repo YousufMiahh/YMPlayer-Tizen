@@ -8,6 +8,7 @@ import { router } from '../router.js';
 import { mountSection, tabFocused } from '../ui/topbar.js';
 import { applyTheme } from '../ui/theme.js';
 import * as backdrop from '../ui/backdrop.js';
+import * as filterSettings from '../filter-settings.js';
 
 const COLORS = ['White', 'Yellow', 'Green', 'Cyan', 'Blue', 'Red'];
 const SIZES = ['Small', 'Medium', 'Large'];
@@ -115,6 +116,17 @@ export function settingsView() {
         r.appendChild(i); sec(name).appendChild(r);
       }
 
+      // SettingsActivity: "Hide What You Don't Watch" comes straight after the playback rows.
+      const hide = section(el, filterSettings.SECTION);
+      for (const [k, title, label] of [['countries', filterSettings.COUNTRIES, filterSettings.countriesLabel],
+        ['hidden', filterSettings.HIDDEN, filterSettings.hiddenLabel]]) {
+        const r = row(title);
+        const b = document.createElement('button');
+        b.type = 'button'; b.dataset.filter = k; b.textContent = label();
+        r.appendChild(b); hide.appendChild(r);
+      }
+      if (sections.Playback) sections.Playback.after(hide);
+
       const home = section(el, 'Customise Home');
       for (const k of store.HOME_KEYS) {
         const r = row(store.HOME_NAMES[k]);
@@ -165,6 +177,10 @@ export function settingsView() {
           applyTheme(store.dark()); backdrop.retheme();
         } else if (b.dataset.setting === 'refresh_now') {
           refreshNow(b);
+        } else if (b.dataset.filter) {
+          const done = (text) => { if (b.isConnected) { b.textContent = text; b.focus(); } };
+          if (b.dataset.filter === 'countries') filterSettings.countries(done);
+          else filterSettings.hidden(done);
         } else if (b.dataset.open) {
           router.go(b.dataset.open);
         } else if (b.dataset.home) {
