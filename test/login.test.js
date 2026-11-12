@@ -1,26 +1,30 @@
 // @vitest-environment jsdom
+// Login (LoginActivity.java): layout, modes, validation, candidate addresses, errors, routing.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-vi.mock('../js/home-rows.js', () => ({ clearCache: vi.fn() }));
-vi.mock('../js/api.js', async (orig) => ({ ...(await orig()), login: vi.fn() }));
+vi.mock('../js/api.js', async (orig) => ({ ...(await orig()), loginAt: vi.fn() }));
 
 import * as api from '../js/api.js';
 import * as store from '../js/store.js';
+import * as repo from '../js/repo.js';
 import { router } from '../js/router.js';
-import { loginView } from '../js/views/login.js';
-import { clearCache } from '../js/home-rows.js';
-import { setupView, label } from '../js/views/setup.js';
+import { loginView, candidateBases, fromLink, SUBTITLE, ERROR_COLOR } from '../js/views/login.js';
 
-const GOOD = { user_info: { status: 'Active', exp_date: '1893456000', active_cons: '1', max_connections: '2' } };
+const GOOD = { user_info: { auth: 1, status: 'Active' } };
 let root;
-
-function fill(sel, v) {
-  const el = root.querySelector(sel);
-  el.value = v;
-  el.dispatchEvent(new Event('input', { bubbles: true }));
-}
-const submit = () => root.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+const $ = (s) => root.querySelector(s);
+const field = (n) => $(`[name=${n}]`);
+function fill(n, v) { field(n).value = v; field(n).dispatchEvent(new Event('input', { bubbles: true })); }
+const submit = () => $('[data-action=login]').click();
 const tick = () => new Promise((r) => setTimeout(r, 0));
+const stub = (name) => () => ({ mount(r) { r.innerHTML = `<p id="${name}"></p>`; }, unmount() {} });
+const status = () => $('.login-status');
+
+function seedAccount(extra = {}) {
+  const a = { ...store.newAccount(), name: 'Home', server: 'http://old.tv', user: 'olga', pass: 'pw', ok: true, ...extra };
+  store.saveAccount(a); store.setCurrent(a.id);
+  return a;
+}
 
 beforeEach(() => {
   localStorage.clear();
@@ -28,217 +32,218 @@ beforeEach(() => {
   root = document.getElementById('root');
   router.init(root);
   router.register('login', loginView);
-  router.register('setup', setupView);
-  router.register('home', () => ({ mount(r) { r.innerHTML = '<p id="home"></p>'; }, unmount() {} }));
-  api.login.mockReset();
-  clearCache.mockClear();
+  router.register('setup', stub('setup'));
+  router.register('home', stub('home'));
+  router.register('settings', stub('settings'));
+  api.loginAt.mockReset();
 });
 afterEach(() => router.reset());
 
-describe('login view', () => {
-  it('clears Home cache once on successful login only', async () => {
-    api.login.mockResolvedValueOnce(GOOD);
+describe('login layout (LoginActivity.java:62-119)', () => {
+  it('two cards: the form and "Use your phone"', () => {
     router.go('login');
-    fill('[name=server]', 'h'); fill('[name=user]', 'u'); fill('[name=pass]', 'p');
-    submit();
-    await tick();
-    expect(clearCache).toHaveBeenCalledTimes(1);
-    clearCache.mockClear();
-    api.login.mockRejectedValueOnce(new Error('bad'));
-    router.go('login', { new: true });
-    fill('[name=server]', 'h2'); fill('[name=user]', 'u'); fill('[name=pass]', 'p');
-    submit();
-    await tick();
-    expect(clearCache).not.toHaveBeenCalled();
+    const cards = [...root.querySelectorAll('.login > .login-card')];
+    expect(cards.map((c) => c.classList.contains('login-form') ? 'form' : 'phone')).toEqual(['form', 'phone']);
+    expect($('.login-title').textContent).toBe('YM Player');
+    expect($('.login-sub').textContent).toBe(SUBTITLE);
+    expect($('.login-phone-title').textContent).toBe('Use your phone');
   });
 
-  it('saves + selects the account BEFORE calling login, then marks ok and goes home', async () => {
-    let seen;
-    api.login.mockImplementation(async () => { seen = { ...store.current() }; return GOOD; });
+  it('has the four Android fields in order, a visible password and no user-agent field', () => {
     router.go('login');
-    fill('[name=server]', 'host.tv:8080');
-    fill('[name=user]', 'bob');
-    fill('[name=pass]', 'secret');
-    submit();
-    await tick();
-    expect(api.login).toHaveBeenCalledTimes(1);
-    expect(seen).toMatchObject({ server: 'host.tv:8080', user: 'bob', pass: 'secret', ok: false });
-    expect(store.current()).toMatchObject({ user: 'bob', ok: true });
-    expect(store.hasAccount()).toBe(true);
-    expect(router.current().name).toBe('home');
+    const inputs = [...root.querySelectorAll('.login-form input')];
+    expect(inputs.map((i) => i.placeholder)).toEqual([
+      'Account name (optional, e.g. Home or Sports)',
+      'Server URL  (e.g. http://example.com:8080)',
+      'Username',
+      'Password',
+    ]);
+    expect(field('pass').type).not.toBe('password');
+    expect(field('ua')).toBeNull();
+    expect($('[data-action=login]').textContent).toBe('Log in');
+    expect($('[data-action=accounts]')).toBeNull();
   });
 
-  it('a successful login leaves Home alone on the stack (LoginActivity finishes; no status chip)', async () => {
-    api.login.mockResolvedValue(GOOD);
+  it('the phone panel says honestly that it is not available, with no QR code', () => {
     router.go('login');
-    fill('[name=server]', 'h'); fill('[name=user]', 'u'); fill('[name=pass]', 'p');
-    submit();
-    await tick();
-    expect(router.current().name).toBe('home');
-    expect(router.stackDepth()).toBe(1); // Back on Home now exits the app
-    expect(router.current().params).toBeUndefined();
+    expect($('.login-phone svg, .login-phone img')).toBeNull();
+    expect($('.login-qr-off').textContent).toBe('Not available on this TV yet');
+    expect($('.login-phone-text').textContent).toMatch(/isn't available on this TV yet/);
   });
 
-  it('splits a pasted get.php M3U link into server/user/pass', async () => {
-    api.login.mockResolvedValue(GOOD);
+  it('first run focuses the server field; the form is empty', () => {
     router.go('login');
-    fill('[name=server]', 'http://host.tv:8080/get.php?username=amy&password=pw1&type=m3u_plus');
-    expect(root.querySelector('[name=server]').value).toBe('http://host.tv:8080');
-    expect(root.querySelector('[name=user]').value).toBe('amy');
-    expect(root.querySelector('[name=pass]').value).toBe('pw1');
-    submit();
-    await tick();
-    expect(store.current()).toMatchObject({ server: 'http://host.tv:8080', user: 'amy', pass: 'pw1', ok: true });
+    expect(document.activeElement).toBe(field('server'));
+    expect(field('server').value).toBe('');
+  });
+});
+
+describe('login modes', () => {
+  it('edit (no params / { edit }) pre-fills the current account and keeps the "YM Player" title', () => {
+    seedAccount();
+    router.go('login', { edit: true });
+    expect(field('name').value).toBe('Home');
+    expect(field('server').value).toBe('http://old.tv');
+    expect(field('user').value).toBe('olga');
+    expect(field('pass').value).toBe('pw');
+    expect($('.login-title').textContent).toBe('YM Player');
+    expect(document.activeElement).toBe(field('server'));
   });
 
-  it('failed login shows an error, stays on login, and leaves no account behind', async () => {
-    api.login.mockRejectedValue(new Error('Server returned HTTP 401'));
+  it('add shows "Add Account", blank fields and focuses the name', () => {
+    seedAccount();
+    router.go('login', { add: true });
+    expect($('.login-title').textContent).toBe('Add Account');
+    expect($('[data-action=login]').textContent).toBe('Add Account');
+    expect(field('server').value).toBe('');
+    expect(document.activeElement).toBe(field('name'));
+  });
+
+  it('add saves a second account with no user agent and makes it current', async () => {
+    const a = seedAccount({ ua: 'Custom/1' });
+    api.loginAt.mockResolvedValue(GOOD);
+    router.go('login', { add: true });
+    fill('name', 'Sports'); fill('server', 'new.tv'); fill('user', 'sam'); fill('pass', 'x');
+    submit(); await tick();
+    expect(store.accounts()).toHaveLength(2);
+    expect(store.current()).toMatchObject({ name: 'Sports', server: 'http://new.tv', user: 'sam', ua: '', ok: true });
+    expect(store.accounts().find((x) => x.id === a.id).ua).toBe('Custom/1');
+  });
+
+  it('edit updates the current account in place', async () => {
+    const a = seedAccount({ ua: 'Custom/1' });
+    api.loginAt.mockResolvedValue(GOOD);
+    router.go('login', { edit: true });
+    fill('pass', 'new');
+    submit(); await tick();
+    expect(store.accounts()).toHaveLength(1);
+    expect(store.current()).toMatchObject({ id: a.id, pass: 'new', ua: 'Custom/1', ok: true });
+  });
+});
+
+describe('login attempt (LoginActivity.attempt)', () => {
+  it('validation: red "Please fill in the server, username and password." and no request', async () => {
     router.go('login');
-    fill('[name=server]', 'h'); fill('[name=user]', 'u'); fill('[name=pass]', 'p');
-    submit();
-    await tick();
-    expect(root.querySelector('.error').textContent).toContain('HTTP 401');
-    expect(router.current().name).toBe('login');
+    fill('server', 'h.tv');
+    submit(); await tick();
+    expect(api.loginAt).not.toHaveBeenCalled();
+    expect(status().textContent).toBe('Please fill in the server, username and password.');
+    expect(status().style.color).toBe('rgb(255, 122, 122)');
+    expect(ERROR_COLOR).toBe('#FF7A7A');
+  });
+
+  it('shows "Connecting…" with the button disabled while it tries', async () => {
+    let finish;
+    api.loginAt.mockReturnValue(new Promise((r) => { finish = r; }));
+    router.go('login');
+    fill('server', 'h.tv'); fill('user', 'u'); fill('pass', 'p');
+    submit(); await tick();
+    expect(status().textContent).toBe('Connecting…');
+    expect($('[data-action=login]').dataset.busy).toBe('true');
+    submit(); // ignored while busy
+    expect(api.loginAt).toHaveBeenCalledTimes(1);
+    finish(GOOD); await tick();
+  });
+
+  it('a pasted get.php link fills empty username/password on submit', async () => {
+    api.loginAt.mockResolvedValue(GOOD);
+    router.go('login');
+    fill('server', 'http://h.tv:8080/get.php?username=amy&password=pw1&type=m3u_plus');
+    expect(field('user').value).toBe(''); // Android parses on submit, not on input
+    submit(); await tick();
+    expect(api.loginAt).toHaveBeenCalledWith('http://h.tv:8080', 'amy', 'pw1');
+    expect(store.current()).toMatchObject({ server: 'http://h.tv:8080', user: 'amy', pass: 'pw1' });
+  });
+
+  it('a pasted link never overwrites a typed username', () => {
+    expect(fromLink('h/get.php?username=a&password=b', 'typed', '')).toEqual({ u: 'typed', p: 'b' });
+    expect(fromLink('h.tv', '', '')).toEqual({ u: '', p: '' });
+  });
+
+  it('tries the address as typed, then host only, then http/https swapped', async () => {
+    expect(candidateBases('http://h.tv:8080/path')).toEqual(['http://h.tv:8080/path', 'http://h.tv:8080', 'https://h.tv:8080/path', 'https://h.tv:8080']);
+    expect(candidateBases('http://h.tv')).toEqual(['http://h.tv', 'https://h.tv']);
+    api.loginAt.mockImplementation(async (base) => {
+      if (base === 'http://h.tv:8080') return GOOD;
+      throw new TypeError('Failed to fetch');
+    });
+    router.go('login');
+    fill('server', 'h.tv:8080/path'); fill('user', 'u'); fill('pass', 'p');
+    submit(); await tick();
+    expect(api.loginAt.mock.calls.map((c) => c[0])).toEqual(['http://h.tv:8080/path', 'http://h.tv:8080']);
+    expect(store.current().server).toBe('http://h.tv:8080'); // the address that worked is saved
+  });
+
+  it('unreachable server: the detailed Android error with the last address tried', async () => {
+    api.loginAt.mockRejectedValue(new TypeError('Failed to fetch'));
+    router.go('login');
+    fill('server', 'h.tv'); fill('user', 'u'); fill('pass', 'p');
+    $('[data-action=login]').focus();
+    submit(); await tick();
+    expect(status().textContent).toBe("Couldn't log in: Couldn't connect to the server\nLast address tried: https://h.tv/player_api.php"
+      + '\nCheck the server address with your provider — it should be just http://host:port');
+    expect($('[data-action=login]').dataset.busy).toBeUndefined();
+    expect(document.activeElement).toBe($('[data-action=login]'));
     expect(store.accounts()).toEqual([]);
-    expect(store.hasAccount()).toBe(false);
-  });
-
-  it('login response without user_info is a failure', async () => {
-    api.login.mockResolvedValue({ server_info: {} });
-    router.go('login');
-    fill('[name=server]', 'h'); fill('[name=user]', 'u'); fill('[name=pass]', 'p');
-    submit();
-    await tick();
-    expect(root.querySelector('.error').textContent).not.toBe('');
-    expect(store.hasAccount()).toBe(false);
-  });
-
-  it('failed re-login of an existing account restores it and the current selection', async () => {
-    const a = store.newAccount(); Object.assign(a, { server: 'old', user: 'o', pass: 'o', ok: true });
-    store.saveAccount(a); store.setCurrent(a.id);
-    api.login.mockRejectedValue(new Error('nope'));
-    router.go('login');
-    fill('[name=pass]', 'changed');
-    submit();
-    await tick();
-    expect(store.current()).toMatchObject({ pass: 'o', ok: true });
-  });
-
-  it('empty required fields do not call login', async () => {
-    router.go('login');
-    fill('[name=server]', 'h');
-    submit();
-    await tick();
-    expect(api.login).not.toHaveBeenCalled();
-    expect(root.querySelector('.error').textContent).not.toBe('');
-  });
-
-  it('persists the optional user agent', async () => {
-    api.login.mockResolvedValue(GOOD);
-    router.go('login');
-    fill('[name=server]', 'h'); fill('[name=user]', 'u'); fill('[name=pass]', 'p'); fill('[name=ua]', 'MyUA/1');
-    submit();
-    await tick();
-    expect(store.userAgent()).toBe('MyUA/1');
-  });
-
-  it('inputs are focusable and focus lands on the first field', () => {
-    router.go('login');
-    expect(document.activeElement).toBe(root.querySelector('[name=server]'));
-  });
-});
-
-describe('setup view (multi-account)', () => {
-  function seed() {
-    const a = store.newAccount(); Object.assign(a, { server: 'http://a.tv', user: 'ann', pass: 'x', ok: true });
-    store.saveAccount(a);
-    const b = store.newAccount(); Object.assign(b, { server: 'http://b.tv', user: 'ben', pass: 'y', ok: true, name: 'Ben TV' });
-    store.saveAccount(b);
-    store.setCurrent(a.id);
-    return [a, b];
-  }
-
-  it('lists accounts using label()', () => {
-    const [a, b] = seed();
-    router.go('setup');
-    const rows = [...root.querySelectorAll('[data-account]')].map((r) => r.textContent);
-    expect(rows.join('|')).toContain(label(a));
-    expect(rows.join('|')).toContain('Ben TV');
-    expect(label(a)).toBe('ann@a.tv');
-  });
-
-  it('switch sets current', () => {
-    const [, b] = seed();
-    router.go('setup');
-    root.querySelector(`[data-account="${b.id}"] [data-action=switch]`).click();
-    expect(store.current().id).toBe(b.id);
-  });
-
-  it('remove deletes the account and re-selects another', () => {
-    const [a, b] = seed();
-    router.go('setup');
-    root.querySelector(`[data-account="${a.id}"] [data-action=remove]`).click();
-    expect(store.accounts().map((x) => x.id)).toEqual([b.id]);
-    expect(store.current().id).toBe(b.id);
-    expect(root.querySelectorAll('[data-account]').length).toBe(1);
-  });
-
-  it('add opens a blank login form and a successful login adds a second account and selects it', async () => {
-    seed();
-    api.login.mockResolvedValue(GOOD);
-    router.go('setup');
-    root.querySelector('[data-action=add]').click();
     expect(router.current().name).toBe('login');
-    expect(root.querySelector('[name=server]').value).toBe('');
-    fill('[name=server]', 'http://c.tv'); fill('[name=user]', 'cat'); fill('[name=pass]', 'z');
-    submit();
-    await tick();
-    expect(store.accounts().length).toBe(3);
-    expect(store.current().user).toBe('cat');
   });
 
-  it('failed add keeps the previous current account', async () => {
-    const [a] = seed();
-    api.login.mockRejectedValue(new Error('bad'));
-    router.go('setup');
-    root.querySelector('[data-action=add]').click();
-    fill('[name=server]', 'c'); fill('[name=user]', 'u'); fill('[name=pass]', 'p');
-    submit();
-    await tick();
-    expect(store.accounts().length).toBe(2);
-    expect(store.current().id).toBe(a.id);
+  it('a response without user_info is "not like an Xtream server"', async () => {
+    api.loginAt.mockResolvedValue({ server_info: {} });
+    router.go('login');
+    fill('server', 'h.tv'); fill('user', 'u'); fill('pass', 'p');
+    submit(); await tick();
+    expect(status().textContent).toContain("Couldn't log in: Server answered, but not like an Xtream server");
+    expect(store.hasAccount()).toBe(false);
   });
-});
 
-describe('login robustness', () => {
-  it('failed login after navigating away does not throw', async () => {
-    let rej;
-    api.login.mockReturnValue(new Promise((_, r) => { rej = r; }));
+  it('rejected login: "The server rejected the login … (account status: X)."', async () => {
+    api.loginAt.mockResolvedValue({ user_info: { auth: 0, status: 'Banned' } });
+    router.go('login');
+    fill('server', 'h.tv'); fill('user', 'u'); fill('pass', 'p');
+    submit(); await tick();
+    expect(status().textContent).toBe('The server rejected the login — check your username and password (account status: Banned).');
+    expect(store.accounts()).toEqual([]);
+  });
+
+  it('a failed edit leaves the saved account untouched', async () => {
+    seedAccount();
+    api.loginAt.mockRejectedValue(new Error('nope'));
+    router.go('login', { edit: true });
+    fill('pass', 'changed');
+    submit(); await tick();
+    expect(store.current()).toMatchObject({ pass: 'pw', ok: true });
+  });
+
+  it('success saves the account, clears the library memory and goes to Setup (clear task)', async () => {
+    api.loginAt.mockResolvedValue(GOOD);
+    const clear = vi.spyOn(repo, 'clear');
+    router.go('settings');
+    router.go('login');
+    fill('name', '  Home  '); fill('server', 'host.tv:8080'); fill('user', 'bob'); fill('pass', 'secret');
+    submit(); await tick();
+    expect(store.current()).toMatchObject({ name: 'Home', server: 'http://host.tv:8080', user: 'bob', pass: 'secret', ok: true });
+    expect(store.hasAccount()).toBe(true);
+    expect(clear).toHaveBeenCalled();
+    expect(router.current().name).toBe('setup');
+    expect(router.stackDepth()).toBe(1);
+    clear.mockRestore();
+  });
+
+  it('leaving the screen mid-attempt neither throws nor saves', async () => {
+    let finish;
+    api.loginAt.mockReturnValue(new Promise((r) => { finish = r; }));
     const errs = [];
     const h = (e) => errs.push(e);
     process.on('unhandledRejection', h);
     router.go('login');
-    fill('[name=server]', 'h'); fill('[name=user]', 'u'); fill('[name=pass]', 'p');
+    fill('server', 'h'); fill('user', 'u'); fill('pass', 'p');
     submit();
     router.go('home');
-    rej(new Error('late'));
+    finish(GOOD);
     await tick();
     process.off('unhandledRejection', h);
     expect(errs).toEqual([]);
     expect(store.accounts()).toEqual([]);
-  });
-
-  it('a throwing home mount does not roll back a successful login', async () => {
-    api.login.mockResolvedValue(GOOD);
-    router.register('home', () => ({ mount() { throw new Error('boom'); }, unmount() {} }));
-    const errs = [];
-    const h = (e) => errs.push(e);
-    process.on('unhandledRejection', h);
-    router.go('login');
-    fill('[name=server]', 'h'); fill('[name=user]', 'u'); fill('[name=pass]', 'p');
-    submit();
-    await tick();
-    process.off('unhandledRejection', h);
-    expect(store.current()).toMatchObject({ user: 'u', ok: true });
   });
 });

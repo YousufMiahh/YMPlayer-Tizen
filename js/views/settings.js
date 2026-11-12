@@ -2,7 +2,9 @@
 import * as store from '../store.js';
 import * as nav from '../nav.js';
 import { hasTmdb } from '../keys.js';
-import { mountAccounts } from './setup.js';
+import { mountAccounts } from '../accounts-ui.js';
+import * as repo from '../repo.js';
+import * as api from '../api.js';
 import { router } from '../router.js';
 import { mountSection, tabFocused } from '../ui/topbar.js';
 import { applyTheme } from '../ui/theme.js';
@@ -12,7 +14,19 @@ const COLORS = ['White', 'Yellow', 'Green', 'Cyan', 'Blue', 'Red'];
 const SIZES = ['Small', 'Medium', 'Large'];
 const OPACITY = ['25%', '50%', '75%', '100%'];
 const PREVIEW = ['Off', 'Muted', 'With sound'];
-const REFRESH = [[-1, 'Manual'], [0, 'Every launch'], [6, 'Every 6 hours'], [12, 'Every 12 hours'], [24, 'Every 24 hours']];
+// SettingsActivity LIBRARY: "Refresh Automatically" cycle order and texts.
+const REFRESH = [[12, 'Every 12 hours'], [24, 'Once a day'], [6, 'Every 6 hours'], [0, 'Every time the app opens'], [-1, 'Only when I ask']];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const pad2 = (n) => String(n).padStart(2, '0');
+
+/** SettingsActivity.lastUpdated(). */
+export function lastUpdated(t = store.lastRefresh(), now = new Date()) {
+  if (!t) return 'Not yet';
+  const d = new Date(t);
+  const hm = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  if (d.toDateString() === now.toDateString()) return `Updated today at ${hm}`;
+  return `Updated ${d.getDate()} ${MONTHS[d.getMonth()]}, ${hm}`;
+}
 const onOff = (b) => (b ? 'On' : 'Off');
 
 // Cycle controls: key -> { title, get, set, options (values), text(value) }.
@@ -22,7 +36,7 @@ const CYCLES = [
       options: ['ts', 'm3u8'], text: (v) => (v === 'ts' ? 'TS' : 'HLS') },
     { key: 'preview', title: 'Preview mode', get: store.previewMode, set: store.setPreviewMode,
       options: [0, 1, 2], text: (v) => PREVIEW[v] },
-    { key: 'refresh', title: 'Auto-refresh library', get: store.refreshHours, set: store.setRefreshHours,
+    { key: 'refresh', title: 'Refresh Automatically', get: store.refreshHours, set: store.setRefreshHours,
       options: REFRESH.map((r) => r[0]), text: (v) => (REFRESH.find((r) => r[0] === v) || [0, `Every ${v} hours`])[1] },
   ]],
   ['Subtitles', [
@@ -50,6 +64,16 @@ function row(title) {
   l.textContent = title;
   r.appendChild(l);
   return r;
+}
+
+/** SettingsActivity.refreshNow. */
+export function refreshNow(v) {
+  if (repo.isRefreshing()) return Promise.resolve();
+  v.textContent = 'Updating…';
+  return repo.refreshAll().then(
+    () => { v.textContent = lastUpdated(); },
+    (e) => { v.textContent = `Failed — ${api.errorMessage(e)}`; },
+  );
 }
 
 export function settingsView() {
@@ -103,7 +127,7 @@ export function settingsView() {
 
       // Tizen extras that Android doesn't have; they used to sit on the Home menu.
       const extras = section(el, 'Extras');
-      for (const [view, title] of [['ambient', 'Ambient'], ['phonelink', 'Phone Link']]) {
+      for (const [view, title] of [['ambient', 'Ambient']]) {
         const r = row(title);
         const b = document.createElement('button');
         b.type = 'button'; b.dataset.open = view; b.textContent = 'Open';
@@ -116,12 +140,19 @@ export function settingsView() {
       tb.type = 'button'; tb.dataset.setting = 'dark'; tb.textContent = onOff(store.dark());
       tr.appendChild(tb); theme.appendChild(tr);
 
-      const acc = section(el, 'Accounts');
-      const host = document.createElement('div');
-      acc.appendChild(host);
+      const lib = section(el, 'Library');
+      const rn = row('Refresh Now');
+      const rb = document.createElement('button');
+      rb.type = 'button'; rb.dataset.setting = 'refresh_now'; rb.textContent = lastUpdated();
+      rn.appendChild(rb); lib.appendChild(rn);
+
+      // SettingsActivity lists ACCOUNTS first.
+      const acc = document.createElement('section');
+      acc.innerHTML = '<h2>Accounts</h2>';
+      el.insertBefore(acc, el.firstChild);
       const { page } = mountSection(root, 'settings', { onDown: () => nav.focusFirst(outer) });
       page.appendChild(outer);
-      accountsUi = mountAccounts(host, root);
+      accountsUi = mountAccounts(acc);
 
       onClick = (e) => {
         const b = e.target;
@@ -134,6 +165,8 @@ export function settingsView() {
         } else if (b.dataset.setting === 'dark') {
           store.setDark(!store.dark()); b.textContent = onOff(store.dark());
           applyTheme(store.dark()); backdrop.retheme();
+        } else if (b.dataset.setting === 'refresh_now') {
+          refreshNow(b);
         } else if (b.dataset.open) {
           router.go(b.dataset.open);
         } else if (b.dataset.home) {

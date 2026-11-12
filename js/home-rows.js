@@ -1,12 +1,13 @@
 // Pure row builders for the Home screen. Each row: {key, title, items}.
 import * as store from './store.js';
-import * as api from './api.js';
+import * as repo from './repo.js';
 import { MOVIE, SERIES } from './item.js';
 import { hasTmdb } from './keys.js';
 
 export { hasTmdb };
 
-const RECENT_LIMIT = 20;
+// HomeActivity.recent(): the newest 24.
+const RECENT_LIMIT = 24;
 const byAddedDesc = (a, b) => (Number(b.added) || 0) - (Number(a.added) || 0);
 
 export const ROWS = [
@@ -30,19 +31,15 @@ export function sortRecentlyAdded(list) {
   return [...list].sort(byAddedDesc).slice(0, RECENT_LIMIT);
 }
 
-const cache = new Map();
-export function clearCache() { cache.clear(); }
+/** From the saved library (js/repo.js), which keeps one copy per account. */
+const recentlyAdded = (type) => repo.recentlyAdded(type, RECENT_LIMIT);
 
-async function recentlyAdded(type) {
-  if (!cache.has(type)) {
-    const list = await api.streams(type, null);
-    cache.set(type, sortRecentlyAdded(list));
-  }
-  return cache.get(type);
-}
-
-/** Rows (in display order) that are enabled and non-empty. Failed/empty rows are dropped. */
-export async function buildRows() {
+/**
+ * Rows (in display order) that are enabled and non-empty. Failed/empty rows are dropped.
+ * @param opts.library false = only the rows kept on the TV (HomeActivity.buildLocalRows), for
+ *   while the library is still downloading for the first time.
+ */
+export async function buildRows({ library = true } = {}) {
   const out = [];
   for (const r of ROWS) {
     if (!store.homeShows(r.key)) continue;
@@ -52,7 +49,7 @@ export async function buildRows() {
       if (r.key === 'continue') items = continueWatching();
       else if (r.key === 'recent') items = store.history(true);
       else if (r.key.startsWith('fav_')) items = store.favs(r.key.slice(4));
-      else if (r.type) items = await recentlyAdded(r.type);
+      else if (r.type && library) items = await recentlyAdded(r.type);
     } catch { items = []; }
     if (items.length) out.push({ key: r.key, title: r.title, items });
   }

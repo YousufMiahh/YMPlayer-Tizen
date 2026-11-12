@@ -4,6 +4,7 @@ import * as store from '../store.js';
 import { router } from '../router.js';
 import * as nav from '../nav.js';
 import { buildRows } from '../home-rows.js';
+import * as repo from '../repo.js';
 import { mountSection, tabFocused } from '../ui/topbar.js';
 import { shelfTitle, initials } from '../ui/widgets.js';
 import { HOLD_OK } from '../ui/theme.js';
@@ -61,13 +62,69 @@ export function renderCard(rowKey, it, i) {
   return b;
 }
 
+export const FIRST_RUN = 'Getting your channels, movies and series ready…\nThis only takes a while the first time.';
+
 export function homeView() {
-  let root; let onClick; let onActivate; let rows = [];
+  let root; let body; let onClick; let onActivate; let rows = []; let seq = 0;
+
+  /** Rebuilds the shelves, keeping focus on the same card when it is still there. */
+  function render(built) {
+    const f = document.activeElement;
+    const had = f && body.contains(f) && f.dataset ? { row: f.dataset.row, tile: f.dataset.tile } : null;
+    rows = built;
+    body.replaceChildren();
+    for (const r of rows) {
+      const sec = document.createElement('section');
+      sec.className = 'home-row'; sec.dataset.row = r.key;
+      const strip = document.createElement('div'); strip.className = 'strip';
+      r.items.forEach((it, i) => strip.appendChild(renderCard(r.key, it, i)));
+      sec.append(shelfTitle(r.title, r.key === 'continue' ? `${HOLD_OK} to remove from list` : ''), strip);
+      body.appendChild(sec);
+    }
+    const again = had && (body.querySelector(`[data-row="${had.row}"][data-tile="${had.tile}"]`)
+      || body.querySelector(`[data-row="${had.row}"][data-tile]`));
+    if (again) again.focus({ preventScroll: true });
+    // HomeActivity: focus starts on the first card, unless the Home tab kept it (arrived by hover).
+    else if (!tabFocused() && !root.contains(document.activeElement)) body.querySelector('.card')?.focus({ preventScroll: true });
+  }
+
+  function showEmpty(text) {
+    const p = document.createElement('p');
+    p.className = 'home-empty';
+    p.textContent = text;
+    body.replaceChildren(p);
+  }
+
+  async function load(opts) {
+    const mine = ++seq;
+    const built = await buildRows(opts);
+    if (!root || mine !== seq) return built;
+    render(built);
+    return built;
+  }
+
+  /** HomeActivity.startLibrary: the saved library (instant), refreshed in the background when due. */
+  async function startLibrary() {
+    repo.setOnUpdated(() => { if (root) load(); }); // a section was replaced: reload the rows
+    if (repo.isRefreshing()) { await load(); return; } // Setup is still finishing Movies & Series
+    if (repo.isDue() && !repo.hasLibrary()) {
+      // First run for this account: download everything once, then fill the rows.
+      const local = await load({ library: false });
+      if (root && !local.length) showEmpty(FIRST_RUN);
+      await repo.refreshAll().catch(() => {});
+      if (root) await load();
+      return;
+    }
+    await load();
+    repo.preload();
+    repo.refreshIfDue(() => { if (root) load(); });
+  }
+
   return {
     async mount(rootEl) {
       root = rootEl;
       const { page } = mountSection(root, 'home');
-      const body = document.createElement('div');
+      body = document.createElement('div');
       body.className = 'home';
       page.appendChild(body);
 
@@ -82,22 +139,12 @@ export function homeView() {
       body.addEventListener('activate', onActivate);
       nav.register(root);
 
-      const built = await buildRows();
-      if (!root) return;
-      rows = built;
-      for (const r of rows) {
-        const sec = document.createElement('section');
-        sec.className = 'home-row'; sec.dataset.row = r.key;
-        const strip = document.createElement('div'); strip.className = 'strip';
-        r.items.forEach((it, i) => strip.appendChild(renderCard(r.key, it, i)));
-        sec.append(shelfTitle(r.title, r.key === 'continue' ? `${HOLD_OK} to remove from list` : ''), strip);
-        body.appendChild(sec);
-      }
-      // HomeActivity: focus starts on the first card, unless the Home tab kept it (arrived by hover).
-      if (!tabFocused()) body.querySelector('.card')?.focus({ preventScroll: true });
+      await startLibrary();
     },
     unmount() {
-      root = null; rows = []; onClick = onActivate = null;
+      repo.setOnUpdated(null);
+      seq++;
+      root = body = null; rows = []; onClick = onActivate = null;
     },
   };
 }

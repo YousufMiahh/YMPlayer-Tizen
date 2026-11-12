@@ -5,12 +5,16 @@ import { boot, views, exitApp } from '../js/app.js';
 import { router } from '../js/router.js';
 import { splashView, SHOW_MS, MAX_WAIT_MS } from '../js/views/splash.js';
 import { _reset as resetBar } from '../js/ui/topbar.js';
+import { seedLibrary } from './helpers.js';
 
 const appender = (name) => () => ({
   mount(r) { const d = document.createElement('div'); d.textContent = name; r.appendChild(d); },
   unmount() {},
 });
-const account = () => localStorage.setItem('accounts', JSON.stringify([{ id: '', server: 'http://h', user: 'u', pass: 'p', ua: '', ok: true }]));
+const account = (library = true) => {
+  localStorage.setItem('accounts', JSON.stringify([{ id: '', server: 'http://h', user: 'u', pass: 'p', ua: '', ok: true }]));
+  if (library) seedLibrary();
+};
 const back = () => document.dispatchEvent(new CustomEvent('back', { bubbles: true }));
 
 let dispose; let saved;
@@ -19,8 +23,8 @@ beforeEach(() => {
   localStorage.clear();
   resetBar();
   document.body.innerHTML = '<div id="root"></div>';
-  saved = { home: views.home, login: views.login, live: views.live };
-  views.home = appender('home'); views.login = appender('login'); views.live = appender('live');
+  saved = { home: views.home, login: views.login, live: views.live, setup: views.setup };
+  views.home = appender('home'); views.login = appender('login'); views.live = appender('live'); views.setup = appender('setup');
 });
 afterEach(() => {
   if (dispose) dispose();
@@ -40,19 +44,36 @@ describe('splash', () => {
     expect(root.querySelector('.splash').classList.contains('go')).toBe(true);
   });
 
-  it('stays at least 1400 ms, then replaces itself (not on the back stack)', () => {
+  it('stays at least 1400 ms, then replaces itself (not on the back stack)', async () => {
     account();
     dispose = boot(document.getElementById('root'));
-    vi.advanceTimersByTime(SHOW_MS - 1);
+    await vi.advanceTimersByTimeAsync(SHOW_MS - 1);
     expect(router.current().name).toBe('splash');
-    vi.advanceTimersByTime(1);
+    await vi.advanceTimersByTimeAsync(1);
     expect(router.current().name).toBe('home');
     expect(router.stackDepth()).toBe(1);
   });
 
-  it('goes to Login when there is no account', () => {
+  it('goes to Setup when signed in but no library is saved yet (LoginActivity.java:52-60)', async () => {
+    account(false);
     dispose = boot(document.getElementById('root'));
-    vi.advanceTimersByTime(SHOW_MS);
+    await vi.advanceTimersByTimeAsync(SHOW_MS);
+    expect(router.current().name).toBe('setup');
+    expect(router.stackDepth()).toBe(1);
+  });
+
+  it('warms the saved library while the logo shows (Live TV list + every category list)', async () => {
+    account();
+    dispose = boot(document.getElementById('root'));
+    await vi.advanceTimersByTimeAsync(SHOW_MS);
+    const repo = await import('../js/repo.js');
+    expect(repo.cached('live')).toEqual([]);
+    expect(router.current().name).toBe('home');
+  });
+
+  it('goes to Login when there is no account', async () => {
+    dispose = boot(document.getElementById('root'));
+    await vi.advanceTimersByTimeAsync(SHOW_MS);
     expect(router.current().name).toBe('login');
     expect(router.stackDepth()).toBe(1);
   });
@@ -90,24 +111,24 @@ describe('splash', () => {
 });
 
 describe('Back on Home exits the app', () => {
-  it('calls tizen.application.getCurrentApplication().exit() with no confirm', () => {
+  it('calls tizen.application.getCurrentApplication().exit() with no confirm', async () => {
     const exit = vi.fn();
     globalThis.tizen = { application: { getCurrentApplication: () => ({ exit }) } };
     account();
     dispose = boot(document.getElementById('root'));
-    vi.advanceTimersByTime(SHOW_MS);
+    await vi.advanceTimersByTimeAsync(SHOW_MS);
     expect(router.current().name).toBe('home');
     back();
     expect(exit).toHaveBeenCalledTimes(1);
     expect(document.querySelector('.dialog')).toBeNull(); // Android Home has no exit prompt
   });
 
-  it('Back from a section goes to Home first, then exits', () => {
+  it('Back from a section goes to Home first, then exits', async () => {
     const exit = vi.fn();
     globalThis.tizen = { application: { getCurrentApplication: () => ({ exit }) } };
     account();
     dispose = boot(document.getElementById('root'));
-    vi.advanceTimersByTime(SHOW_MS);
+    await vi.advanceTimersByTimeAsync(SHOW_MS);
     router.go('live');
     back();
     expect(router.current().name).toBe('home');

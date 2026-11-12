@@ -1,6 +1,6 @@
 // VOD browser shared by Movies and Series: category rail on the left, poster grid on the right.
 // Enter opens the detail view; Menu / long-press OK toggles a favourite (item or category).
-import * as api from '../api.js';
+import * as repo from '../repo.js';
 import * as store from '../store.js';
 import * as nav from '../nav.js';
 import { router } from '../router.js';
@@ -47,7 +47,7 @@ export function vodBrowseView(type, detail) {
       if (params) params.categoryId = id;
       for (const b of railEl.querySelectorAll('.cat')) b.classList.toggle('selected', b.dataset.cat === id);
       let list;
-      try { list = await api.streams(type, id); } catch { list = []; }
+      try { list = await repo.streams(type, id); } catch { list = []; }
       if (seq !== loadSeq || !root) return;
       items = list;
       gridEl.replaceChildren(...list.map(renderCard));
@@ -123,7 +123,7 @@ export function vodBrowseView(type, detail) {
         root.addEventListener('back', onBack);
         nav.register(root);
 
-        try { cats = await api.categories(type); } catch { cats = []; }
+        try { cats = await repo.categories(type); } catch { cats = []; }
         if (!root) return;
         renderRail();
         const first = (params.categoryId && catBtn(params.categoryId)) || railEl.querySelector('[data-cat]');

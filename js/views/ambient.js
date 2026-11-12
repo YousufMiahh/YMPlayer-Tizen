@@ -1,6 +1,6 @@
 // Ambient screensaver: slowly cycles Xtream artwork the app already has. No TMDB, no external fetch.
 import * as store from '../store.js';
-import * as api from '../api.js';
+import * as repo from '../repo.js';
 import { router } from '../router.js';
 
 const DEFAULT_INTERVAL_MS = 8000;
@@ -22,7 +22,7 @@ async function fallbackArtwork() {
   const urls = [];
   for (const type of ['movie', 'series']) {
     try {
-      const list = await api.streams(type, null);
+      const list = await repo.streams(type, null);
       for (const i of list) if (i.icon && !urls.includes(i.icon) && urls.length < 30) urls.push(i.icon);
     } catch { /* ignore: ambient just shows a blank screen */ }
   }

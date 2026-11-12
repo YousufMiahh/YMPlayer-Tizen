@@ -37,3 +37,4 @@
   transition: transform var(--dur-focus) var(--ease-focus);
 }
 .settings .actions button:focus { background: var(--focus-bg); color: var(--on-focus); transform: scale(1.06); }
+.settings .setting button:empty::before { content: "\200b"; } /* empty value: keep the row height */

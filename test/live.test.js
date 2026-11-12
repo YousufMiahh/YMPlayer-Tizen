@@ -246,3 +246,20 @@ describe('live player', () => {
     expect(root.querySelector('.live-error').hidden).toBe(false);
   });
 });
+
+describe('live browse reads the saved library', () => {
+  it('categories and channels come from the repo: no provider request per click', async () => {
+    store.saveAccount({ id: '', server: 'http://a.tv', user: 'ann', pass: 'p', ok: true });
+    const { seedLibrary } = await import('./helpers.js');
+    seedLibrary({ live: [...CH[1].map((c) => ({ ...c, categoryId: '1' })), ...CH[2].map((c) => ({ ...c, categoryId: '2' }))], cats: { live: CATS } });
+    router.go('live', {});
+    await tick();
+    expect(root.querySelectorAll('[data-cat]').length).toBe(3);
+    catBtn('1').click(); await tick();
+    expect(rows().map((r) => r.dataset.channel)).toEqual(['10', '11']);
+    catBtn('2').click(); await tick();
+    expect(rows().map((r) => r.dataset.channel)).toEqual(['20']);
+    expect(api.categories).not.toHaveBeenCalled();
+    expect(api.streams).not.toHaveBeenCalled();
+  });
+});

@@ -2,6 +2,7 @@
 import { router } from './router.js';
 import * as nav from './nav.js';
 import * as store from './store.js';
+import * as repo from './repo.js';
 import { applyTheme } from './ui/theme.js';
 import * as backdrop from './ui/backdrop.js';
 import { isSection, prepareBack } from './ui/topbar.js';
@@ -19,11 +20,10 @@ import { playerVodView } from './views/player-vod.js';
 import { searchView } from './views/search.js';
 import { settingsView } from './views/settings.js';
 import { ambientView } from './views/ambient.js';
-import { phonelinkView } from './views/phonelink.js';
 
 // Registry of views: name -> () => view.
 export const views = {
-  splash: splashView(),
+  splash: splashView({ warmUp: repo.warmUp }),
   login: loginView,
   setup: setupView,
   live: liveView,
@@ -37,7 +37,6 @@ export const views = {
   search: searchView,
   settings: settingsView,
   ambient: ambientView,
-  phonelink: phonelinkView,
 };
 
 /** Back with nothing beneath (Home, or the first Login): close the app like Android's finish(). */

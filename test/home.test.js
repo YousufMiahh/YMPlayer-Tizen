@@ -1,13 +1,12 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-vi.mock('../js/api.js', () => ({ streams: vi.fn() }));
+vi.mock('../js/api.js', () => ({ streams: vi.fn(), categories: vi.fn(async () => []) }));
 
 import * as api from '../js/api.js';
 import * as store from '../js/store.js';
 import { router } from '../js/router.js';
 import { homeView } from '../js/views/home.js';
-import { clearCache } from '../js/home-rows.js';
 
 let root;
 const tick = () => new Promise((r) => setTimeout(r, 0));
@@ -19,7 +18,6 @@ const M = (id, added) => ({ type: 'movie', id, name: `M${id}`, added });
 
 beforeEach(() => {
   localStorage.clear();
-  clearCache();
   document.body.innerHTML = '<div id="root"></div>';
   root = document.getElementById('root');
   vi.clearAllMocks();
@@ -166,5 +164,41 @@ describe('home top bar', () => {
     expect(root.querySelector('.status-chip')).toBeNull();
     expect(root.querySelector('.tb-clock').textContent).toMatch(/^\d\d:\d\d$/);
     expect(root.querySelector('[data-tab="home"]').classList.contains('current')).toBe(true);
+  });
+});
+
+describe('home library (HomeActivity.startLibrary)', () => {
+  const signIn = () => store.saveAccount({ id: '', server: 'http://a.tv', user: 'ann', pass: 'p', ok: true });
+
+  it('first run with nothing saved: shows the "getting ready" note, downloads once, then fills the rows', async () => {
+    signIn();
+    let release;
+    api.categories.mockImplementationOnce(() => new Promise((r) => { release = r; }));
+    router.go('home');
+    await tick();
+    expect(root.querySelector('.home-empty').textContent)
+      .toBe('Getting your channels, movies and series ready…\nThis only takes a while the first time.');
+    release([]);
+    for (let i = 0; i < 5; i++) await tick();
+    expect(rowKeys()).toEqual(['new_movies', 'new_series']);
+    expect(api.streams.mock.calls.filter((c) => c[0] === 'movie')).toHaveLength(1);
+    const repo = await import('../js/repo.js');
+    expect(repo.hasLibrary()).toBe(true);
+  });
+
+  it('with a saved library it reads it (no download) and reloads rows when a refresh lands', async () => {
+    signIn();
+    const repo = await import('../js/repo.js');
+    const { seedLibrary } = await import('./helpers.js');
+    seedLibrary({ movie: [M('7', '700')], series: [] });
+    store.setLastRefresh(Date.now()); // not due
+    router.go('home');
+    await tick(); await tick();
+    expect(ids('new_movies')).toEqual(['7']);
+    expect(api.streams).not.toHaveBeenCalled();
+    api.streams.mockImplementation(async (t) => (t === 'movie' ? [M('8', '800'), M('7', '700')] : []));
+    await repo.downloadType('movie');
+    await tick();
+    expect(ids('new_movies')).toEqual(['8', '7']);
   });
 });

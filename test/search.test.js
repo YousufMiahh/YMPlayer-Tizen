@@ -118,3 +118,17 @@ describe('favourites helper', () => {
     expect(orderCategories('live', cats).map((c) => c.id)).toEqual(['2', '3', '1']);
   });
 });
+
+describe('search reads the saved library', () => {
+  it('uses the saved list without asking the provider', async () => {
+    store.saveAccount({ id: '', server: 'http://a.tv', user: 'ann', pass: 'p', ok: true });
+    const { seedLibrary } = await import('./helpers.js');
+    seedLibrary({ live: [{ type: 'live', id: 'x1', name: 'Saved One' }] });
+    router.go('search');
+    const box = root.querySelector('.search input');
+    box.value = 'saved'; box.dispatchEvent(new Event('input'));
+    await new Promise((r) => setTimeout(r, 200));
+    expect([...root.querySelectorAll('[data-result]')].map((r) => r.dataset.result)).toEqual(['x1']);
+    expect(api.streams).not.toHaveBeenCalled();
+  });
+});

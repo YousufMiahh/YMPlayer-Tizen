@@ -1,6 +1,7 @@
 // Live TV browser: category rail on the left, channel rows (logo, num, name, Now/Next) on the right.
 // Enter opens the channel in `player-live`; Menu toggles a favourite; Back goes to the rail first.
 import * as api from '../api.js';
+import * as repo from '../repo.js';
 import * as store from '../store.js';
 import * as nav from '../nav.js';
 import { router } from '../router.js';
@@ -65,7 +66,7 @@ export function liveView() {
     if (params) params.categoryId = id;
     for (const b of railEl.querySelectorAll('.cat')) b.classList.toggle('selected', b.dataset.cat === id);
     let list;
-    try { list = await api.streams(LIVE, id); } catch { list = []; }
+    try { list = await repo.streams(LIVE, id); } catch { list = []; }
     if (seq !== loadSeq || !root) return;
     channels = list;
     listEl.replaceChildren(...list.map(renderRow));
@@ -149,7 +150,7 @@ export function liveView() {
       root.addEventListener('back', onBack);
       nav.register(root);
 
-      try { cats = await api.categories(LIVE); } catch { cats = []; }
+      try { cats = await repo.categories(LIVE); } catch { cats = []; }
       if (!root) return; // unmounted while loading
       renderRail();
       const first = (params?.categoryId && catBtn(params.categoryId)) || railEl.querySelector('[data-cat]');

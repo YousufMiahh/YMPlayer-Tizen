@@ -9,3 +9,4 @@
   scrollbar-width: none;
 }
 .home .strip::after { content: ''; flex: none; width: 1px; } /* keeps the right padding when scrolled */
+.home-empty { margin: 0; padding-top: calc(80 * var(--u)); font-size: calc(18 * var(--u)); color: var(--text2); text-align: center; white-space: pre-line; line-height: var(--lh); }

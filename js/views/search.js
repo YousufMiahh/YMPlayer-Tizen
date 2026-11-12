@@ -1,7 +1,7 @@
 // Search: a text box plus a Live/Movies/Series toggle; filters the section's loaded list by name.
 // Enter opens the result (channel -> player-live, movie -> movie-detail, series -> series-detail);
-// Menu toggles a favourite. No server-side search: lists come from api.streams(type, null), cached per mount.
-import * as api from '../api.js';
+// Menu toggles a favourite. No server-side search: lists come from the saved library (repo.streams(type, null)).
+import * as repo from '../repo.js';
 import * as nav from '../nav.js';
 import { router } from '../router.js';
 import { LIVE, MOVIE, SERIES } from '../item.js';
@@ -19,7 +19,7 @@ export function searchView() {
   let timer = null; let seq = 0; let cache; let onClick; let onActivate; let onInput;
 
   async function list(type) {
-    if (!cache.has(type)) cache.set(type, api.streams(type, null).catch(() => { cache.delete(type); return []; }));
+    if (!cache.has(type)) cache.set(type, repo.streams(type, null).catch(() => { cache.delete(type); return []; }));
     return cache.get(type);
   }
 

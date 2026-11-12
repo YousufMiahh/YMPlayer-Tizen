@@ -1,28 +1,61 @@
-/* Login (LoginActivity): a SURFACE_LO card, radius 28u, padding 44u, 620u wide, centred. Rebuilt later. */
-.login {
-  width: calc(620 * var(--u)); margin: calc(60 * var(--u)) auto 0;
-  padding: calc(44 * var(--u)); border-radius: var(--r-track); background: var(--surface-lo);
-  display: flex; flex-direction: column; gap: calc(12 * var(--u));
-  max-height: calc(100% - 120 * var(--u)); overflow-y: auto;
+/* Login (LoginActivity) and Setup (SetupActivity): the first-run screens. Sizes in Android units. */
+
+/* ---------------------------------------------------------------- Login */
+/* Two cards side by side, centred both ways (FrameLayout Gravity.CENTER, pair CENTER_VERTICAL). */
+.login { height: 100%; display: flex; align-items: center; justify-content: center; }
+.login-card { background: var(--surface-lo); border-radius: calc(28 * var(--u)); display: flex; flex-direction: column; }
+.login-form { width: calc(620 * var(--u)); padding: calc(44 * var(--u)); }
+.login-phone { width: calc(440 * var(--u)); margin-left: calc(36 * var(--u)); padding: calc(40 * var(--u)); align-items: center; }
+
+.login-title { font-size: calc(40 * var(--u)); font-weight: 700; letter-spacing: -0.02em; line-height: var(--lh); }
+.login-sub { font-size: calc(15 * var(--u)); color: var(--text2); line-height: var(--lh); padding: calc(6 * var(--u)) 0 calc(20 * var(--u)); }
+.login-form .pill-input { width: 100%; margin: 0 0 calc(12 * var(--u)); }
+.login-button { width: 100%; margin-top: calc(8 * var(--u)); }
+.login-status { font-size: calc(15 * var(--u)); color: var(--text2); line-height: var(--lh); padding-top: calc(14 * var(--u)); white-space: pre-line; }
+.login-status { min-height: calc((14 + 15 * 1.15) * var(--u)); } /* an empty TextView still takes one line */
+
+.login-phone-title { font-size: calc(28 * var(--u)); font-weight: 700; letter-spacing: -0.02em; text-align: center; line-height: var(--lh); }
+.login-phone-text { font-size: calc(15 * var(--u)); color: var(--text2); text-align: center; line-height: var(--lh); padding: calc(8 * var(--u)) 0 calc(22 * var(--u)); }
+/* The QR slot: Android's white rounded-20 box (padding 14) around a 250x250 code. No code can work
+   on this TV yet, so the same slot shows a quiet notice instead. */
+.login-qr-box {
+  width: calc(278 * var(--u)); height: calc(278 * var(--u)); padding: calc(14 * var(--u));
+  border-radius: calc(20 * var(--u)); background: var(--surface);
+  display: flex; align-items: center; justify-content: center;
 }
-.login h1 { font-size: calc(40 * var(--u)); font-weight: 700; letter-spacing: -0.02em; margin: 0 0 calc(14 * var(--u)); }
-.login form { display: flex; flex-direction: column; gap: calc(12 * var(--u)); }
-.login label { display: flex; flex-direction: column; gap: calc(6 * var(--u)); font-size: calc(15 * var(--u)); font-weight: 500; color: var(--text2); }
-.login input {
-  font-size: calc(19 * var(--u)); font-weight: 500;
-  padding: calc(16 * var(--u)) calc(16 * var(--u)) calc(16 * var(--u)) calc(20 * var(--u));
-  border: 0; border-radius: var(--r-button); background: var(--surface); color: var(--text);
+.login-qr-off { font-size: calc(17 * var(--u)); font-weight: 500; color: var(--text2); text-align: center; line-height: var(--lh); }
+.login-qr-url { font-size: calc(14 * var(--u)); color: var(--text3); text-align: center; padding-top: calc(16 * var(--u)); }
+.login-phone-status { font-size: calc(16 * var(--u)); font-weight: 500; text-align: center; padding-top: calc(10 * var(--u)); }
+.login-qr-url:empty, .login-phone-status:empty { display: none; }
+
+/* ---------------------------------------------------------------- Setup */
+.setup { height: 100%; display: flex; align-items: center; justify-content: center; }
+.setup-col { width: calc(720 * var(--u)); display: flex; flex-direction: column; align-items: center; }
+.setup-logo { width: calc(110 * var(--u)); height: calc(110 * var(--u)); }
+.setup-title {
+  font-size: calc(36 * var(--u)); font-weight: 700; letter-spacing: -0.02em; text-align: center; line-height: var(--lh);
+  padding: calc(26 * var(--u)) 0 calc(8 * var(--u));
 }
-.login input:focus { background: var(--focus-bg); color: var(--on-focus); }
-.login .actions { display: flex; gap: calc(16 * var(--u)); margin-top: calc(8 * var(--u)); }
-.login button {
-  flex: 1; font-size: calc(18 * var(--u)); font-weight: 600; text-align: center;
-  padding: calc(14 * var(--u)) calc(28 * var(--u));
-  border-radius: var(--r-button); background: var(--surface-hi); color: var(--text);
-  transition: transform var(--dur-focus) var(--ease-focus);
+.setup-sub { font-size: calc(17 * var(--u)); color: var(--text2); text-align: center; line-height: var(--lh); padding-bottom: calc(30 * var(--u)); }
+.setup-list { align-self: stretch; background: var(--surface-lo); border-radius: calc(22 * var(--u)); padding: calc(10 * var(--u)); }
+.setup-row { display: flex; align-items: center; padding: calc(16 * var(--u)) calc(20 * var(--u)); }
+.setup-icon { position: relative; flex: none; width: calc(34 * var(--u)); height: calc(34 * var(--u)); margin-right: calc(18 * var(--u)); }
+.setup-mark {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: calc(22 * var(--u)); font-weight: 700;
 }
-.login button:focus { background: var(--focus-bg); color: var(--on-focus); transform: scale(1.06); }
-.login .error { min-height: calc(18 * var(--u)); margin: 0; font-size: calc(15 * var(--u)); color: var(--text2); }
-.login .account { display: flex; align-items: center; gap: calc(16 * var(--u)); font-size: calc(19 * var(--u)); }
-.login .account span { flex: 1; }
-.login .account button { flex: none; }
+/* Android's indeterminate ProgressBar, tinted TEXT. */
+.setup-spin {
+  position: absolute; inset: calc(2 * var(--u)); border-radius: 50%;
+  border: calc(3.5 * var(--u)) solid transparent; border-top-color: var(--text); border-right-color: var(--text);
+  animation: setup-spin 1s linear infinite;
+}
+.setup-spin[hidden] { display: none; }
+@keyframes setup-spin { to { transform: rotate(360deg); } }
+.setup-name { flex: 1; font-size: calc(21 * var(--u)); font-weight: 600; }
+.setup-count { font-size: calc(17 * var(--u)); font-weight: 500; }
+.setup-status { font-size: calc(16 * var(--u)); color: var(--text2); text-align: center; line-height: var(--lh); padding-top: calc(20 * var(--u)); }
+.setup-status.c-text { color: var(--text); }
+.setup-actions { align-self: stretch; display: flex; justify-content: center; padding-top: calc(18 * var(--u)); }
+.setup-actions .pill-btn { margin: 0 calc(10 * var(--u)); }
+.setup-actions .pill-btn:only-child { margin: 0; }

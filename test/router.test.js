@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { seedLibrary } from './helpers.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createRouter, router } from '../js/router.js';
 import { boot, views } from '../js/app.js';
@@ -298,6 +299,7 @@ describe('splash launch routing', () => {
     localStorage.clear();
     if (hasAcc) {
       localStorage.setItem('accounts', JSON.stringify([{ id: '', server: 'http://h', user: 'u', pass: 'p', ua: '', ok: true }]));
+      seedLibrary();
     }
     views.home = appender('home'); views.login = appender('login');
     document.body.innerHTML = '<div id="root"></div>';
@@ -305,19 +307,19 @@ describe('splash launch routing', () => {
     return dispose;
   }
 
-  it('boot starts at splash, then redirects to home when an account exists', () => {
+  it('boot starts at splash, then redirects to home when an account exists', async () => {
     const dispose = setup(true);
     expect(router.current().name).toBe('splash');
-    vi.advanceTimersByTime(2000);
+    await vi.advanceTimersByTimeAsync(2000);
     expect(router.current().name).toBe('home');
     dispose();
     delete views.home; delete views.login;
   });
 
-  it('redirects to login when no account exists', () => {
+  it('redirects to login when no account exists', async () => {
     const dispose = setup(false);
     expect(router.current().name).toBe('splash');
-    vi.advanceTimersByTime(2000);
+    await vi.advanceTimersByTimeAsync(2000);
     expect(router.current().name).toBe('login');
     dispose();
     delete views.home; delete views.login;
