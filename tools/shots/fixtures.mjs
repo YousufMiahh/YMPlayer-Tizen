@@ -197,34 +197,95 @@ export function shortEpg(streamId, limit = 4) {
   return { epg_listings: out };
 }
 
+const EPISODE_NAMES = ['Pilot', 'The Long Night', 'Crossing Over', 'Low Tide', 'Signals', 'What the Fog Hid',
+  'Northbound', 'The Keeper', 'Glass Houses', 'Homecoming', 'Old Debts', 'The Reckoning'];
+
+/** A fake YouTube id (11 characters, as YouTube's are) for this item. */
+export const trailerId = (id) => `yt${String(id).padStart(9, '0')}`;
+
+/**
+ * get_series_info: 1-4 seasons by id, 6-9 episodes each, a Specials season (0) on every fifth
+ * series, a still per episode (some without), a trailer on every other series.
+ */
 export function seriesInfo(id) {
   const s = find('series', id);
   if (!s) return {};
   const episodes = {};
-  for (let season = 1; season <= 3; season++) {
-    episodes[String(season)] = Array.from({ length: 8 }, (_, i) => ({
-      id: String(id * 100 + season * 10 + i), episode_num: i + 1, title: `${s.name} S${season}E${i + 1}`,
-      container_extension: 'mp4', season,
-      info: { duration_secs: 2700, plot: 'Things take an unexpected turn.', movie_image: s.cover },
-    }));
+  const count = 1 + (id % 4);
+  const keys = [...(id % 5 === 0 ? [0] : []), ...Array.from({ length: count }, (_, i) => i + 1)];
+  for (const season of keys) {
+    const n = season === 0 ? 2 : 6 + ((id + season) % 4);
+    episodes[String(season)] = Array.from({ length: n }, (_, i) => {
+      const epId = id * 100 + season * 10 + i;
+      const mins = 42 + ((epId * 7) % 17);
+      return {
+        id: String(epId), episode_num: i + 1, title: season === 0 ? `Behind the Scenes ${i + 1}` : EPISODE_NAMES[(i + season * 3) % EPISODE_NAMES.length],
+        container_extension: 'mp4', season,
+        info: { duration_secs: mins * 60, duration: `00:${String(mins).padStart(2, '0')}:00`,
+          plot: `Episode ${i + 1}: things take an unexpected turn when an old friend comes back to town.`,
+          movie_image: (epId % 6) === 5 ? '' : `/art/still/${epId}.svg` },
+      };
+    });
   }
   return {
-    seasons: [1, 2, 3].map((n) => ({ season_number: n, name: `Season ${n}`, cover: s.cover })),
-    info: { name: s.name, cover: s.cover, plot: s.plot, cast: s.cast, director: s.director, genre: s.genre,
-      releaseDate: s.releaseDate, rating: s.rating, backdrop_path: [] },
+    seasons: keys.map((n) => ({ season_number: n, name: n === 0 ? 'Specials' : `Season ${n}`, cover: s.cover })),
+    info: { name: s.name, cover: s.cover, plot: `${s.plot} A small coastal town keeps its secrets until a stranger arrives with questions nobody wants to answer.`,
+      cast: s.cast, director: s.director, genre: s.genre, releaseDate: s.releaseDate, rating: s.rating,
+      backdrop_path: [`/art/backdrop/${id}.svg`], youtube_trailer: id % 2 === 0 ? trailerId(id) : '' },
     episodes,
   };
 }
 
+/** get_vod_info: backdrop, credits, and a trailer as a bare id, a watch link, or none. */
 export function vodInfo(id) {
   const m = find('movie', id);
   if (!m) return {};
+  const t = id % 3 === 0 ? '' : id % 3 === 1 ? `https://www.youtube.com/watch?v=${trailerId(id)}` : trailerId(id);
   return {
-    info: { name: m.name, movie_image: m.stream_icon, plot: 'When a quiet town is shaken by a strange signal, one engineer must decide who to trust.',
-      cast: 'Alex Morgan, Sam Patel, Lee Chen', director: 'Jo Reid', genre: 'Drama', releasedate: '2023-05-01',
-      duration_secs: 6420, duration: '01:47:00', rating: m.rating, youtube_trailer: '', backdrop_path: [] },
+    info: { name: m.name, movie_image: m.stream_icon, plot: 'When a quiet town is shaken by a strange signal, one engineer must decide who to trust. Old friendships are tested as the truth comes out, one broadcast at a time.',
+      cast: 'Alex Morgan, Sam Patel, Lee Chen, Jordan Blake', director: 'Jo Reid', genre: 'Drama, Thriller', releasedate: m.name.match(/\((\d{4})\)/)?.[1] ? `${m.name.match(/\((\d{4})\)/)[1]}-05-01` : '2023-05-01',
+      duration_secs: 6420, duration: '01:47:00', rating: m.rating, youtube_trailer: t, backdrop_path: [`/art/backdrop/${id}.svg`] },
     movie_data: { stream_id: m.stream_id, name: m.name, added: m.added, category_id: m.category_id, container_extension: 'mp4' },
   };
+}
+
+/** A wide scene for the detail pages' backdrop (1280x720): sky, sun, hills, the title faintly. */
+export function backdropSvg(id) {
+  const h = hueFor(id);
+  const item = find('movie', id) || find('series', id);
+  const name = item ? item.name.replace(/\s*\(\d{4}\)$/, '') : '';
+  const hill = (y, amp, col, op) => `<path d="M0 ${y} C 300 ${y - amp}, 520 ${y + amp}, 800 ${y - amp / 2} S 1180 ${y - amp}, 1280 ${y} V720 H0 Z" fill="${col}" fill-opacity="${op}"/>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+<defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="hsl(${(h + 200) % 360},55%,22%)"/><stop offset="0.55" stop-color="hsl(${h},70%,55%)"/><stop offset="1" stop-color="hsl(${(h + 30) % 360},70%,70%)"/></linearGradient></defs>
+<rect width="1280" height="720" fill="url(#sky)"/>
+<circle cx="${820 + (id % 5) * 60}" cy="${300 + (id % 3) * 20}" r="90" fill="hsl(${(h + 40) % 360},90%,80%)" fill-opacity=".85"/>
+${hill(470, 60, `hsl(${(h + 220) % 360},40%,30%)`, 0.9)}${hill(540, 80, `hsl(${(h + 240) % 360},45%,18%)`, 0.95)}${hill(620, 50, `hsl(${(h + 250) % 360},50%,10%)`, 1)}
+<text x="1240" y="120" text-anchor="end" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" font-size="54" fill="#fff" fill-opacity=".18">${esc(name.toUpperCase())}</text></svg>`;
+}
+
+/** An episode still (480x270). */
+export function stillSvg(id) {
+  const h = hueFor(id);
+  const n = id % 10;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="480" height="270" viewBox="0 0 480 270">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${(h + n * 25) % 360},55%,45%)"/><stop offset="1" stop-color="hsl(${(h + n * 25 + 60) % 360},55%,15%)"/></linearGradient></defs>
+<rect width="480" height="270" fill="url(#g)"/>
+<circle cx="${120 + n * 25}" cy="${110 + (n % 3) * 20}" r="${40 + n * 3}" fill="#fff" fill-opacity=".12"/>
+<rect x="0" y="200" width="480" height="70" fill="#000" fill-opacity=".25"/></svg>`;
+}
+
+/**
+ * The trailer harness never reaches YouTube: the youtube-nocookie embed is answered with this
+ * stand-in page. With `fail`, it reports a player error (150: not embeddable) like the real one.
+ */
+export function trailerStandIn(id, fail = false) {
+  return `<!doctype html><html><head><style>html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:DejaVu Sans,Arial,sans-serif}
+.f{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;color:#bbb;
+background:radial-gradient(circle at 50% 45%,#2a2a2a,#000 70%)}.p{width:136px;height:96px;border-radius:24px;background:#f00;display:flex;align-items:center;justify-content:center;margin-bottom:36px}
+.p i{border-left:40px solid #fff;border-top:24px solid transparent;border-bottom:24px solid transparent;margin-left:8px}.s{font-size:30px}.u{font-size:22px;margin-top:14px;color:#777}</style></head>
+<body><div class="f"><div class="p"><i></i></div><div class="s">YouTube embed stand-in (offline)</div><div class="u">youtube-nocookie.com/embed/${esc(id)}</div></div>
+${fail ? '<script>setTimeout(function(){parent.postMessage(JSON.stringify({event:"onError",info:150}),"*")},700)</script>' : ''}</body></html>`;
 }
 
 /**

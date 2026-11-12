@@ -80,6 +80,10 @@ export function startServer(port = 0) {
       }
       let m = url.pathname.match(/^\/art\/poster\/(\d+)\.svg$/);
       if (m) { send(200, MIME['.svg'], fx.posterSvg(Number(m[1]))); return; }
+      m = url.pathname.match(/^\/art\/backdrop\/(\d+)\.svg$/);
+      if (m) { send(200, MIME['.svg'], fx.backdropSvg(Number(m[1]))); return; }
+      m = url.pathname.match(/^\/art\/still\/(\d+)\.svg$/);
+      if (m) { send(200, MIME['.svg'], fx.stillSvg(Number(m[1]))); return; }
       m = url.pathname.match(/^\/art\/logo\/(\d+)\.svg$/);
       if (m) { send(200, MIME['.svg'], fx.logoSvg(Number(m[1]))); return; }
       const rel = decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname);

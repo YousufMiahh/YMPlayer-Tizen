@@ -173,6 +173,31 @@ async function openPlayer(page, url, what, setup = {}) {
 };
 const shimDo = (page, fn, arg) => page.evaluate(fn, arg);
 
+/**
+ * The movie / series pages, opened the way a card does (Open.item with the library's own item).
+ * `setup.history`: episodes of that series to put in the watch history first, oldest first, as
+ * [season, episodeIndex, positionMs, durationMs] (position 0 = watched to the end).
+ */
+async function openDetail(page, type, id, setup = {}) {
+  await toHome(page);
+  await page.evaluate(async ({ type, id, setup }) => {
+    const repo = await import('/js/repo.js');
+    const store = await import('/js/store.js');
+    const item = (await repo.streams(type, null)).find((x) => x.id === String(id));
+    for (const [season, i, pos, dur] of setup.history || []) {
+      const ep = { type: 'episode', id: String(id * 100 + season * 10 + i), name: 'Episode', num: String(i + 1), ext: 'mp4',
+        parentId: String(id), parentName: item.name, parentIcon: item.icon };
+      store.addHistory(ep); store.setDuration(ep, dur); store.setPosition(ep, pos);
+    }
+    if (setup.resume) store.setPosition(item, setup.resume);
+    const { openItem } = await import('/js/open.js');
+    openItem(item);
+  }, { type, id, setup });
+  await page.waitForSelector('.detail-page .dp-buttons button:focus', { timeout: 8000 });
+}
+const SHOW = 8002; // fx.series[2]: 3 seasons, a trailer, S1E4 in progress from the seed
+const WATCHED = [[1, 0, 0, 2820000], [1, 1, 0, 2700000], [1, 2, 0, 2940000], [1, 3, 1220000, 2700000]]; // E1-E3 seen, E4 newest
+
 export const SCREENS = {
   splash: { seed: false, steps: async () => { await wait(1000); } },
   login: { // first run: empty form, focus on the server field
@@ -571,6 +596,85 @@ export const SCREENS = {
     seed: true,
     steps: async (page, h) => { await openPlayer(page, h.url, 'movie', { fail: true }); await wait(600); },
   },
+  movie: { // a film never started: ▶ Play focused, ▶ Trailer (from a watch?v= link), backdrop + scrims
+    seed: true,
+    steps: async (page) => { await openDetail(page, 'movie', fx.movies[26].stream_id); await wait(1400); },
+  },
+  'movie-resume': { // a film from Continue Watching: ▶ Resume H:MM:SS, ↺ Start Over, Trailer, Favourite
+    seed: true,
+    steps: async (page) => { await openDetail(page, 'movie', fx.movies[3].stream_id, { resume: 4521000 }); await wait(1400); },
+  },
+  'movie-fav': { // no trailer id: Play | Favourite; a favourite: ♥ In Favourites
+    seed: true,
+    steps: async (page) => { await openDetail(page, 'movie', fx.movies[13].stream_id); await press(page, 'ArrowRight'); await wait(1400); },
+  },
+  'movie-loading': { // get_vod_info not back yet: the list's line, the poster standing in as backdrop
+    seed: true, provider: { get_vod_info: { holdMs: 60000 } },
+    steps: async (page) => { await openDetail(page, 'movie', fx.movies[26].stream_id); await wait(1200); },
+  },
+  series: { // first visit: Specials + 2 seasons, Specials shown, ▶ Play focused
+    seed: true,
+    steps: async (page) => { await openDetail(page, 'series', fx.series[5].series_id); await wait(1400); },
+  },
+  'series-resume': { // in progress: opens on Season 1, ▶ Resume S1 · E4, watched / part-watched cards
+    seed: true,
+    steps: async (page) => {
+      await openDetail(page, 'series', SHOW, { history: WATCHED });
+      await wait(1400);
+    },
+  },
+  'series-season': { // ▼ onto the pills, ▶: Season 2 shown on focus alone
+    seed: true,
+    steps: async (page) => {
+      await openDetail(page, 'series', SHOW); await wait(600);
+      await press(page, 'ArrowDown', 1, 300); await press(page, 'ArrowRight', 1, 300); await wait(900);
+    },
+  },
+  'series-episode': { // ▼ ▼ into the shelf, ▶ ×3: Episode 4 (in progress) focused, its label and plot
+    seed: true,
+    steps: async (page) => {
+      await openDetail(page, 'series', SHOW, { history: WATCHED });
+      await wait(600);
+      await press(page, 'ArrowDown', 1, 300); await press(page, 'ArrowDown', 1, 300);
+      await press(page, 'ArrowRight', 3, 300); await wait(900);
+    },
+  },
+  'series-scrolled': { // far along the shelf: the HorizontalScrollView has moved
+    seed: true,
+    steps: async (page) => {
+      await openDetail(page, 'series', SHOW); await wait(500);
+      await press(page, 'ArrowDown', 2, 300); await press(page, 'ArrowRight', 7, 200); await wait(900);
+    },
+  },
+  'series-loading': { // "Loading episodes…"
+    seed: true, provider: { get_series_info: { holdMs: 60000 } },
+    steps: async (page) => { await openDetail(page, 'series', fx.series[5].series_id); await wait(1200); },
+  },
+  'series-error': { // "Couldn't load episodes — …"
+    seed: true, provider: { get_series_info: { status: 502 } },
+    steps: async (page) => { await openDetail(page, 'series', fx.series[5].series_id); await wait(1200); },
+  },
+  'series-light': { // light theme, an episode focused
+    seed: true, light: true,
+    steps: async (page) => {
+      await openDetail(page, 'series', SHOW); await wait(500);
+      await press(page, 'ArrowDown', 2, 300); await press(page, 'ArrowRight', 1, 300); await wait(900);
+    },
+  },
+  trailer: { // ▶ Trailer: the youtube-nocookie embed full screen (an offline stand-in page)
+    seed: true,
+    steps: async (page) => {
+      await openDetail(page, 'movie', fx.movies[3].stream_id, { resume: 4521000 }); await wait(800);
+      await press(page, 'ArrowRight', 2, 250); await press(page, 'Enter'); await wait(1500);
+    },
+  },
+  'trailer-fail': { // the embed reports an error: back on the film with "No trailer available"
+    seed: true, trailerFail: true,
+    steps: async (page) => {
+      await openDetail(page, 'movie', fx.movies[3].stream_id, { resume: 4521000 }); await wait(800);
+      await press(page, 'ArrowRight', 2, 250); await press(page, 'Enter'); await wait(1600);
+    },
+  },
   toast: {
     seed: true,
     steps: async (page) => {
@@ -600,6 +704,9 @@ export async function shoot(names, { log = console.log } = {}) {
         if (u.hostname === 'www.netflix.com' && u.pathname === '/tudum/top10/data/all-weeks-countries.tsv') {
           return route.fulfill({ status: 200, contentType: 'text/tab-separated-values; charset=utf-8',
             headers: { 'Access-Control-Allow-Origin': '*', ETag: '"fixture"' }, body: fx.top10Tsv() });
+        }
+        if (u.hostname === 'www.youtube-nocookie.com' && u.pathname.startsWith('/embed/')) {
+          return route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: fx.trailerStandIn(u.pathname.split('/')[2], !!scr.trailerFail) });
         }
         return route.abort();
       });
