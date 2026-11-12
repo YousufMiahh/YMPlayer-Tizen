@@ -19,7 +19,6 @@ import { trailerView } from './views/trailer.js';
 import { homeView } from './views/home.js';
 import { searchView } from './views/search.js';
 import { settingsView } from './views/settings.js';
-import { ambientView } from './views/ambient.js';
 
 // Registry of views: name -> () => view.
 export const views = {
@@ -37,7 +36,6 @@ export const views = {
   home: homeView,
   search: searchView,
   settings: settingsView,
-  ambient: ambientView,
 };
 
 /** Back with nothing beneath (Home, or the first Login): close the app like Android's finish(). */
