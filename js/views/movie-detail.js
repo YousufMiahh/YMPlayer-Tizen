@@ -1,81 +1,129 @@
-// Movie detail. Params: { item }. Shows poster, plot, rating, and Resume / Play from start.
+// Movie page (MovieActivity.java). Params: { item }.
+// Full-bleed backdrop (the poster first, then backdrop_path[0] / movie_image) under Android's
+// left and bottom page scrims; a 900u column anchored bottom-left with the title, the
+// "year · duration · genre · ★ rating" line, the plot, "Director: … · Cast: …" and the buttons
+//   ▶  Resume  H:MM:SS | ↺  Start Over (both only with a saved point; else ▶  Play)
+//   ▶  Trailer (once get_vod_info names one) | ♡  Favourite / ♥  In Favourites
+// Focus starts on Play. Coming back from the player or a trailer rebuilds the buttons (onResume),
+// so the Resume time is current and focus is on Play again.
 import * as api from '../api.js';
 import * as store from '../store.js';
 import * as nav from '../nav.js';
-import { router } from '../router.js';
+import { play } from '../open.js';
+import { openTrailer } from '../trailer.js';
+import { movieInfo, movieButtons, favLabel } from '../detail.js';
+import { pillButton } from '../ui/widgets.js';
 
-export function formatTime(ms) {
-  const s = Math.floor(ms / 1000);
-  const h = Math.floor(s / 3600);
-  const mm = String(Math.floor((s % 3600) / 60)).padStart(h ? 2 : 1, '0');
-  const ss = String(s % 60).padStart(2, '0');
-  return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+export const FADE_MS = 500; // loadBackdrop: alpha 0 -> 1 over 500 ms
+
+/**
+ * The page frame both detail screens share: BG, the centre-cropped backdrop that fades in, then
+ * Ui.scrimLeft() and Ui.pageScrimBottom() over it.
+ */
+export function detailFrame(className) {
+  const el = document.createElement('div');
+  el.className = `detail-page ${className}`;
+  const img = document.createElement('img');
+  img.className = 'dp-backdrop'; img.alt = '';
+  const left = document.createElement('div'); left.className = 'dp-scrim-left';
+  const bottom = document.createElement('div'); bottom.className = 'dp-scrim-bottom';
+  el.append(img, left, bottom);
+  let token = 0;
+  /** ImageLoader.load + animate().alpha(1): the picture is swapped in once it has loaded. */
+  const setBackdrop = (url, { fade = true } = {}) => {
+    if (!url) return;
+    const mine = ++token;
+    if (!fade) img.classList.add('now');
+    const show = () => {
+      if (mine !== token) return;
+      img.src = url;
+      img.classList.add('on');
+    };
+    if (typeof Image === 'undefined' || !fade) { show(); return; }
+    const pre = new Image();
+    pre.onload = show;
+    pre.onerror = () => { if (mine === token) img.classList.add('on'); }; // alpha still goes to 1
+    pre.src = url;
+  };
+  return { el, setBackdrop, backdrop: img };
 }
 
 export function movieDetailView() {
-  let root; let item; let onClick; let onActivate; let seq = 0;
+  let root; let item; let params; let page; let buttonsEl; let metaEl; let plotEl; let creditsEl;
+  let trailer = null; let seq = 0; let onActivate; let onClick;
+
+  function buildButtons() {
+    buttonsEl.replaceChildren(...movieButtons(item, trailer).map((b) => pillButton(b.label, { action: b.action })));
+    // `if (!buttons.hasFocus()) playBtn.requestFocus()`: the old buttons are gone, so Play.
+    buttonsEl.firstChild.focus();
+  }
+
+  function act(action, btn) {
+    if (action === 'fav') { store.toggleFav(item); btn.textContent = favLabel(item); return; }
+    if (action === 'trailer') { openTrailer(trailer); return; }
+    if (action === 'over') store.setPosition(item, 0); // Start Over forgets the saved point first
+    play([item], 0);
+  }
+
+  /** MovieActivity.loadInfo's callback. */
+  function apply(r, { fade }) {
+    const m = movieInfo(r, item);
+    if (!m) return;
+    if (m.plot !== null) { plotEl.textContent = m.plot; item.plot = m.plot; }
+    if (m.meta !== null) metaEl.textContent = m.meta;
+    creditsEl.textContent = m.credits;
+    if (m.backdrop) page.setBackdrop(m.backdrop, { fade });
+    if (m.trailer && trailer === null) {
+      trailer = m.trailer;
+      const f = document.activeElement;
+      const idx = f && f.parentElement === buttonsEl ? [...buttonsEl.children].indexOf(f) : 0;
+      buildButtons();
+      const b = buttonsEl.children[idx];
+      if (b) b.focus();
+    }
+    if (m.ext && !item.ext) item.ext = m.ext;
+  }
 
   return {
-    async mount(rootEl, params) {
-      root = rootEl; item = params.item;
-      const pos = store.position(item);
-      const el = document.createElement('div');
-      el.className = 'detail';
-      const poster = document.createElement('div');
-      poster.className = 'poster-big';
-      const body = document.createElement('div');
-      body.className = 'body';
-      const h = document.createElement('h1'); h.textContent = item.name;
-      const meta = document.createElement('p'); meta.className = 'meta'; meta.textContent = item.info ? `★ ${item.info}` : '';
-      const plot = document.createElement('p'); plot.className = 'plot'; plot.textContent = item.plot || '';
-      const actions = document.createElement('div'); actions.className = 'actions';
-      const btn = (action, text) => {
-        const b = document.createElement('button');
-        b.type = 'button'; b.dataset.action = action; b.textContent = text;
-        return b;
-      };
-      if (pos > 0) actions.append(btn('resume', `Resume from ${formatTime(pos)}`));
-      actions.append(btn('play', pos > 0 ? 'Play from start' : 'Play'));
-      actions.append(btn('fav', store.isFav(item) ? '★ Favourited' : '☆ Favourite'));
-      body.append(h, meta, plot, actions);
-      el.append(poster, body);
-      root.appendChild(el);
-      const setPoster = (src) => {
-        if (!src) return;
-        poster.replaceChildren();
-        const img = document.createElement('img'); img.src = src; img.alt = '';
-        poster.appendChild(img);
-      };
-      setPoster(item.icon);
+    async mount(rootEl, p) {
+      root = rootEl; params = p; trailer = null;
+      // Android works on its own copy of the item (ext and plot are filled in from the info).
+      item = params.movie || (params.movie = { ...params.item });
+      page = detailFrame('movie-page');
+      const col = document.createElement('div');
+      col.className = 'mp-col';
+      const title = document.createElement('h1'); title.className = 'dp-title'; title.textContent = item.name || '';
+      metaEl = document.createElement('div'); metaEl.className = 'dp-meta'; metaEl.textContent = item.info || '';
+      plotEl = document.createElement('div'); plotEl.className = 'dp-plot';
+      creditsEl = document.createElement('div'); creditsEl.className = 'dp-credits';
+      buttonsEl = document.createElement('div'); buttonsEl.className = 'dp-buttons';
+      col.append(title, metaEl, plotEl, creditsEl, buttonsEl);
+      page.el.appendChild(col);
+      root.appendChild(page.el);
 
       onClick = (e) => {
-        const b = e.target.closest('[data-action]');
-        if (!b) return;
-        const a = b.dataset.action;
-        if (a === 'fav') {
-          b.textContent = store.toggleFav(item) ? '★ Favourited' : '☆ Favourite';
-        } else {
-          // The player resumes from the saved point by itself (PlayerActivity.play(true)); playing
-          // from the start forgets it first, as MovieActivity's Start Over does.
-          if (a !== 'resume') store.setPosition(item, 0);
-          router.go('player-vod', { queue: [item], index: 0 });
-        }
+        const b = e.target.closest && e.target.closest('[data-action]');
+        if (b && buttonsEl.contains(b)) act(b.dataset.action, b);
       };
-      onActivate = (e) => { e.target.closest('button')?.click(); };
+      onActivate = (e) => { const b = e.target.closest && e.target.closest('button'); if (b) b.click(); };
       root.addEventListener('click', onClick);
       root.addEventListener('activate', onActivate);
       nav.register(root);
-      nav.focusFirst(actions);
+      buildButtons();
 
+      // The Activity stays alive under the player: what it loaded is still there on the way back.
+      if (params.vodInfo) {
+        if (item.icon) page.setBackdrop(item.icon, { fade: false });
+        apply(params.vodInfo, { fade: false });
+        return;
+      }
+      if (item.icon) page.setBackdrop(item.icon);
       const mine = ++seq;
-      let data = null;
-      try { data = await api.vodInfo(item.id); } catch { /* keep list data */ }
-      if (mine !== seq || !root) return;
-      const info = data?.info || {};
-      if (info.plot) plot.textContent = info.plot;
-      const rating = info.rating || info.rating_5based;
-      if (rating) meta.textContent = `★ ${rating}`;
-      setPoster(info.movie_image || info.cover_big);
+      let r = null;
+      try { r = await api.vodInfo(item.id); } catch { r = null; } // Android: nothing changes
+      if (mine !== seq || !root || !r) return;
+      params.vodInfo = r;
+      apply(r, { fade: true });
     },
     unmount() {
       seq++;
@@ -83,7 +131,7 @@ export function movieDetailView() {
         root.removeEventListener('click', onClick);
         root.removeEventListener('activate', onActivate);
       }
-      root = item = null;
+      root = item = params = page = buttonsEl = metaEl = plotEl = creditsEl = null;
     },
   };
 }

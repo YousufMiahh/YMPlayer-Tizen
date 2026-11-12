@@ -73,3 +73,43 @@ export function rowCell({ title, sub, num, logo, trail, active } = {}) {
   if (trail) { const tr = document.createElement('span'); tr.className = 'rc-trail'; tr.textContent = trail; b.appendChild(tr); }
   return b;
 }
+
+/**
+ * Cards.card(): rounded artwork (initials when there is none, except posters), a one-line title,
+ * an optional one-line subtitle, and a progress bar along the bottom of the art when > 0.
+ * Same markup and CSS (.card) as Home's shelves.
+ */
+export function card({ shape = 'landscape', image = null, title = '', sub = '', progress = 0 } = {}) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = `card ${shape}`;
+  if (image) b.dataset.art = image;
+  const art = document.createElement('span');
+  art.className = 'art';
+  if (image) {
+    const img = document.createElement('img');
+    img.src = image; img.alt = ''; img.decoding = 'async';
+    art.appendChild(img);
+  } else if (shape !== 'poster') {
+    const ph = document.createElement('span');
+    ph.className = 'initials'; ph.textContent = initials(title);
+    art.appendChild(ph);
+  }
+  if (progress > 0) {
+    const bar = document.createElement('span');
+    bar.className = 'progress';
+    const fill = document.createElement('i');
+    fill.style.width = `${Math.max(2, Math.min(100, progress * 100))}%`;
+    bar.appendChild(fill);
+    art.appendChild(bar);
+  }
+  const t = document.createElement('span');
+  t.className = 'title'; t.textContent = title || '';
+  b.append(art, t);
+  if (sub) {
+    const s = document.createElement('span');
+    s.className = 'sub'; s.textContent = sub;
+    b.appendChild(s);
+  }
+  return b;
+}

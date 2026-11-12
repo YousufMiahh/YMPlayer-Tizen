@@ -195,32 +195,3 @@ html.preview-on, html.preview-on body { background: transparent; }
 /* Video plays on the AVPlay plane behind the page, so the page must be see-through. */
 html.video-on, body.video-on, body.video-on #root { background: transparent; }
 #av { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
-
-/* Detail / episodes: restyled to Android's buttons and rows (rebuilt in later phases). */
-.detail { display: flex; gap: 64px; padding: 80px; }
-.detail .poster-big { width: 400px; aspect-ratio: 2 / 3; background: var(--surface); border-radius: var(--r-poster); overflow: hidden; flex: none; }
-.detail .poster-big img { width: 100%; height: 100%; object-fit: cover; }
-.detail h1 { font-size: calc(40 * var(--u)); font-weight: 700; letter-spacing: -0.02em; margin: 0 0 12px; }
-.detail .meta { font-size: calc(18 * var(--u)); color: var(--text2); margin: 0 0 24px; }
-.detail .plot { font-size: calc(18 * var(--u)); line-height: 1.4; color: var(--text2); max-width: 1000px; }
-.detail .actions { display: flex; gap: calc(16 * var(--u)); margin-top: 40px; }
-.detail button, .series-detail [data-action="next"] {
-  font-size: calc(18 * var(--u)); font-weight: 600;
-  padding: calc(14 * var(--u)) calc(28 * var(--u));
-  border-radius: var(--r-button); background: var(--surface-hi); color: var(--text);
-  transition: transform var(--dur-focus) var(--ease-focus);
-}
-.detail button:focus, .series-detail [data-action="next"]:focus {
-  background: var(--focus-bg); color: var(--on-focus); transform: scale(1.06);
-}
-.series-detail .rail h1 { font-size: calc(26 * var(--u)); margin: 0 0 12px; }
-.series-detail .rail .plot { font-size: calc(15 * var(--u)); color: var(--text2); margin: 0 0 20px; }
-.series-detail .episodes { flex: 1; padding: 48px 56px; display: flex; flex-direction: column; gap: calc(2 * var(--u)); overflow-y: auto; }
-.series-detail .episode {
-  display: flex; justify-content: space-between;
-  font-size: calc(19 * var(--u)); font-weight: 500; color: var(--text); text-align: left;
-  padding: calc(14 * var(--u)) calc(18 * var(--u)); border-radius: var(--r-row);
-}
-.series-detail .episode .mark { color: var(--text2); }
-.series-detail .episode:focus { background: var(--focus-bg); color: var(--on-focus); }
-.series-detail .episode:focus .mark { color: var(--on-focus2); }

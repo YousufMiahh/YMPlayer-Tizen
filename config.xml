@@ -12,5 +12,5 @@
   <tizen:privilege name="http://tizen.org/privilege/application.launch"/>
   <tizen:privilege name="http://tizen.org/privilege/tv.audio"/>
   <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable" encryption="disable" install-location="auto" hwkey-event="enable"/>
-  <tizen:content-security-policy>default-src 'self' http: https: data: blob: 'unsafe-inline' 'unsafe-eval'; media-src * blob:; img-src * data: blob:</tizen:content-security-policy>
+  <tizen:content-security-policy>default-src 'self' http: https: data: blob: 'unsafe-inline' 'unsafe-eval'; frame-src https://www.youtube-nocookie.com; media-src * blob:; img-src * data: blob:</tizen:content-security-policy>
 </widget>

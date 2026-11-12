@@ -33,4 +33,9 @@ describe('config.xml', () => {
   it('points at an existing entry page', () => {
     expect(doc.getElementsByTagName('content')[0].getAttribute('src')).toBe('index.html');
   });
+
+  it('lets the trailer embed (youtube-nocookie) load in a frame', () => {
+    const csp = doc.getElementsByTagName('tizen:content-security-policy')[0].textContent;
+    expect(csp).toMatch(/frame-src[^;]*https:\/\/www\.youtube-nocookie\.com/);
+  });
 });

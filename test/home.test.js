@@ -174,21 +174,20 @@ describe('opening cards (Open.item)', () => {
     expect(router.current().params.item.id).toBe('a');
   });
 
-  it('a Continue Watching episode goes straight into the player at its resume point, alone in the queue', async () => {
+  it('a Continue Watching episode goes straight into the player, alone in the queue (it resumes by itself)', async () => {
     const ep = { type: 'episode', id: 'e', name: 'E', parentName: 'S' };
     store.addHistory(ep); store.setPosition(ep, 90000);
     router.go('home'); await settle();
     card('continue').click();
     const cur = router.current();
     expect(cur.name).toBe('player-vod');
-    expect(cur.params.startMs).toBe(90000);
-    expect(cur.params.queue.map((q) => q.id)).toEqual(['e']);
+    expect(cur.params).toEqual({ queue: [expect.objectContaining({ id: 'e' })], index: 0 }); // Open.play(q, 0)
   });
 
-  it('a resume point under 10 s starts from the beginning (PlayerActivity.play)', () => {
+  it('an episode opens through Open.play with no start time: PlayerActivity decides (> 10 s resumes)', () => {
     const ep = { type: 'episode', id: 'e' };
     store.setPosition(ep, 8000);
-    expect(rows.openTarget(ep).params.startMs).toBe(0);
+    expect(rows.openTarget(ep)).toEqual({ name: 'player-vod', params: { queue: [ep], index: 0 } });
   });
 
   it('a recent channel zaps through the whole Recent list; a favourite-only one through Favourite Channels', async () => {

@@ -123,30 +123,8 @@ export function liveSiblings(it) {
   return null;
 }
 
-/**
- * Open.item: where a card goes.
- *   movie -> movie details (Continue Watching too), series -> series screen,
- *   live -> the player with the zap queue, episode -> straight into the player (one-item queue).
- * @returns {{name: string, params: object}}
- */
-export function openTarget(it, siblings = null) {
-  if (it.type === MOVIE) return { name: 'movie-detail', params: { item: it } };
-  if (it.type === SERIES) return { name: 'series-detail', params: { item: it } };
-  if (it.type === LIVE) {
-    let q = (siblings || []).filter((s) => s.type === LIVE);
-    let idx = q.findIndex((s) => key(s) === key(it)); // the list may hold a different copy of it
-    if (idx < 0) { q = [it]; idx = 0; }
-    return { name: 'player-live', params: { channels: q, index: idx } };
-  }
-  // PlayerActivity.play(resume): resumes from the saved point when it is past 10 s.
-  const pos = store.position(it);
-  return { name: 'player-vod', params: { item: it, queue: [it], index: 0, startMs: pos > 10000 ? pos : 0 } };
-}
-
-/** Open.toggleFav's toast text. */
-export function favToast(now, it) {
-  return `${now ? 'Added to Favourites — ' : 'Removed from Favourites — '}${it.name || ''}`;
-}
+// Open.item / Open.toggleFav live in js/open.js (every screen uses them).
+export { openTarget, favToast } from './open.js';
 
 /** HomeActivity.removeMenu: the dialog message ("Series · Episode" for an episode). */
 export function removeName(it) {

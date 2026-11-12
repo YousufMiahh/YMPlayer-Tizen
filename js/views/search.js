@@ -1,9 +1,9 @@
 // Search: a text box plus a Live/Movies/Series toggle; filters the section's loaded list by name.
-// Enter opens the result (channel -> player-live, movie -> movie-detail, series -> series-detail);
+// Enter opens the result through Open.item (js/open.js);
 // Menu toggles a favourite. No server-side search: lists come from the saved library (repo.streams(type, null)).
 import * as repo from '../repo.js';
 import * as nav from '../nav.js';
-import { router } from '../router.js';
+import { openItem } from '../open.js';
 import { LIVE, MOVIE, SERIES } from '../item.js';
 import * as favourites from '../favourites.js';
 import * as store from '../store.js';
@@ -56,8 +56,7 @@ export function searchView() {
   function open(index) {
     const item = results[index];
     if (!item) return;
-    if (section === LIVE) router.go('player-live', { channels: results, index });
-    else router.go(section === MOVIE ? 'movie-detail' : 'series-detail', { item });
+    openItem(item, results); // Open.item with the hits as the zap list
   }
 
   return {

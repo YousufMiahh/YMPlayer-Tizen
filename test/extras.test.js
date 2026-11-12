@@ -5,7 +5,6 @@ vi.mock('../js/api.js', () => ({ streams: vi.fn() }));
 
 import * as api from '../js/api.js';
 import * as store from '../js/store.js';
-import * as keys from '../js/keys.js';
 import { router } from '../js/router.js';
 import { ambientView, collectArtwork } from '../js/views/ambient.js';
 import * as homeRows from '../js/home-rows.js';
@@ -27,10 +26,8 @@ beforeEach(() => {
 });
 afterEach(() => { router.reset(); vi.useRealTimers(); });
 
-describe('keys gate', () => {
-  it('has no YouTube key in v1, and no TMDB gate at all (Top 10 needs no key)', () => {
-    expect(keys.hasYoutube()).toBe(false);
-    expect(keys.hasTmdb).toBeUndefined();
+describe('no key gates', () => {
+  it('the remote rows need no key (Top 10 is the Netflix file; trailers are the keyless embed)', () => {
     expect(homeRows.REMOTE_ROWS.map((r) => r.key)).toEqual(['top_movies', 'top_series', 'new_movies', 'new_series']);
   });
 });

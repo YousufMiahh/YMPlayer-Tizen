@@ -29,7 +29,7 @@ describe('scaffold smoke test', () => {
   });
 
   it('no stylesheet draws the old blue focus outline/glow', () => {
-    for (const f of ['theme', 'ui', 'home', 'browse', 'login', 'search', 'settings', 'extras']) {
+    for (const f of ['theme', 'ui', 'home', 'browse', 'login', 'search', 'settings', 'extras', 'detail']) {
       const css = read(`../css/${f}.css`);
       expect(css, f).not.toMatch(/rgba\(10,\s*132,\s*255/);
       expect(css, f).not.toMatch(/border-color:\s*var\(--accent\)/);

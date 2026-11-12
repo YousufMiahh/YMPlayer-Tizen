@@ -15,6 +15,7 @@ import { moviesView } from './views/movies.js';
 import { seriesView } from './views/series.js';
 import { movieDetailView } from './views/movie-detail.js';
 import { seriesDetailView } from './views/series-detail.js';
+import { trailerView } from './views/trailer.js';
 import { homeView } from './views/home.js';
 import { searchView } from './views/search.js';
 import { settingsView } from './views/settings.js';
@@ -31,6 +32,7 @@ export const views = {
   series: seriesView,
   'movie-detail': movieDetailView,
   'series-detail': seriesDetailView,
+  trailer: trailerView,
   'player-vod': playerView,
   home: homeView,
   search: searchView,
