@@ -5,3 +5,4 @@ node_modules/
 dist/
 *.wgt
 .tizen-cli-*
+tools/shots/out/
