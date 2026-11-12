@@ -1,19 +1,9 @@
 // Xtream Codes API client: port of XtreamApi.java. Reads server/user/pass/UA from the current account.
 import * as store from './store.js';
 import { LIVE, MOVIE, SERIES, EPISODE, CATEGORY } from './item.js';
+import { normalize } from './url.js';
 
-const TAILS = ['/player_api.php', '/get.php', '/xmltv.php', '/panel_api.php'];
-
-/** Turns whatever the user typed into "http(s)://host:port". */
-export function normalize(server) {
-  let s = (server ?? '').trim();
-  if (!s) return s;
-  if (!/^https?:\/\//i.test(s)) s = `http://${s}`;
-  const q = s.indexOf('?');
-  if (q >= 0) s = s.slice(0, q);
-  for (const t of TAILS) if (s.endsWith(t)) s = s.slice(0, -t.length);
-  return s.replace(/\/+$/, '');
-}
+export { normalize } from './url.js';
 
 /** Accepts a server or a pasted get.php M3U link -> {server, user, pass}. */
 export function parseLink(text) {
@@ -124,6 +114,35 @@ export async function login() {
   return JSON.parse(body);
 }
 
+/**
+ * LoginActivity.loginOnce: one player_api.php request with explicit details (no saved account
+ * needed). Resolves with the parsed object; rejects on HTTP/network errors or a non-object body.
+ */
+export async function loginAt(serverBase, user, pass) {
+  const url = `${serverBase}/player_api.php?username=${enc(user)}&password=${enc(pass)}`;
+  const res = await fetch(url, { headers: { 'User-Agent': store.userAgent() } });
+  if (!res.ok) throw new Error(`Server returned HTTP ${res.status}`);
+  const body = (await res.text()).trim();
+  if (!body.startsWith('{')) throw new Error("This doesn't look like an Xtream server");
+  return JSON.parse(body);
+}
+
+/**
+ * Async.message(e). fetch() reports every network failure (unknown host, refused, TLS) as a bare
+ * TypeError, so they all read as Android's ConnectException text.
+ */
+export function errorMessage(e) {
+  if (!e) return '';
+  if (e.name === 'TypeError' && /fetch|network|load/i.test(e.message || '')) return "Couldn't connect to the server";
+  if (e.name === 'AbortError' || e.name === 'TimeoutError') return 'The server took too long to answer';
+  return e.message || String(e);
+}
+
+/** True for errors where no other user agent could help (LoginActivity's UnknownHost/Connect/SSL). */
+export function isUnreachable(e) {
+  return !!e && e.name === 'TypeError';
+}
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 export function describeAccount(r) {
@@ -171,11 +190,21 @@ export async function categories(type) {
   return out;
 }
 
+/**
+ * XtreamApi.PROGRESS: items read so far by the whole-list download of each type (the Setup
+ * screen polls it every 300 ms). Reset when a new whole-list download starts.
+ */
+const PROGRESS = {};
+export const progress = (type) => PROGRESS[type] || 0;
+
 /** @param categoryId omit/null for every item of that type. */
 export async function streams(type, categoryId = null) {
-  const extra = categoryId === null || categoryId === undefined ? null : `&category_id=${enc(categoryId)}`;
+  const whole = categoryId === null || categoryId === undefined;
+  const extra = whole ? null : `&category_id=${enc(categoryId)}`;
   const out = [];
+  if (whole) PROGRESS[type] = 0;
   await readArray(apiUrl(STREAM_ACTION[type] ?? STREAM_ACTION[SERIES], extra), (o) => {
+    if (whole) PROGRESS[type] = (PROGRESS[type] || 0) + 1;
     let item;
     if (type === SERIES) {
       item = { type, id: str(o.series_id), name: str(o.name).trim() };

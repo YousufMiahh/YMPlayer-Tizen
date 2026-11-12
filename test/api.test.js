@@ -237,3 +237,29 @@ describe('user agent', () => {
     expect(f.mock.calls[0][1].headers['User-Agent']).toBe(store.userAgent());
   });
 });
+
+describe('progress / loginAt / errorMessage', () => {
+  it('counts items of a whole-list download (XtreamApi.PROGRESS), not of one category', async () => {
+    mockFetch([{ stream_id: 1, name: 'a' }, { stream_id: 2, name: 'b' }, { stream_id: 3, name: 'c' }]);
+    await api.streams('movie');
+    expect(api.progress('movie')).toBe(3);
+    mockFetch([{ stream_id: 9, name: 'z' }]);
+    await api.streams('movie', '5');
+    expect(api.progress('movie')).toBe(3);
+  });
+  it('loginAt asks the given address with the given details', async () => {
+    const f = mockFetch({ user_info: { auth: 1 } });
+    const r = await api.loginAt('https://x.tv:8443', 'a b', 'p&q');
+    expect(f.mock.calls[0][0]).toBe('https://x.tv:8443/player_api.php?username=a%20b&password=p%26q');
+    expect(r.user_info.auth).toBe(1);
+    mockFetch('nope');
+    await expect(api.loginAt('http://x', 'u', 'p')).rejects.toThrow("This doesn't look like an Xtream server");
+    mockFetch('{}', 403);
+    await expect(api.loginAt('http://x', 'u', 'p')).rejects.toThrow('Server returned HTTP 403');
+  });
+  it('errorMessage maps fetch network failures like Async.message', () => {
+    expect(api.errorMessage(new TypeError('Failed to fetch'))).toBe("Couldn't connect to the server");
+    expect(api.errorMessage(new Error('Server returned HTTP 500'))).toBe('Server returned HTTP 500');
+    expect(api.errorMessage(null)).toBe('');
+  });
+});
