@@ -109,8 +109,9 @@ export function createTopBar(current, opts = {}) {
   }
 
   function glideTo(tab) {
-    const tx = tab.offsetLeft; const tw = tab.offsetWidth;
-    pill.style.top = `${tab.offsetTop}px`;
+    // Track coordinates, as tabs.getLeft() + tab.getLeft() in the Java.
+    const tx = tabs.offsetLeft + tab.offsetLeft; const tw = tab.offsetWidth;
+    pill.style.top = `${tabs.offsetTop + tab.offsetTop}px`;
     pill.style.height = `${tab.offsetHeight}px`;
     let fx; let fw;
     if (glide.shown) { fx = glide.x; fw = glide.w; } else if (lastX >= 0 && glideHandoff) {
