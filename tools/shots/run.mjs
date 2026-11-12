@@ -137,6 +137,42 @@ const openGuide = async (page) => {
   await wait(1300);
 };
 
+
+/**
+ * The player screens run on the AVPlay shim in demo mode (js/avplay-shim.js): a stand-in video
+ * plane behind the page, a real-time clock, fake audio/subtitle tracks and subtitle lines.
+ * `play` opens the player straight through the router, the way Open.play does.
+ */
+async function openPlayer(page, url, what, setup = {}) {
+  await toHome(page);
+  await page.evaluate(async ({ what, url, fxLive, fxMovie, fxSeries, setup }) => {
+    const abs = (s) => (s && s.startsWith('/') ? url + s : s);
+    const m = await import('/js/avplay-shim.js');
+    const shim = m.createAvplayShim({ demo: true });
+    if (setup.fail) shim.failWhen = () => true;
+    window.webapis = { avplay: shim };
+    window.__shim = shim;
+    const store = await import('/js/store.js');
+    for (const [k, v] of Object.entries(setup.prefs || {})) localStorage.setItem(k, String(v));
+    const { router } = await import('/js/router.js');
+    if (what === 'live') {
+      const channels = fxLive.map((s) => ({ type: 'live', id: String(s.stream_id), name: s.name, icon: abs(s.stream_icon), num: String(s.num) }));
+      if (!store.isFav(channels[setup.index || 0])) store.toggleFav(channels[setup.index || 0]);
+      router.go('player-live', { channels, index: setup.index || 0 });
+    } else if (what === 'movie') {
+      const item = { type: 'movie', id: String(fxMovie.stream_id), name: fxMovie.name, icon: abs(fxMovie.stream_icon), ext: 'mp4' };
+      store.setPosition(item, setup.resume || 0);
+      router.go('player-vod', { queue: [item], index: 0 });
+    } else {
+      const queue = [1, 2, 3].map((n) => ({ type: 'episode', id: String(fxSeries.series_id * 100 + n), name: ['The Lighthouse Keeper', 'Low Tide', 'What the Fog Hid'][n - 1],
+        num: String(n), ext: 'mp4', parentId: String(fxSeries.series_id), parentName: fxSeries.name, parentIcon: abs(fxSeries.cover) }));
+      router.go('player-vod', { queue, index: 0 });
+    }
+  }, { what, url, fxLive: fx.live.slice(0, 40), fxMovie: fx.movies[3], fxSeries: fx.series[2], setup });
+  await page.waitForSelector('.player', { timeout: 8000 });
+};
+const shimDo = (page, fn, arg) => page.evaluate(fn, arg);
+
 export const SCREENS = {
   splash: { seed: false, steps: async () => { await wait(1000); } },
   login: { // first run: empty form, focus on the server field
@@ -463,6 +499,77 @@ export const SCREENS = {
       });
       await wait(400);
     },
+  },
+  'player-live': { // the live banner: logo, number, name ♥, now, time + bar, next, hint
+    seed: true,
+    steps: async (page, h) => { await openPlayer(page, h.url, 'live', { index: 2 }); await wait(1500); },
+  },
+  'player-channels': { // OK: the Channels list on the playing channel (▶), favourites ♥, gliding highlight
+    seed: true,
+    steps: async (page, h) => {
+      await openPlayer(page, h.url, 'live', { index: 2 }); await wait(800);
+      await press(page, 'Enter'); await wait(300); await press(page, 'ArrowDown', 2, 260); await wait(500);
+    },
+  },
+  'player-menu': { // live Hold OK: Favourites, Subtitles, Audio, Subtitle Size
+    seed: true,
+    steps: async (page, h) => { await openPlayer(page, h.url, 'live', { index: 2 }); await wait(1000); await holdOk(page); await wait(500); },
+  },
+  'player-tracks': { // a film: Subtitles & Audio, a subtitle line underneath
+    seed: true,
+    steps: async (page, h) => {
+      await openPlayer(page, h.url, 'movie'); await wait(1000);
+      await holdOk(page); await wait(300); await press(page, 'ArrowDown'); await wait(3600);
+    },
+  },
+  'player-subs': { // a rendered subtitle line, default look (Medium, White, drop shadow)
+    seed: true,
+    steps: async (page, h) => { await openPlayer(page, h.url, 'movie'); await wait(4800); },
+  },
+  'player-subs-styled': { // Extra Large, Yellow, background 50 %
+    seed: true,
+    steps: async (page, h) => {
+      await openPlayer(page, h.url, 'movie', { prefs: { sub_size: 3, sub_color: 1, sub_bg: true, sub_bg_opacity: 1 } });
+      await wait(4800);
+    },
+  },
+  'player-vod': { // a film resumed: sheet with title, bar, elapsed / −remaining, hint, the resume toast
+    seed: true,
+    steps: async (page, h) => { await openPlayer(page, h.url, 'movie', { resume: 1234000 }); await wait(900); },
+  },
+  'player-episode': { // an episode paused: "Series · Episode 1", centre icon, sheet pinned
+    seed: true,
+    steps: async (page, h) => {
+      await openPlayer(page, h.url, 'episode'); await wait(2500);
+      await press(page, 'Enter'); await wait(600);
+    },
+  },
+  'player-seek': { // ▶ ▶ ▶: the "+30 sec" bubble
+    seed: true,
+    steps: async (page, h) => { await openPlayer(page, h.url, 'movie', { resume: 1234000 }); await wait(2500); await press(page, 'ArrowRight', 3, 150); await wait(250); },
+  },
+  'player-scrub': { // ▼ then ▶ x4: the knob, the lighter stretch ahead, the time over the knob
+    seed: true,
+    steps: async (page, h) => {
+      await openPlayer(page, h.url, 'movie', { resume: 1234000 }); await wait(1500);
+      await press(page, 'ArrowDown'); await press(page, 'ArrowRight', 4, 150); await wait(300);
+    },
+  },
+  'player-nextup': { // the last 30 s of an episode: Watch credits | Next Episode filling up
+    seed: true,
+    steps: async (page, h) => {
+      await openPlayer(page, h.url, 'episode'); await wait(1200);
+      await shimDo(page, () => window.__shim.seekTo(45 * 60000 - 29000));
+      await wait(4200);
+    },
+  },
+  'player-error': { // live: retries, the other format, then the card
+    seed: true,
+    steps: async (page, h) => { await openPlayer(page, h.url, 'live', { index: 2, fail: true }); await wait(9500); },
+  },
+  'player-status': { // the status pill ("Reconnecting…") over a film
+    seed: true,
+    steps: async (page, h) => { await openPlayer(page, h.url, 'movie', { fail: true }); await wait(600); },
   },
   toast: {
     seed: true,
