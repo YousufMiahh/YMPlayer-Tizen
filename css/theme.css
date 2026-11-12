@@ -3,10 +3,78 @@
 @font-face { font-family: 'Inter'; font-weight: 600; src: url('../assets/fonts/Inter-SemiBold.ttf') format('truetype'); }
 @font-face { font-family: 'Inter'; font-weight: 700; src: url('../assets/fonts/Inter-Bold.ttf') format('truetype'); }
 
+/*
+ * Design tokens ported from Ui.java (Android is the source of truth).
+ * Android sizes are "design units": Ui.unit() = min(W/1920, H/1080) * 1.4, so at 1920x1080 one unit is
+ * 1.4 CSS px. Write sizes as calc(N * var(--u)) with N copied straight from the Java.
+ */
 :root {
-  --bg:#0B0B0F;
-  --accent:#0A84FF;
-  --font:'Inter', sans-serif;
+  --u: 1.4px;
+  --font: 'Inter', sans-serif;
+
+  /* Ui.applyTheme(true) — dark, the default */
+  --bg: #0A0B12;
+  --bg-top: #1C2040;
+  --surface: rgba(255, 255, 255, 0.102);    /* 0x1AFFFFFF */
+  --surface-hi: rgba(255, 255, 255, 0.180); /* 0x2EFFFFFF */
+  --surface-lo: rgba(255, 255, 255, 0.071); /* 0x12FFFFFF */
+  --sheet: rgba(28, 28, 34, 0.949);         /* 0xF21C1C22 */
+  --text: #FFFFFF;
+  --text2: rgba(235, 235, 245, 0.600);      /* 0x99EBEBF5 */
+  --text3: rgba(235, 235, 245, 0.302);      /* 0x4DEBEBF5 */
+  --focus-bg: #FFFFFF;
+  --on-focus: #0B0B0F;
+  --on-focus2: rgba(11, 11, 15, 0.702);     /* 0xB30B0B0F */
+  --ring: #FFFFFF;                          /* Ui.outline(): white in dark, FOCUS_BG in light */
+  --logo-bg: #24252C;                       /* channel-logo backing (BrowseActivity:272) */
+
+  /* Both themes */
+  --accent: #0A84FF;                        /* only the EPG "now" line uses this */
+  --red: #FF453A;
+  --w1: #FFFFFF;                            /* always-light text over video */
+  --w2: rgba(235, 235, 245, 0.600);
+  --w3: rgba(235, 235, 245, 0.400);
+  --progress-track: rgba(255, 255, 255, 0.349); /* 0x59FFFFFF (Cards.progressBar) */
+
+  /* Text sizes (Android sp, already in units) — use with calc(var(--t-x) * var(--u)) or the .t-* classes */
+  --lh: 1.15;                               /* Ui.text(): lineSpacing(0, 1.15) */
+
+  /* Radii in units */
+  --r-button: calc(12 * var(--u));
+  --r-card: calc(14 * var(--u));
+  --r-poster: calc(12 * var(--u));
+  --r-row: calc(12 * var(--u));
+  --r-track: calc(28 * var(--u));
+  --r-tab: calc(22 * var(--u));
+  --r-sheet: calc(26 * var(--u));
+  --r-panel: calc(22 * var(--u));
+  --ring-w: calc(4 * var(--u));
+
+  /* Motion (Android interpolators) */
+  --ease-focus: cubic-bezier(0.2, 0.62, 0.33, 1);   /* DecelerateInterpolator(1.6) */
+  --ease-out: cubic-bezier(0.25, 1, 0.5, 1);        /* DecelerateInterpolator(2)   */
+  --ease-out-22: cubic-bezier(0.22, 1, 0.36, 1);    /* DecelerateInterpolator(2.2) */
+  --ease-std: cubic-bezier(0.37, 0, 0.63, 1);       /* AccelerateDecelerate (ViewPropertyAnimator default) */
+  --dur-focus: 180ms;                               /* Ui.animateFocus */
+  --lift-shadow: 0 calc(10 * var(--u)) calc(20 * var(--u)) rgba(0, 0, 0, 0.42); /* translationZ 14u */
+}
+
+/* Ui.applyTheme(false) — light theme (Prefs.darkTheme() == false) */
+html.light {
+  --bg: #F2F2F7;
+  --bg-top: #FFFFFF;
+  --surface: rgba(0, 0, 0, 0.071);          /* 0x12000000 */
+  --surface-hi: rgba(0, 0, 0, 0.129);       /* 0x21000000 */
+  --surface-lo: rgba(0, 0, 0, 0.039);       /* 0x0A000000 */
+  --sheet: rgba(247, 247, 250, 0.961);      /* 0xF5F7F7FA */
+  --text: #000000;
+  --text2: rgba(60, 60, 67, 0.600);         /* 0x993C3C43 */
+  --text3: rgba(60, 60, 67, 0.361);         /* 0x5C3C3C43 */
+  --focus-bg: #1D1D1F;
+  --on-focus: #FFFFFF;
+  --on-focus2: rgba(255, 255, 255, 0.702);
+  --ring: #1D1D1F;
+  --logo-bg: #E6E6EB;
 }
 
 * { box-sizing: border-box; }
@@ -17,8 +85,25 @@ html, body {
   height: 100%;
   overflow: hidden;
   background: var(--bg);
-  color: #fff;
+  color: var(--text);
   font-family: var(--font);
+  font-weight: 400;
+  line-height: var(--lh);
 }
 
-#root { width: 100%; height: 100%; }
+#root { position: relative; z-index: 1; width: 100%; height: 100%; }
+
+/* Android never draws a focus outline: focus is a white fill or a white ring (see ui.css). */
+:focus, :focus-visible { outline: none; }
+button, input { font: inherit; color: inherit; }
+button { -webkit-appearance: none; appearance: none; background: none; border: 0; margin: 0; padding: 0; cursor: pointer; text-align: inherit; }
+
+/* Text helpers matching Ui.text / Ui.medium / Ui.title (size N units: style="--ts:N") */
+.t { font-size: calc(var(--ts, 16) * var(--u)); font-weight: 400; line-height: var(--lh); }
+.t-medium { font-weight: 500; }
+.t-semibold { font-weight: 600; }
+.t-title { font-weight: 700; letter-spacing: -0.02em; }
+.c-text { color: var(--text); }
+.c-text2 { color: var(--text2); }
+.c-text3 { color: var(--text3); }
+.one-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

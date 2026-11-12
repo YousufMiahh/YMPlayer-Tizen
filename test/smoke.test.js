@@ -16,11 +16,25 @@ describe('scaffold smoke test', () => {
     expect(root.children.length).toBeGreaterThan(0);
   });
 
-  it('theme.css declares the exact design tokens', () => {
-    const css = read('../css/theme.css');
-    expect(css).toContain('--bg:#0B0B0F');
-    expect(css).toContain('--accent:#0A84FF');
+  it('theme.css declares the Ui.java design tokens', () => {
+    const css = read('../css/theme.css').replace(/\s+/g, '');
+    expect(css).toContain('--u:1.4px');
+    expect(css).toContain('--bg:#0A0B12');       // Ui.BG (dark)
+    expect(css).toContain('--bg-top:#1C2040');
+    expect(css).toContain('--focus-bg:#FFFFFF');
+    expect(css).toContain('--on-focus:#0B0B0F');
+    expect(css).toContain('--accent:#0A84FF');   // EPG now-line only
+    expect(css).toContain('html.light{--bg:#F2F2F7');
     expect(css).toMatch(/--font:[^;]*Inter/);
+  });
+
+  it('no stylesheet draws the old blue focus outline/glow', () => {
+    for (const f of ['theme', 'ui', 'home', 'browse', 'login', 'search', 'settings', 'extras']) {
+      const css = read(`../css/${f}.css`);
+      expect(css, f).not.toMatch(/rgba\(10,\s*132,\s*255/);
+      expect(css, f).not.toMatch(/border-color:\s*var\(--accent\)/);
+      expect(css, f).not.toMatch(/#ffd60a/i);
+    }
   });
 
   it('config.xml targets Tizen 7.0 with required privileges', () => {

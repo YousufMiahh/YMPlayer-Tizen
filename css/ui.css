@@ -1,0 +1,280 @@
+/* Shared components ported from Ui.java, TopBar.java, Glider.java, Cards.java, Adapters.java.
+   Sizes are Android design units: calc(N * var(--u)). */
+
+/* ---------------------------------------------------------------- background (Ambient) */
+#backdrop { position: fixed; inset: 0; z-index: 0; pointer-events: none; background: var(--bg); }
+#backdrop .bd-layer { position: absolute; inset: 0; }
+body.video-on #backdrop { display: none; }
+
+/* ---------------------------------------------------------------- section screen + top bar */
+.section-screen { height: 100%; display: flex; flex-direction: column; }
+.section-page { position: relative; flex: 1; min-height: 0; }
+
+.topbar {
+  flex: none;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: calc(28 * var(--u)) calc(64 * var(--u)) calc(8 * var(--u));
+  position: relative;
+  z-index: 2;
+}
+.tb-brand { justify-self: start; font-size: calc(22 * var(--u)); font-weight: 700; letter-spacing: -0.02em; color: var(--text); }
+.tb-clock { justify-self: end; font-size: calc(20 * var(--u)); font-weight: 500; color: var(--text2); font-variant-numeric: tabular-nums; }
+.tb-track { position: relative; padding: calc(6 * var(--u)); border-radius: var(--r-track); background: var(--surface-lo); }
+.tb-tabs { position: relative; z-index: 1; display: flex; align-items: center; }
+.tb-tab {
+  font-size: calc(17 * var(--u)); font-weight: 500; line-height: var(--lh);
+  padding: calc(11 * var(--u)) calc(22 * var(--u));
+  margin: 0 calc(2 * var(--u));
+  border-radius: var(--r-tab);
+  color: var(--text2);
+  white-space: nowrap;
+}
+.tb-tab.current { font-weight: 600; color: var(--text); background: var(--surface-hi); }
+.tb-tab:focus { color: var(--on-focus); background: transparent; }
+.tb-pill { position: absolute; left: 0; top: calc(6 * var(--u)); width: 0; height: 0; pointer-events: none; }
+.tb-pill-face {
+  width: 100%; height: 100%;
+  border-radius: var(--r-tab);
+  background: var(--focus-bg);
+  box-shadow: 0 calc(3 * var(--u)) calc(6 * var(--u)) rgba(0, 0, 0, 0.28); /* elevation 6u */
+  opacity: 0;
+}
+
+/* ---------------------------------------------------------------- buttons, inputs, headings */
+.pill-btn {
+  font-size: calc(18 * var(--u)); font-weight: 600; line-height: var(--lh);
+  padding: calc(14 * var(--u)) calc(28 * var(--u));
+  border-radius: var(--r-button);
+  background: var(--surface-hi);
+  color: var(--text);
+  text-align: center;
+  transition: transform var(--dur-focus) var(--ease-focus);
+}
+.pill-btn:focus { background: var(--focus-bg); color: var(--on-focus); transform: scale(1.06); }
+
+.pill-input {
+  font-size: calc(19 * var(--u)); font-weight: 500; line-height: var(--lh);
+  padding: calc(16 * var(--u)) calc(16 * var(--u)) calc(16 * var(--u)) calc(20 * var(--u));
+  border: 0; border-radius: var(--r-button);
+  background: var(--surface);
+  color: var(--text);
+}
+.pill-input::placeholder { color: var(--text3); }
+.pill-input:focus { background: var(--focus-bg); color: var(--on-focus); }
+
+.section-heading {
+  font-size: calc(14 * var(--u)); font-weight: 500; letter-spacing: 0.1em; color: var(--text3);
+  padding: calc(34 * var(--u)) 0 calc(10 * var(--u)) calc(22 * var(--u));
+}
+.shelf-title {
+  margin: 0;
+  font-size: calc(22 * var(--u)); font-weight: 600; color: var(--text2); line-height: var(--lh);
+  padding: calc(18 * var(--u)) 0 calc(6 * var(--u)) calc(64 * var(--u));
+}
+.shelf-hint { white-space: pre; font-size: calc(15 * var(--u)); color: var(--text3); }
+
+/* ---------------------------------------------------------------- Home card (Cards.card) */
+.card {
+  flex: none;
+  display: flex; flex-direction: column;
+  transition: transform var(--dur-focus) var(--ease-focus);
+}
+.card .art {
+  position: relative; display: block; overflow: hidden;
+  background: var(--surface);
+  border-radius: var(--r-card);
+  box-shadow: 0 calc(1.5 * var(--u)) calc(4 * var(--u)) rgba(0, 0, 0, 0.30); /* elevation 3u */
+  transition: box-shadow var(--dur-focus) var(--ease-focus);
+}
+.card.poster .art { width: calc(160 * var(--u)); height: calc(240 * var(--u)); }
+.card.channel .art { width: calc(220 * var(--u)); height: calc(124 * var(--u)); }
+.card.landscape .art { width: calc(300 * var(--u)); height: calc(169 * var(--u)); }
+.card .art img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.card.channel .art img { object-fit: contain; padding: calc(22 * var(--u)); }
+.card .art .initials {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: calc(30 * var(--u)); font-weight: 700; letter-spacing: -0.02em; color: var(--text3);
+}
+.card .art::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  border: var(--ring-w) solid var(--ring); opacity: 0; pointer-events: none;
+}
+.card .progress { position: absolute; left: calc(12 * var(--u)); right: calc(12 * var(--u)); bottom: calc(12 * var(--u)); height: calc(5 * var(--u)); border-radius: calc(3 * var(--u)); background: var(--progress-track); overflow: hidden; }
+.card .progress > i { display: block; height: 100%; background: #fff; border-radius: calc(3 * var(--u)); }
+.card .title {
+  display: block; font-size: calc(16 * var(--u)); font-weight: 500; color: var(--text2);
+  padding: calc(12 * var(--u)) 0 0 calc(2 * var(--u));
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.card .sub {
+  display: block; font-size: calc(14 * var(--u)); color: var(--text3);
+  padding: calc(4 * var(--u)) 0 0 calc(2 * var(--u));
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.card.poster .title, .card.poster .sub { width: calc(160 * var(--u)); }
+.card.channel .title, .card.channel .sub { width: calc(220 * var(--u)); }
+.card.landscape .title, .card.landscape .sub { width: calc(300 * var(--u)); }
+.card:focus { transform: scale(1.08); }
+.card:focus .art { box-shadow: var(--lift-shadow); }
+.card:focus .art::after { opacity: 1; }
+.card:focus .title { color: var(--text); }
+.card:focus .sub { color: var(--text2); }
+
+/* ---------------------------------------------------------------- poster grid cell (Adapters.Posters) */
+.poster-cell {
+  display: flex; flex-direction: column; align-items: center;
+  padding: calc(12 * var(--u));
+  transition: transform var(--dur-focus) var(--ease-focus);
+}
+.poster-cell .art {
+  position: relative; display: block; overflow: hidden;
+  width: calc(150 * var(--u)); height: calc(225 * var(--u));
+  background: var(--surface); border-radius: var(--r-poster);
+  box-shadow: 0 calc(1 * var(--u)) calc(3 * var(--u)) rgba(0, 0, 0, 0.28); /* elevation 2u */
+}
+.poster-cell .art img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.poster-cell .art::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  border: var(--ring-w) solid var(--ring); opacity: 0; pointer-events: none;
+}
+.poster-cell .title {
+  width: calc(150 * var(--u)); padding-top: calc(10 * var(--u));
+  font-size: calc(15 * var(--u)); color: var(--text2); text-align: center; line-height: var(--lh);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.poster-cell:focus { transform: scale(1.09); }
+.poster-cell:focus .art { box-shadow: var(--lift-shadow); }
+.poster-cell:focus .art::after { opacity: 1; }
+.poster-cell:focus .title { color: var(--text); font-weight: 600; }
+
+/* ---------------------------------------------------------------- list row (Adapters.RowCell) */
+.row-cell {
+  position: relative; z-index: 1;
+  display: flex; align-items: center; width: 100%;
+  padding: calc(14 * var(--u)) calc(18 * var(--u));
+  margin-bottom: calc(2 * var(--u));
+  border-radius: var(--r-row);
+  color: var(--text);
+  text-align: left;
+  transition: background-color 160ms linear;
+}
+.row-cell .rc-num { flex: none; min-width: calc(44 * var(--u)); font-size: calc(16 * var(--u)); font-weight: 500; color: var(--text2); }
+.row-cell .rc-logo {
+  flex: none; display: flex; align-items: center; justify-content: center;
+  width: calc(72 * var(--u)); height: calc(44 * var(--u)); margin-right: calc(16 * var(--u));
+  padding: calc(5 * var(--u)); border-radius: calc(8 * var(--u)); background: var(--surface);
+}
+.row-cell .rc-logo img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.row-cell .rc-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.row-cell .rc-title { font-size: calc(19 * var(--u)); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row-cell .rc-sub { font-size: calc(14 * var(--u)); color: var(--text2); padding-top: calc(4 * var(--u)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row-cell .rc-trail { flex: none; font-size: calc(16 * var(--u)); font-weight: 500; color: var(--text2); padding-left: calc(10 * var(--u)); }
+.row-cell.active { background: var(--surface-hi); }
+.row-cell.active .rc-title { font-weight: 600; }
+.row-cell:focus { background: var(--focus-bg); }
+.row-cell:focus .rc-title { color: var(--on-focus); font-weight: 600; }
+.row-cell:focus .rc-sub, .row-cell:focus .rc-num { color: var(--on-focus2); }
+.row-cell:focus .rc-trail { color: var(--on-focus); }
+
+/* Glider: one pill behind the list; the focused row itself stays clear. */
+.glider-host { position: relative; }
+.glider-host .row-cell:focus { background: transparent; transition: none; }
+.glider-pill {
+  position: absolute; left: 0; top: 0; z-index: 0;
+  border-radius: var(--r-row); background: var(--focus-bg);
+  opacity: 0; pointer-events: none;
+}
+.glider-pill.on { opacity: 1; }
+
+/* ---------------------------------------------------------------- AlertDialog (Material) */
+/* Fire TV lays out at 960x540 dp, so a framework dp is 2 CSS px here (these are not design units). */
+.dialog-scrim {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.6); /* backgroundDimAmount */
+  opacity: 0; transition: opacity 150ms linear;
+  --dlg-bg: #424242; --dlg-title: #FFFFFF; --dlg-msg: rgba(255, 255, 255, 0.7);
+  --dlg-accent: #80CBC4; --dlg-hl: rgba(255, 255, 255, 0.2); --dlg-item: #FFFFFF;
+}
+html.light .dialog-scrim {
+  --dlg-bg: #FFFFFF; --dlg-title: rgba(0, 0, 0, 0.87); --dlg-msg: rgba(0, 0, 0, 0.54);
+  --dlg-accent: #009688; --dlg-hl: rgba(0, 0, 0, 0.12); --dlg-item: rgba(0, 0, 0, 0.87);
+}
+.dialog-scrim.on { opacity: 1; }
+.dialog {
+  min-width: 65%; max-width: 90%; max-height: 90%;
+  display: flex; flex-direction: column;
+  background: var(--dlg-bg); border-radius: 4px;
+  box-shadow: 0 48px 76px rgba(0, 0, 0, 0.42), 0 18px 30px rgba(0, 0, 0, 0.3);
+  font-family: Roboto, var(--font); line-height: 1.25;
+  overflow: hidden;
+}
+.dialog-title { flex: none; padding: 36px 48px 0; font-size: 40px; font-weight: 500; color: var(--dlg-title); }
+.dialog-message { padding: 28px 48px 0; font-size: 32px; line-height: 1.5; color: var(--dlg-msg); white-space: pre-line; overflow-y: auto; }
+.dialog-items { padding: 16px 0; margin-top: 12px; overflow-y: auto; }
+.dialog-item { display: flex; align-items: center; width: 100%; min-height: 96px; padding: 0 48px; font-size: 32px; color: var(--dlg-item); text-align: left; }
+.dialog-item:focus { background: var(--dlg-hl); }
+.dialog-buttons { flex: none; display: flex; justify-content: flex-end; gap: 16px; padding: 40px 16px 16px; }
+.dialog-button {
+  min-width: 128px; min-height: 72px; padding: 0 16px;
+  border-radius: 4px; font-size: 28px; font-weight: 500; text-transform: uppercase;
+  color: var(--dlg-accent); text-align: center;
+}
+.dialog-button.neutral { margin-right: auto; }
+.dialog-button:focus { background: var(--dlg-hl); }
+
+/* ---------------------------------------------------------------- Toast */
+.toast {
+  position: fixed; left: 50%; bottom: 128px; z-index: 200;
+  max-width: 70%;
+  transform: translateX(-50%);
+  padding: 16px 32px; border-radius: 44px;
+  background: rgba(50, 50, 50, 0.95); color: #FFFFFF;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  font-size: 28px; line-height: 1.3; text-align: center;
+  opacity: 0; transition: opacity 250ms linear; pointer-events: none;
+}
+html.light .toast { background: rgba(238, 238, 238, 0.97); color: rgba(0, 0, 0, 0.87); }
+.toast.on { opacity: 1; }
+
+/* ---------------------------------------------------------------- Sheet (player side panels) */
+.sheet {
+  position: fixed; z-index: 90;
+  top: calc(40 * var(--u)); bottom: calc(40 * var(--u));
+  display: flex; flex-direction: column;
+  padding: calc(22 * var(--u));
+  background: var(--sheet); border-radius: var(--r-sheet);
+  opacity: 0; transition: opacity 250ms var(--ease-std);
+}
+.sheet.on { opacity: 1; transition-duration: 200ms; }
+.sheet[hidden] { display: none; }
+.sheet-left { left: calc(40 * var(--u)); }
+.sheet-right { right: calc(40 * var(--u)); }
+.sheet-bottom { left: calc(40 * var(--u)); right: calc(40 * var(--u)); top: auto; }
+.sheet-title { font-size: calc(26 * var(--u)); font-weight: 700; letter-spacing: -0.02em; padding: calc(6 * var(--u)) 0 calc(2 * var(--u)) calc(10 * var(--u)); }
+.sheet-hint { font-size: calc(14 * var(--u)); color: var(--text2); padding: 0 0 calc(14 * var(--u)) calc(10 * var(--u)); }
+.sheet-body { flex: 1; min-height: 0; overflow-y: auto; }
+
+/* ---------------------------------------------------------------- Splash */
+.splash { height: 100%; display: flex; align-items: center; justify-content: center; }
+.splash-col { width: 100%; display: flex; flex-direction: column; align-items: center; }
+.splash-logo {
+  width: calc(190 * var(--u)); height: calc(190 * var(--u));
+  opacity: 0; transform: scale(0.86);
+  transition: opacity 520ms var(--ease-out), transform 520ms var(--ease-out);
+}
+.splash-name {
+  font-size: calc(40 * var(--u)); font-weight: 700; letter-spacing: -0.02em; color: var(--text);
+  padding: calc(30 * var(--u)) 0 calc(8 * var(--u));
+  opacity: 0; transform: translateY(calc(14 * var(--u)));
+  transition: opacity 450ms var(--ease-out) 180ms, transform 450ms var(--ease-out) 180ms;
+}
+.splash-by {
+  font-size: calc(18 * var(--u)); font-weight: 500; color: var(--text2);
+  opacity: 0; transition: opacity 450ms var(--ease-std) 380ms;
+}
+.splash.go .splash-logo { opacity: 1; transform: none; }
+.splash.go .splash-name { opacity: 1; transform: none; }
+.splash.go .splash-by { opacity: 1; }
