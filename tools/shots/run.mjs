@@ -198,7 +198,37 @@ async function openDetail(page, type, id, setup = {}) {
 const SHOW = 8002; // fx.series[2]: 3 seasons, a trailer, S1E4 in progress from the seed
 const WATCHED = [[1, 0, 0, 2820000], [1, 1, 0, 2700000], [1, 2, 0, 2940000], [1, 3, 1220000, 2700000]]; // E1-E3 seen, E4 newest
 
-export const SCREENS = {
+export /** Home → the Search tab (OK), then into the box; optionally type a query and wait for it. */
+const openSearch = async (page, q) => {
+  await toHome(page);
+  await press(page, 'ArrowUp'); await press(page, 'ArrowRight', 4, 60); await press(page, 'Enter');
+  await page.waitForSelector('.search .s-box', { timeout: 8000 });
+  await wait(700); // OK on the tab opens Search with focus in the box (box.requestFocus())
+  await page.waitForSelector('.search .s-box:focus', { timeout: 8000 });
+  if (q) { await page.keyboard.type(q, { delay: 40 }); await wait(900); }
+  else await wait(300);
+};
+/** From the search box: ▼ to the chips (the nearest one, Movies), along to chip n, OK. */
+const pickChip = async (page, n) => {
+  await press(page, 'ArrowDown');
+  const at = await page.evaluate(() => Number(document.activeElement.dataset.chip));
+  await press(page, n < at ? 'ArrowLeft' : 'ArrowRight', Math.abs(n - at)); await press(page, 'Enter'); await wait(700);
+};
+/** Home → Settings (OK on the tab), then ▼ until the row with this key has focus. */
+const openSettings = async (page, key, already = false) => {
+  if (!already) await toHome(page);
+  await press(page, 'ArrowUp'); await press(page, 'ArrowRight', 5, 60); await press(page, 'Enter');
+  await page.waitForSelector('.settings-col .srow', { timeout: 8000 });
+  await wait(700);
+  if (await page.evaluate(() => !document.activeElement.classList.contains('srow'))) await press(page, 'ArrowDown');
+  for (let i = 0; key && i < 60; i++) {
+    if (await page.evaluate((k) => document.activeElement && document.activeElement.dataset.key === k, key)) break;
+    await press(page, 'ArrowDown', 1, 90);
+  }
+  await wait(600);
+};
+
+const SCREENS = {
   splash: { seed: false, steps: async () => { await wait(1000); } },
   login: { // first run: empty form, focus on the server field
     seed: false,
@@ -506,13 +536,139 @@ export const SCREENS = {
       await press(page, 'ArrowDown'); await wait(400);
     },
   },
-  settings: {
+  search: { // arrival: focus in the box, All picked, "Type to search everything"
+    seed: true,
+    steps: async (page) => { await openSearch(page); },
+  },
+  'search-all': { // All: a shelf per section, "Channels  ·  40+" / "Movies  ·  18" / "Series  ·  13"
+    seed: true,
+    steps: async (page) => { await openSearch(page, 'gold'); await press(page, 'Enter'); await wait(500); await press(page, 'ArrowRight', 2); await wait(400); },
+  },
+  'search-all-down': { // ... down to the Series shelf
+    seed: true,
+    steps: async (page) => { await openSearch(page, 'gold'); await press(page, 'Enter'); await wait(500); await press(page, 'ArrowDown', 2, 250); await press(page, 'ArrowRight'); await wait(500); },
+  },
+  'search-one': { // All, hits in one section only: that section as the full grid
+    seed: true,
+    steps: async (page) => { await openSearch(page, 'sky ne'); await press(page, 'Enter'); await wait(500); },
+  },
+  'search-live': { // the Live TV chip: channels as a grid (up to 120)
+    seed: true,
+    steps: async (page) => { await openSearch(page, 'gold'); await pickChip(page, 1); await press(page, 'ArrowDown', 2, 250); await wait(500); },
+  },
+  'search-movies': { // the Movies chip: posters as a grid
+    seed: true,
+    steps: async (page) => { await openSearch(page, 'gold'); await pickChip(page, 2); await press(page, 'ArrowDown'); await press(page, 'ArrowRight', 2); await wait(500); },
+  },
+  'search-series': { // the Series chip, focus still on the chip
+    seed: true,
+    steps: async (page) => { await openSearch(page, 'gold'); await pickChip(page, 3); },
+  },
+  'search-none': { // No results for "qzx"; Enter leaves the box for the Search tab
+    seed: true,
+    steps: async (page) => { await openSearch(page, 'qzx'); },
+  },
+  'search-short': { // one character: still "Type to search everything"
+    seed: true,
+    steps: async (page) => { await openSearch(page, 'g'); },
+  },
+  'search-fav': { // Hold OK on a result: favourite toggled, toast
+    seed: true,
+    steps: async (page) => { await openSearch(page, 'gold'); await press(page, 'Enter'); await wait(500); await press(page, 'ArrowDown'); await holdOk(page); await wait(400); },
+  },
+  'search-tour': { // the Search tour's second tip (the chips)
+    seed: true, coach: 'tour-browse',
+    steps: async (page) => { await openSearch(page); await page.waitForSelector('.coach', { timeout: 8000 }); await wait(700); await press(page, 'Enter'); await wait(700); },
+  },
+  'search-light': { // light theme
+    seed: true, light: true,
+    steps: async (page) => { await openSearch(page, 'gold'); await press(page, 'Enter'); await wait(500); },
+  },
+  settings: { // arrival: ACCOUNTS, focus on the first actionable row
+    seed: true, accounts: 2,
+    steps: async (page) => { await openSettings(page); },
+  },
+  'settings-appearance': { // Theme, Live TV Preview, Hide What You Don't Watch
+    seed: true,
+    steps: async (page) => { await openSettings(page, 'preview'); },
+  },
+  'settings-home': { // Customise Home Screen, one row switched Off
+    seed: true,
+    steps: async (page) => { await openSettings(page, 'home_fav_series'); await press(page, 'Enter'); await wait(300); },
+  },
+  'settings-subtitles': { // Size → Large, Colour → Yellow: the sample frame follows
+    seed: true,
+    steps: async (page) => {
+      await openSettings(page, 'sub_size'); await press(page, 'Enter'); await press(page, 'ArrowDown'); await press(page, 'Enter');
+      await press(page, 'ArrowDown', 3, 200); await wait(500); // on to Live Stream Format: the sample is in view
+    },
+  },
+  'settings-subtitles-bg': { // Background On at 50 %
+    seed: true,
+    steps: async (page) => {
+      await openSettings(page, 'sub_bg'); await press(page, 'Enter'); await press(page, 'ArrowDown'); await press(page, 'Enter', 3);
+      await press(page, 'ArrowDown', 2, 200); await wait(500);
+    },
+  },
+  'settings-opacity-toast': { // Background Opacity with Background off: "Turn Background on to see this"
+    seed: true,
+    steps: async (page) => { await openSettings(page, 'sub_opacity'); await press(page, 'Enter'); await wait(400); },
+  },
+  'settings-playback': { // Live Stream Format, Fix Frozen Video Automatically, User Agent
+    seed: true,
+    steps: async (page) => { await openSettings(page, 'auto_recover'); },
+  },
+  'settings-useragent': { // the User Agent dialog: message, field, Default / Cancel / Save
+    seed: true,
+    steps: async (page) => { await openSettings(page, 'user_agent'); await press(page, 'Enter'); await page.waitForSelector('.dialog-input', { timeout: 8000 }); await wait(400); },
+  },
+  'settings-useragent-save': { // ... ▼: on to Save
+    seed: true,
+    steps: async (page) => { await openSettings(page, 'user_agent'); await press(page, 'Enter'); await page.waitForSelector('.dialog-input', { timeout: 8000 }); await press(page, 'ArrowDown'); await wait(400); },
+  },
+  'settings-library': { // Refresh Automatically, Refresh Now ("Updated today at HH:mm"), Clear Watch History, Show Tutorial
+    seed: true,
+    steps: async (page) => { await openSettings(page, 'refresh_now'); },
+  },
+  'settings-clear': { // Clear Watch History: the toast
+    seed: true,
+    steps: async (page) => { await openSettings(page, 'clear_history'); await press(page, 'Enter'); await wait(400); },
+  },
+  'settings-about': { // the end of the list: Version and the credit
+    seed: true,
+    steps: async (page) => { await openSettings(page, 'tutorial'); await press(page, 'ArrowDown'); await wait(600); },
+  },
+  'settings-remove': { // Remove This Account: the confirm dialog
+    seed: true, accounts: 2,
+    steps: async (page) => { await openSettings(page, 'remove_account'); await press(page, 'Enter'); await page.waitForSelector('.dialog', { timeout: 8000 }); await wait(400); },
+  },
+  'settings-countries': { // Countries & Languages from its row
+    seed: true,
+    steps: async (page) => { await openSettings(page, 'countries'); await press(page, 'Enter'); await page.waitForSelector('.dialog .dialog-check', { timeout: 8000 }); await press(page, 'ArrowDown', 2); await wait(400); },
+  },
+  'settings-hidden': { // Hidden Categories from its row
     seed: true,
     steps: async (page) => {
       await toHome(page);
-      await press(page, 'ArrowUp'); await press(page, 'ArrowRight', 5, 60); await press(page, 'Enter');
-      await wait(700); await press(page, 'ArrowDown', 2); await wait(500);
+      await page.evaluate(async () => { const f = await import('/js/filters.js'); f.setHiddenTags(new Set(['FR'])); f.setCategoryHidden('movie', '205', true); });
+      await openSettings(page, 'hidden', true); await press(page, 'Enter'); await page.waitForSelector('.dialog .dialog-check', { timeout: 8000 }); await wait(400);
     },
+  },
+  'settings-offline': { // the provider is down: Subscription says so
+    seed: true, provider: { null: { status: 502 } },
+    steps: async (page) => { await openSettings(page); await wait(1200); },
+  },
+  'settings-light': { // light theme
+    seed: true, light: true,
+    steps: async (page) => { await openSettings(page, 'preview'); },
+  },
+  'settings-theme': { // OK on Theme: the app restarts at Home in the light theme
+    seed: true,
+    steps: async (page) => { await openSettings(page, 'theme'); await press(page, 'Enter'); await toHome(page); await wait(900); },
+  },
+  'settings-tutorial': { // Show Tutorial: back at Home with the tour running again
+    seed: true,
+    steps: async (page) => { await openSettings(page, 'tutorial'); await press(page, 'Enter'); await page.waitForSelector('.coach', { timeout: 8000 }); await wait(900); },
   },
   dialog: { // shared modal dialog over Home
     seed: true,
@@ -725,6 +881,13 @@ export async function shoot(names, { log = console.log } = {}) {
       } else if (scr.seed) {
         await seed(page, server.url, scr.coach || null);
         if (scr.light) await page.evaluate(() => localStorage.setItem('dark', 'false'));
+        if (scr.accounts === 2) { // a second saved account, for Settings → ACCOUNTS
+          await page.evaluate(async (server) => {
+            const st = await import('/js/store.js');
+            st.saveAccount({ ...st.newAccount(), name: '', server, user: 'guest', pass: 'guest', ua: '', ok: true });
+            st.setCurrent('');
+          }, server.url);
+        }
         await page.reload();
       } else {
         await page.evaluate(() => localStorage.clear()); await page.reload();
