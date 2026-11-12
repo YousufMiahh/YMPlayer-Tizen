@@ -28,16 +28,10 @@ beforeEach(() => {
 afterEach(() => { router.reset(); vi.useRealTimers(); });
 
 describe('keys gate', () => {
-  it('has no TMDB/YouTube keys in v1', () => {
-    expect(keys.hasTmdb()).toBe(false);
+  it('has no YouTube key in v1, and no TMDB gate at all (Top 10 needs no key)', () => {
     expect(keys.hasYoutube()).toBe(false);
-  });
-  it('home shares the gate: Top 10 stays hidden', async () => {
-    expect(homeRows.hasTmdb).toBe(keys.hasTmdb);
-    store.toggleFav({ type: 'movie', id: 'f', name: 'F' });
-    const rows = await homeRows.buildRows();
-    expect(rows.map((r) => r.key)).not.toContain('top_movies');
-    expect(rows.map((r) => r.key)).not.toContain('top_series');
+    expect(keys.hasTmdb).toBeUndefined();
+    expect(homeRows.REMOTE_ROWS.map((r) => r.key)).toEqual(['top_movies', 'top_series', 'new_movies', 'new_series']);
   });
 });
 
@@ -66,7 +60,6 @@ describe('ambient', () => {
     expect(new Set(seen).size).toBe(3);
     expect(seen[3]).toBe(seen[0]); // wraps around
     expect(seen.every((s) => s.startsWith('http://x/'))).toBe(true);
-    expect(keys.hasTmdb()).toBe(false);
     expect(api.streams).not.toHaveBeenCalled(); // enough cached artwork
   });
 

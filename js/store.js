@@ -8,8 +8,8 @@ export const HOME_KEYS = ['continue', 'recent', 'fav_live', 'fav_movie', 'fav_se
 
 export const HOME_NAMES = {
   continue: 'Continue Watching', recent: 'Recent Channels', fav_live: 'Favourite Channels',
-  fav_movie: 'Favourite Movies', fav_series: 'Favourite Series', top_movies: 'Top 10 Movies',
-  top_series: 'Top 10 Series', new_movies: 'Recently Added Movies', new_series: 'Recently Added Series',
+  fav_movie: 'Favourite Movies', fav_series: 'Favourite Series', top_movies: 'Top 10 Movies in the UK',
+  top_series: 'Top 10 Series in the UK', new_movies: 'Recently Added Movies', new_series: 'Recently Added Series',
 };
 
 const HISTORY_MAX = 40;

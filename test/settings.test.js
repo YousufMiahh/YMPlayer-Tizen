@@ -48,31 +48,18 @@ describe('settings view', () => {
     expect(store.liveFormat()).toBe('ts');
   });
 
-  it('Customise Home lists every HOME_KEYS row and toggling flips homeShows', () => {
+  it('Customise Home lists every HOME_KEYS row (Top 10 included, no key needed) and toggling flips homeShows', () => {
     addAccounts();
     router.go('settings');
     const keys = [...root.querySelectorAll('[data-home]')].map((b) => b.dataset.home);
-    expect(keys).toEqual(store.HOME_KEYS.filter((k) => k !== 'top_movies' && k !== 'top_series'));
+    expect(keys).toEqual(store.HOME_KEYS);
+    expect(store.HOME_NAMES.top_movies).toBe('Top 10 Movies in the UK');
+    expect(store.HOME_NAMES.top_series).toBe('Top 10 Series in the UK');
     expect(store.homeShows('fav_movie')).toBe(true);
     click('[data-home="fav_movie"]');
     expect(store.homeShows('fav_movie')).toBe(false);
     click('[data-home="fav_movie"]');
     expect(store.homeShows('fav_movie')).toBe(true);
-  });
-
-  it('Customise Home shows the Top 10 toggles only when a TMDB key exists', () => {
-    addAccounts();
-    router.go('settings');
-    expect(root.querySelector('[data-home="top_movies"]')).toBeNull();
-    expect(root.querySelector('[data-home="top_series"]')).toBeNull();
-    router.reset(); router.init(root);
-    router.register('settings', settingsView);
-    globalThis.YM_KEYS = { tmdb: 'k' };
-    try {
-      router.go('settings');
-      expect(root.querySelector('[data-home="top_movies"]')).not.toBeNull();
-      expect(root.querySelector('[data-home="top_series"]')).not.toBeNull();
-    } finally { delete globalThis.YM_KEYS; }
   });
 
   it('user-agent edits persist and are what the next api request will send', () => {
