@@ -1,6 +1,8 @@
 // The app's version, as config.xml declares it (test/config.test.js keeps the two in step).
 // Settings → About shows "YM Player {version}"; on a TV the installed package's own version wins.
-export const VERSION = '0.1.0';
+// 1.0.0 is a local / development build: the CI build stamps 1.0.<run number> into this file and
+// config.xml before packaging (tools/stamp-version.mjs, .github/workflows/build.yml).
+export const VERSION = '1.0.0';
 
 /** The installed version: tizen.application's appInfo, else VERSION. */
 export function appVersion() {

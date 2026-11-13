@@ -25,6 +25,11 @@ jobs:
           node-version: 20
           cache: npm
 
+      # Settings → About shows this: 1.0.<run number>, in config.xml (the package) and js/version.js.
+      # Stamped before the tests, which check that the two files agree.
+      - name: Stamp the build version
+        run: node tools/stamp-version.mjs "1.0.${{ github.run_number }}"
+
       - name: Run unit tests
         run: |
           npm ci

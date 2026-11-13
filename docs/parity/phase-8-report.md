@@ -31,7 +31,7 @@ This phase was taken over part-way. The Search rebuild and the start of Settings
 
 ## Could not be matched
 
-- **Version text.** Android shows its `versionName` (1.0.N). Tizen shows the package version from `tizen.application.getAppInfo()`, falling back to `js/version.js` (0.1.0, kept equal to config.xml by a test). The CI release number (`v<run>`) is not written into the package.
+- **Version text.** Android shows its `versionName` (1.0.N). Tizen shows the package version from `tizen.application.getAppInfo()`, falling back to `js/version.js` (kept equal to config.xml by a test). The CI build stamps `1.0.<run number>` into both before packaging (`tools/stamp-version.mjs`); a local build reads 1.0.0.
 - **Search focus after Enter.** Android closes the keyboard at once and the results land a moment later; here focus waits for the results so it can go to the first one. The end state is the same.
 - **Preview start buffer.** Android uses 0.3 s; AVPlay counts whole seconds, so 1 s. Check on a TV.
 - **Not verifiable here:** the Tizen IME's Done (65376) and Cancel (65385) keys in the search box and the User Agent dialog; `getAppInfo().version`.

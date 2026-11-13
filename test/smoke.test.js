@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { boot } from '../js/app.js';
 
@@ -41,8 +41,13 @@ describe('scaffold smoke test', () => {
     const xml = read('../config.xml');
     expect(xml).toMatch(/<access\s+origin="\*"/);
     expect(xml).toContain('required_version="7.0"');
-    for (const p of ['internet', 'tv.inputdevice', 'application.launch']) {
+    for (const p of ['internet', 'tv.inputdevice', 'tv.audio']) {
       expect(xml).toContain(`http://tizen.org/privilege/${p}`);
     }
+    // nothing launches another app (exit() needs no privilege): the privilege is not asked for
+    expect(xml).not.toContain('privilege/application.launch');
+    const files = (rel) => readdirSync(fileURLToPath(new URL(rel, import.meta.url)), { withFileTypes: true })
+      .flatMap((e) => (e.isDirectory() ? files(`${rel}/${e.name}`) : [`${rel}/${e.name}`]));
+    expect(files('../js').map(read).join('\n')).not.toMatch(/application\.launch|launchAppControl/);
   });
 });
