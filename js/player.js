@@ -13,10 +13,21 @@ import { shim } from './avplay-shim.js';
 export const AUDIO = 'AUDIO';
 export const TEXT = 'TEXT';
 
-/** Real `webapis.avplay` on a TV; the shim in tests / desktop browsers. */
+export const UNAVAILABLE = 'Video player unavailable on this TV';
+
+/**
+ * Real `webapis.avplay` on a TV; the shim only where there is no Tizen at all (tests / desktop
+ * browsers). On a TV without AVPlay (webapis.js did not load) there is no engine: null, never the
+ * shim, which would "play" nothing behind a black screen.
+ */
 export function getAvplay() {
-  return globalThis.webapis?.avplay ?? shim;
+  const av = globalThis.webapis && globalThis.webapis.avplay;
+  if (av) return av;
+  return globalThis.tizen ? null : shim;
 }
+
+/** False on a TV whose AVPlay is missing: nothing can be played. */
+export const available = () => getAvplay() !== null;
 
 const listeners = new Map();
 export function on(event, cb) {
@@ -113,6 +124,12 @@ function onCompleted(av, session) {
 export function open(item, { startMs = 0, format } = {}) {
   const av = getAvplay();
   if (s) stop();
+  if (!av) { // say so on screen (the player's error state) rather than fail silently
+    console.error('webapis.avplay is missing: was $WEBAPIS/webapis/webapis.js loaded?');
+    emit('buffering', false);
+    emit('error', { what: UNAVAILABLE, fatal: true });
+    return;
+  }
   const live = item.type === LIVE;
   s = {
     item, pos: live ? 0 : startMs, format: live ? (format || store.liveFormat()) : 'ts',

@@ -207,6 +207,22 @@ describe('live', () => {
     expect(opens()).toHaveLength(2);
     expect(view()._state().panel).toBe(null);
   });
+  it('the Channels list reads the favourites once per paint, not once per row', () => {
+    const many = Array.from({ length: 300 }, (_, i) => ({ type: 'live', id: String(1000 + i), name: `Ch ${i}`, num: String(i + 1) }));
+    store.toggleFav(many[2]);
+    live(0, many);
+    const reads = vi.spyOn(Storage.prototype, 'getItem');
+    const favReads = () => reads.mock.calls.filter((c) => String(c[0]).endsWith('fav_live')).length;
+    press(KEY.ENTER); // open the list
+    expect(favReads()).toBe(1);
+    const rows = [...document.querySelectorAll('.pl-channels .row-cell')];
+    expect(rows.length).toBeGreaterThan(5);
+    expect(rows[2].querySelector('.rc-trail').textContent).toBe('♥');
+    reads.mockClear();
+    for (let i = 0; i < 40; i++) down(KEY.DOWN); // scrolling draws new rows from the same set
+    expect(favReads()).toBe(0);
+    reads.mockRestore();
+  });
   it('in Channels: Hold OK (or Menu) toggles the favourite with the toast; no zap', () => {
     live(0);
     press(KEY.ENTER);
@@ -491,7 +507,7 @@ describe('films and episodes', () => {
     expect(store.position(MOVIE)).toBe(300000);
     expect(store.duration(MOVIE)).toBe(3600000);
   });
-  it('media keys: Play/Pause toggles, Play, Pause, FF/RW seek; Stop does nothing (as on Android)', () => {
+  it('media keys: Play/Pause toggles, Play, Pause, FF/RW seek; Stop leaves the player with the place saved', () => {
     vod([MOVIE]);
     shim.tick(60000);
     press(KEY.PLAY_PAUSE);
@@ -503,7 +519,16 @@ describe('films and episodes', () => {
     press(KEY.FAST_FORWARD);
     expect(shim.calls.at(-1)).toEqual({ name: 'seekTo', args: [70000] });
     press(KEY.STOP);
-    expect(router.current().name).toBe('player-vod');
+    expect(router.current().name).toBe('home');
+    expect(shim.names().slice(-2)).toEqual(['stop', 'close']);
+    expect(store.position(MOVIE)).toBe(70000); // resumes from here next time
+  });
+  it('Stop also leaves from the Channels list of a live channel', () => {
+    live(0);
+    press(KEY.ENTER);
+    expect(view()._state().panel).toBe('channels');
+    press(KEY.STOP);
+    expect(router.current().name).toBe('home');
   });
   it('a film ending goes back; an episode with a next one in the queue plays it', () => {
     vod(EPS, 0);
@@ -532,6 +557,36 @@ describe('films and episodes', () => {
     press(KEY.ENTER);
     expect(opens()).toHaveLength(4);
     expect($('.pl-error').hidden).toBe(true);
+  });
+  it('a TV without AVPlay: the error state says so at once, no retries, never the shim', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    globalThis.tizen = {}; delete globalThis.webapis; // webapis.js did not load
+    try {
+      vod([MOVIE]);
+      expect($('.pl-error').hidden).toBe(false);
+      expect(txt('.pl-error')).toBe('Video player unavailable on this TV\n\nBack  Exit');
+      expect($('.pl-spinner').hidden).toBe(true);
+      later(10000);
+      expect(shim.calls).toEqual([]);
+      press(KEY.ENTER); // OK tries again and says the same
+      expect(txt('.pl-error')).toContain('Video player unavailable on this TV');
+      press(KEY.BACK);
+      expect(router.current().name).toBe('home');
+    } finally { delete globalThis.tizen; console.error.mockRestore(); }
+  });
+  it('the screen saver comes back however the player is left, also when a film ends by itself', () => {
+    const setScreenSaver = vi.fn();
+    const ON = 1; const OFF = 0;
+    const leave = [() => shim.complete(), () => press(KEY.STOP), () => { press(KEY.BACK); press(KEY.BACK); }];
+    for (const go of leave) {
+      globalThis.webapis = { avplay: shim, appcommon: { setScreenSaver, AppCommonScreenSaverState: { SCREEN_SAVER_ON: ON, SCREEN_SAVER_OFF: OFF } } };
+      setScreenSaver.mockClear();
+      vod([MOVIE]);
+      expect(setScreenSaver.mock.calls).toEqual([[OFF]]);
+      go();
+      expect(router.current().name).toBe('home');
+      expect(setScreenSaver.mock.calls).toEqual([[OFF], [ON]]);
+    }
   });
   it('freeze watchdog for a film re-seeks to where it is', () => {
     vod([MOVIE]);

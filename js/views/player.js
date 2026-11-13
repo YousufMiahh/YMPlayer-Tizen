@@ -105,6 +105,7 @@ export function playerView() {
   let center; let banner; let liveLogo; let liveNum; let liveName; let liveNow; let liveTime; let liveBar; let liveNext;
   let spinner; let errorEl; let statusEl; let nextCard; let subs;
   let chSheet; let chList; let chGlider; let playingId = null; let trSheet; let trList;
+  let favIds = new Set(); // the favourite channels, read once per paint of the Channels list
   // state
   let liveFormat = store.liveFormat();
   let retries = 0; let triedAltFormat = false; let firstStart = true;
@@ -224,7 +225,7 @@ export function playerView() {
 
   function channelCell(i, cell) {
     const it = queue[i];
-    let trail = store.isFav(it) ? '♥' : '';
+    let trail = favIds.has(String(it.id)) ? '♥' : '';
     const playing = playingId != null && String(playingId) === String(it.id);
     if (playing) trail = '▶';
     if (cell && cell.dataset.id === String(it.id)) {
@@ -312,7 +313,14 @@ export function playerView() {
     router.back();
   }
 
-  function onError({ what } = {}) {
+  function onError({ what, fatal } = {}) {
+    if (fatal) { // no video engine on this TV: retrying or another format cannot help
+      cancel('retry');
+      errorEl.textContent = `${what}\n\nBack  Exit`;
+      errorEl.hidden = false;
+      spinner.hidden = true;
+      return;
+    }
     if (retries < 2) {
       retries++;
       status('Reconnecting…');
@@ -441,6 +449,7 @@ export function playerView() {
   function openChannels() {
     fade(banner, false);
     playingId = current().id;
+    favIds = store.favIds(LIVE);
     chList.setCount(queue.length);
     chSheet.open();
     chList.relayout();
@@ -462,6 +471,7 @@ export function playerView() {
     if (pos < 0 || pos >= queue.length) return;
     const it = queue[pos];
     toast(favToast(store.toggleFav(it), it));
+    favIds = store.favIds(LIVE);
     chList.refresh();
     chGlider.refresh();
   }
@@ -744,6 +754,10 @@ export function playerView() {
     const okKey = k === KEY.ENTER;
     const done = () => { e.preventDefault(); return true; };
 
+    // ■ Stop leaves the player from wherever it is (a panel, scrubbing, the error text): the
+    // place is saved as the screen closes (player.stop() in unmount), like Back at the top level.
+    if (k === KEY.STOP) { if (!repeat) router.back(); return done(); }
+
     // Next episode card: ◀ ▶ between its two buttons, OK presses (on release)
     if (nextShown && !panelOpen() && !scrubbing) {
       if (k === KEY.LEFT || k === KEY.RIGHT) { (k === KEY.LEFT ? nextCard.credits : nextCard.next).focus(); return done(); }
@@ -920,10 +934,10 @@ export function playerView() {
     onKey: onKeyDown,
     onBack: () => back(),
     unmount() {
-      const was = alive;
       alive = false;
       stopTickers();
       cancelCoach();
+      coach.dismiss();
       for (const k of Object.keys(timers)) clearTimeout(timers[k]);
       for (const t of fadeTimers.values()) clearTimeout(t);
       clearTimeout(rebuildTimer);
@@ -940,7 +954,9 @@ export function playerView() {
       if (av) av.hidden = true;
       document.body.classList.remove('video-on');
       document.documentElement.classList.remove('video-on');
-      if (was) screenSaver(true);
+      // Always, however the player was left: a film that ends by itself has already cleared
+      // `alive` (finish()), and the TV must not be left with its screen saver switched off.
+      screenSaver(true);
       root = host = null;
     },
     // for tests

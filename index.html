@@ -17,6 +17,9 @@
 <body>
   <object id="av" type="application/avplayer" hidden></object>
   <div id="root"></div>
+  <!-- Samsung's product APIs (webapis.avplay = the video player). The TV serves this path itself;
+       it must load before the app (a classic script, so it runs ahead of the module below). -->
+  <script src="$WEBAPIS/webapis/webapis.js"></script>
   <script type="module">
     import { boot } from './js/app.js';
     boot(document.getElementById('root'));

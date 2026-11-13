@@ -3,6 +3,7 @@ import { router } from './router.js';
 import * as nav from './nav.js';
 import * as store from './store.js';
 import * as repo from './repo.js';
+import { restoreTvMute } from './live-preview.js';
 import { applyTheme } from './ui/theme.js';
 import * as backdrop from './ui/backdrop.js';
 import { isSection, prepareBack } from './ui/topbar.js';
@@ -41,6 +42,7 @@ export const views = {
 /** Back with nothing beneath (Home, or the first Login): close the app like Android's finish(). */
 export function exitApp() {
   const t = globalThis.tizen;
+  restoreTvMute(); // a muted preview must not outlive the app
   try {
     if (t && t.application && typeof t.application.getCurrentApplication === 'function') {
       t.application.getCurrentApplication().exit();
@@ -53,6 +55,7 @@ export function exitApp() {
 // Returns a dispose function that removes the global listeners.
 export function boot(rootEl) {
   applyTheme(store.dark());
+  restoreTvMute(); // the app died last time with the TV muted for a preview: give the sound back
   if (globalThis.document && document.body) backdrop.install(document.body);
   router.init(rootEl, { onExit: exitApp });
   for (const [name, factory] of Object.entries(views)) router.register(name, factory);
@@ -69,14 +72,24 @@ export function boot(rootEl) {
     if (cur && isSection(cur.name) && cur.name !== 'home') prepareBack();
     router.back();
   };
+  // Hidden (Home key, another source) or closing: the TV gets its sound back whatever the screen
+  // was doing. (The Live TV screen restarts its preview, and mutes again, when the app returns.)
+  const onHidden = () => { if (document.hidden) restoreTvMute(); };
+  const onLeave = () => { restoreTvMute(); };
   document.addEventListener('keydown', onKeydown);
   document.addEventListener('back', onBack);
+  document.addEventListener('visibilitychange', onHidden);
+  window.addEventListener('pagehide', onLeave);
+  window.addEventListener('beforeunload', onLeave);
 
   router.go('splash');
 
   return () => {
     document.removeEventListener('keydown', onKeydown);
     document.removeEventListener('back', onBack);
+    document.removeEventListener('visibilitychange', onHidden);
+    window.removeEventListener('pagehide', onLeave);
+    window.removeEventListener('beforeunload', onLeave);
     router.reset();
   };
 }

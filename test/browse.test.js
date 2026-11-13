@@ -555,6 +555,7 @@ describe('Live TV info panel and preview', () => {
     store.setPreviewMode(1);
     let muted = false;
     globalThis.tizen = { tvaudiocontrol: { isMute: () => muted, setMute: vi.fn((m) => { muted = m; }) } };
+    globalThis.webapis = { avplay: shim }; // a TV: the real player is there
     router.init(root);
     await open('live');
     press(K.DOWN); press(K.DOWN); press(K.DOWN); press(K.DOWN);

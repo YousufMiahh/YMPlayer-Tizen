@@ -62,6 +62,11 @@ export function startServer(port = 0) {
     };
     try {
       if (url.pathname === '/favicon.ico') { send(204, 'text/plain', ''); return; }
+      // index.html loads Samsung's product APIs from a path only a TV serves: nothing to run here.
+      if (decodeURIComponent(url.pathname) === '/$WEBAPIS/webapis/webapis.js') {
+        send(200, MIME['.js'], '/* webapis.js: only on a Samsung TV */');
+        return;
+      }
       if (url.pathname === '/player_api.php') {
         // Providers return absolute artwork URLs; mirror that so the app fetches them like real ones.
         const b = behaviour[url.searchParams.get('action')] || {};

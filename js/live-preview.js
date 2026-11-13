@@ -26,6 +26,40 @@ export function holeMask(w, h, r, radius) {
 
 const round = (v) => Math.round(v * 100) / 100;
 
+// ------------------------------------------------------------ the TV's own mute
+//
+// A muted preview mutes the whole TV (AVPlay has no volume of its own). The app must never leave
+// the TV muted behind it: MUTE_FLAG records, on the TV's storage, that it was the app that muted,
+// so the sound comes back when the preview stops, when the app is hidden or closed, and, if the
+// app died before it could, the next time it starts.
+export const MUTE_FLAG = 'preview_muted_tv';
+const flag = {
+  get() { try { return globalThis.localStorage.getItem(MUTE_FLAG) === 'true'; } catch { return false; } },
+  set(on) { try { if (on) globalThis.localStorage.setItem(MUTE_FLAG, 'true'); else globalThis.localStorage.removeItem(MUTE_FLAG); } catch { /* no storage */ } },
+};
+const audio = () => (globalThis.tizen && globalThis.tizen.tvaudiocontrol) || null;
+
+/** Mute the TV for a muted preview (a TV the viewer muted themselves is left alone). */
+export function muteTv() {
+  const ac = audio();
+  if (!ac) return;
+  try {
+    if (ac.isMute()) return;
+    flag.set(true); // before the call: if the app dies right after it, the next launch still knows
+    ac.setMute(true);
+  } catch { flag.set(false); /* no audio control on this device */ }
+}
+
+/** Give the sound back if the app took it. Safe to call at any time. @returns true if it unmuted. */
+export function restoreTvMute() {
+  if (!flag.get()) return false;
+  const ac = audio();
+  if (!ac) { flag.set(false); return false; }
+  try { ac.setMute(false); } catch { return false; } // still flagged: tried again at the next chance
+  flag.set(false);
+  return true;
+}
+
 /**
  * @param o.box       the logo / preview box (its rect is where the video goes)
  * @param o.logo      the artwork layer over the video (fades out once it plays)
@@ -34,16 +68,12 @@ const round = (v) => Math.round(v * 100) / 100;
  * @param o.realVideo true when a real AVPlay draws the picture (default: webapis.avplay exists)
  */
 export function createPreview(o) {
-  let timer = null; let item = null; let opened = false; let seq = 0; let mutedByUs = false;
+  let timer = null; let item = null; let opened = false; let seq = 0;
   const realVideo = () => (o.realVideo !== undefined ? o.realVideo : !!globalThis.webapis?.avplay);
   const avEl = () => document.getElementById('av');
 
   function setMute(on) {
-    const ac = globalThis.tizen && globalThis.tizen.tvaudiocontrol;
-    if (!ac) return;
-    try {
-      if (on && !ac.isMute()) { ac.setMute(true); mutedByUs = true; } else if (!on && mutedByUs) { ac.setMute(false); mutedByUs = false; }
-    } catch { /* no audio control on this device */ }
+    if (on) muteTv(); else restoreTvMute();
   }
 
   function punch(on) {
@@ -82,6 +112,7 @@ export function createPreview(o) {
     if (!opened) return;
     opened = false;
     const av = getAvplay();
+    if (!av) return;
     try { av.stop(); } catch { /* already idle */ }
     try { av.close(); } catch { /* already closed */ }
     const el = avEl();
@@ -104,6 +135,7 @@ export function createPreview(o) {
       const my = ++seq;
       showLogo();
       const av = getAvplay();
+      if (!av) return; // a TV without AVPlay: the artwork stays (the full-screen player says why)
       try {
         av.open(api.playUrl(it, store.liveFormat()));
         opened = true;
@@ -143,7 +175,7 @@ export function createPreview(o) {
     relayout() {
       if (!opened) return;
       const r = o.box.getBoundingClientRect();
-      try { getAvplay().setDisplayRect(Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)); } catch { /* not ready */ }
+      try { const av = getAvplay(); if (av) av.setDisplayRect(Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)); } catch { /* not ready */ }
       if (document.documentElement.classList.contains('preview-on')) punch(true);
     },
     /** releasePreview: before the full-screen player starts, or when leaving. */
