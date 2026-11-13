@@ -115,9 +115,18 @@ export function createEpgGrid(o) {
   let windowStart = 0; let cursor = 0; let tick = null; let hold = null;
   let paintedFocus = null;
 
-  const size = () => {
+  // The stage size is asked for (and may be measured from the page) once per redraw or key
+  // press, not once per row: every row of one paint is laid out against the same numbers.
+  let frame = null;
+  const measure = () => {
     const s = o.size ? o.size() : null;
     return { w: (s && s.w) || el.clientWidth || 1920 - u(96), h: (s && s.h) || el.clientHeight || 0 };
+  };
+  const size = () => frame || measure();
+  const once = (fn) => {
+    if (frame) return fn();
+    frame = measure();
+    try { return fn(); } finally { frame = null; }
   };
   const perSec = () => (size().w - GRID_X) / WINDOW;
   const visibleRows = () => Math.max(1, Math.floor((size().h - HEADER_H) / Math.max(1, rowH)));
@@ -248,15 +257,18 @@ export function createEpgGrid(o) {
     } else nowEl.hidden = true;
   }
 
-  function scrollTo(animate) {
+  /** @param defer a redraw follows at once: it draws the rows (one paint, not two) */
+  function scrollTo(animate, defer = false) {
     vlist.body.style.transition = animate ? `transform ${SCROLL_MS}ms var(--ease-out)` : 'none';
-    vlist.select(sel, { scroll: (sel - top) * rowH, silent: true });
+    vlist.select(sel, { scroll: (sel - top) * rowH, silent: true, defer });
   }
 
   function redraw() {
-    paintedFocus = focused();
-    drawHeader();
-    vlist.refresh();
+    once(() => {
+      paintedFocus = focused();
+      drawHeader();
+      vlist.refresh();
+    });
   }
 
   function startTick() {
@@ -267,14 +279,16 @@ export function createEpgGrid(o) {
   // ------------------------------------------------------------ keys
 
   function moveRow(to) {
-    sel = to;
-    const newTop = scrollTop(sel, top, visibleRows(), channels.length);
-    const moved = newTop !== top;
-    top = newTop;
-    scrollTo(moved);
-    if (moved) requestListings();
-    highlight();
-    redraw();
+    once(() => {
+      sel = to;
+      const newTop = scrollTop(sel, top, visibleRows(), channels.length);
+      const moved = newTop !== top;
+      top = newTop;
+      scrollTo(moved, true);
+      if (moved) requestListings();
+      highlight();
+      redraw();
+    });
   }
 
   const KEY = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, ENTER: 13, CH_UP: 427, CH_DOWN: 428, MENU: 10133, INFO: 457 };
@@ -358,10 +372,12 @@ export function createEpgGrid(o) {
       el.style.setProperty('--row-h', `${rowH}px`);
       vlist.setPitch(rowH);
       vlist.setCount(channels.length);
-      scrollTo(false);
-      requestListings();
-      highlight();
-      redraw();
+      once(() => {
+        scrollTo(false, true);
+        requestListings();
+        highlight();
+        redraw();
+      });
       startTick();
     },
     selected: () => sel,
@@ -371,7 +387,7 @@ export function createEpgGrid(o) {
     /** New listings arrived: redraw, and refresh the details if the highlighted channel's came in. */
     listingsChanged() { highlight(); redraw(); },
     /** The guide's size changed (layout). */
-    relayout() { vlist.relayout(); scrollTo(false); requestListings(); redraw(); },
+    relayout() { vlist.relayout(); once(() => { scrollTo(false, true); requestListings(); redraw(); }); },
     redraw,
     focus() { el.focus({ preventScroll: true }); redraw(); },
     hasFocus: () => document.activeElement === el,

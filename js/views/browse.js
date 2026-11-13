@@ -986,6 +986,7 @@ export function browseView(type) {
       if (hold) clearTimeout(hold.timer);
       hold = null;
       if (cancelTour) cancelTour();
+      coach.dismiss();
       if (preview) preview.release(); // the full-screen player gets the connection
       off.forEach((f) => f()); off.length = 0;
       if (catGlider) catGlider.destroy();

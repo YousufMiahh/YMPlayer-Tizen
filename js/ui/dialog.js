@@ -6,6 +6,21 @@ export const KEY = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, ENTER: 13, BACK: 100
 
 let openCount = 0;
 export const isOpen = () => openCount > 0;
+const stack = []; // open dialogs' scrims, the newest last: only that one takes the keys
+
+// Whether OK is being held right now. A dialog opened while it is down (Hold OK on a card, a
+// channel, a guide row…) must not take that same press as its answer: some remotes send the
+// held key as fresh keydowns (no `repeat` flag), so the dialog waits for the key to come up.
+// Tracked here, ahead of every other key listener, so a view or overlay that stops the event
+// cannot hide it. Losing the window (Home key mid-press) counts as letting go.
+let okDown = false;
+if (typeof window !== 'undefined') {
+  window.addEventListener('keydown', (e) => { if (e.keyCode === KEY.ENTER) okDown = true; }, true);
+  window.addEventListener('keyup', (e) => { if (e.keyCode === KEY.ENTER) okDown = false; }, true);
+  window.addEventListener('blur', () => { okDown = false; });
+}
+/** Tests: forget a key that was pressed and never released. */
+export const _resetKeys = () => { okDown = false; };
 
 /**
  * @param o.title     string
@@ -116,13 +131,18 @@ export function showDialog(o = {}) {
 
   let done; const result = new Promise((r) => { done = r; });
   let closed = false;
+  let waitForOkUp = okDown; // opened by a press that is still down: ignore OK until it is released
+  const onKeyUp = (e) => { if (e.keyCode === KEY.ENTER) waitForOkUp = false; };
   const root = document.getElementById('root');
 
   function close(value = null) {
     if (closed) return;
     closed = true;
     openCount--;
+    const at = stack.indexOf(scrim);
+    if (at >= 0) stack.splice(at, 1);
     window.removeEventListener('keydown', onKey, true);
+    window.removeEventListener('keyup', onKeyUp, true);
     scrim.classList.remove('on');
     scrim.remove();
     if (root && openCount === 0) root.removeAttribute('inert');
@@ -146,7 +166,13 @@ export function showDialog(o = {}) {
 
   function onKey(e) {
     const k = e.keyCode;
+    if (stack[stack.length - 1] !== scrim || !scrim.isConnected) return; // a dialog on top of this one has the keys
     const i = targets.indexOf(document.activeElement);
+    // Modal: whatever the key, the screen underneath never sees it (media keys, Menu, CH+/−, the
+    // colour keys…). Typing in the dialog's own field still works: stopping the event here does
+    // not stop the browser's own handling of it, only preventDefault below would.
+    e.stopImmediatePropagation();
+    if (k === KEY.ENTER && waitForOkUp) { e.preventDefault(); return; } // the press that opened it
     if (field && document.activeElement === field) {
       if (k === KEY.LEFT || k === KEY.RIGHT || (k >= 32 && k <= 126 && k !== KEY.UP && k !== KEY.DOWN && k !== KEY.ENTER)) return; // the caret / typing
       if (k === KEY.BACK || k === KEY.ESC || k === KEY.IME_CANCEL) close(null);
@@ -155,10 +181,9 @@ export function showDialog(o = {}) {
         if (last && last !== field) { field.blur(); last.focus(); }
       } else if (k !== KEY.UP) return;
       e.preventDefault();
-      e.stopImmediatePropagation();
       return;
     }
-    if (field && !vertical && k === KEY.UP && i > 0) { field.focus(); e.preventDefault(); e.stopImmediatePropagation(); return; }
+    if (field && !vertical && k === KEY.UP && i > 0) { field.focus(); e.preventDefault(); return; }
     const step = (d) => { const t = targets[Math.max(0, Math.min(targets.length - 1, (i < 0 ? 0 : i) + d))]; if (t) t.focus(); };
     if (k === KEY.BACK || k === KEY.ESC) close(null);
     else if (k === KEY.ENTER) { if (!e.repeat && i >= 0 && targets[i] !== field) pick(targets[i]); else if (i < 0 && targets[0]) targets[0].focus(); }
@@ -170,7 +195,6 @@ export function showDialog(o = {}) {
       if (t && t.classList.contains('dialog-button')) step(k === KEY.RIGHT ? 1 : -1);
     } else if (!vertical && (k === KEY.UP || k === KEY.DOWN)) { /* stay */ } else return;
     e.preventDefault();
-    e.stopImmediatePropagation();
   }
 
   box.addEventListener('click', (e) => {
@@ -180,8 +204,10 @@ export function showDialog(o = {}) {
 
   document.body.appendChild(scrim);
   openCount++;
+  stack.push(scrim);
   if (root) root.setAttribute('inert', '');
   window.addEventListener('keydown', onKey, true);
+  window.addEventListener('keyup', onKeyUp, true);
   void scrim.offsetWidth;
   scrim.classList.add('on');
 

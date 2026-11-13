@@ -206,7 +206,7 @@ describe('listings (Guide.java)', () => {
     api.epg.mockImplementation(async () => { await gate; return [P(T0, T0 + 60, 'x')]; });
     const done = vi.fn();
     Guide.load([CH(1), CH(2), CH(3), CH(4), CH(5)], done);
-    Guide.load([CH(1), CH(2)], done); // already on the way
+    Guide.load([CH(1), CH(2), CH(3), CH(4), CH(5)], done); // already on the way
     await settle();
     expect(api.epg).toHaveBeenCalledTimes(3);
     expect(api.epg.mock.calls.every((c) => c[1] === 24)).toBe(true);
@@ -224,6 +224,47 @@ describe('listings (Guide.java)', () => {
     Guide.load([CH(1)], done);
     await settle();
     expect(api.epg).toHaveBeenCalledTimes(6); // stale after 30 min
+  });
+  it('the newest request is served first, and queued channels no longer in view are dropped', async () => {
+    const gates = [];
+    api.epg.mockImplementation((id) => new Promise((r) => { gates.push(() => r([P(T0, T0 + 60, `p${id}`)])); }));
+    const asked = () => api.epg.mock.calls.map((c) => c[0]);
+    Guide.load([CH(1), CH(2), CH(3), CH(4), CH(5), CH(6)]); // 1-3 start, 4-6 wait
+    await settle();
+    expect(asked()).toEqual(['1', '2', '3']);
+    Guide.load([CH(6), CH(7), CH(8)]); // scrolled on: 4 and 5 are gone, 6 is still wanted
+    expect(Guide._state().queued).toEqual(['7', '8', '6']);
+    expect(Guide._state().loading.some((k) => k.endsWith('|4') || k.endsWith('|5'))).toBe(false);
+    gates.splice(0).forEach((g) => g());
+    await settle();
+    expect(asked()).toEqual(['1', '2', '3', '7', '8', '6']); // the rows on screen now, before the older one
+    gates.splice(0).forEach((g) => g());
+    await settle();
+    expect(Guide.get('4')).toBeNull(); // dropped, not fetched
+    expect(Guide.get('8')[0].title).toBe('p8');
+    Guide.load([CH(4)]); // back in view: asked for again
+    await settle();
+    expect(asked()).toEqual(['1', '2', '3', '7', '8', '6', '4']);
+  });
+  it('listings are kept per account, and clear() forgets them (account switch / remove / login)', async () => {
+    const first = store.newAccount(); Object.assign(first, { server: 'http://a', user: 'u', pass: 'p', ok: true }); store.saveAccount(first);
+    const second = store.newAccount(); Object.assign(second, { server: 'http://b', user: 'u', pass: 'p', ok: true }); store.saveAccount(second);
+    store.setCurrent(first.id);
+    api.epg.mockImplementation(async () => [P(T0, T0 + 60, `on ${store.server()}`)]);
+    Guide.load([CH(1)]);
+    await settle();
+    expect(Guide.get('1')[0].title).toBe('on http://a');
+    store.setCurrent(second.id); // same stream id, another provider
+    expect(Guide.get('1')).toBeNull();
+    Guide.load([CH(1)]);
+    await settle();
+    expect(api.epg).toHaveBeenCalledTimes(2);
+    expect(Guide.get('1')[0].title).toBe('on http://b');
+    store.setCurrent(first.id);
+    expect(Guide.get('1')[0].title).toBe('on http://a');
+    Guide.clear();
+    expect(Guide.get('1')).toBeNull();
+    expect(Guide._state().cached).toEqual([]);
   });
   it('a failed request is kept as "no listings"', async () => {
     api.epg.mockRejectedValueOnce(new Error('x'));
@@ -397,7 +438,35 @@ describe('the TV guide in Live TV', () => {
     const before = api.epg.mock.calls.length;
     for (let i = 0; i < 30; i++) press(K.UP);
     await settle();
-    expect(api.epg.mock.calls.filter((c) => c[1] === 24).length).toBe(before - api.epg.mock.calls.filter((c) => c[1] !== 24).length); // cached: nothing new
+    // rows that were fetched are cached; rows passed too quickly to be fetched were dropped from
+    // the queue and are only asked for now that they are in view again: never the same one twice
+    const all = api.epg.mock.calls.filter((c) => c[1] === 24).map((c) => c[0]);
+    expect(all.length).toBe(new Set(all).size);
+    expect(before).toBeGreaterThan(0);
+  });
+
+  it('one redraw or row move asks for the stage size once, not once per row', async () => {
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    const size = vi.fn(() => ({ w: 1400, h: 800 }));
+    const grid = G.createEpgGrid({ el, size, listener: {} });
+    grid.setChannels(BIG.slice(0, 200), 0, 0, 72);
+    expect(el.querySelectorAll('.g-row').length).toBeGreaterThan(8);
+    size.mockClear();
+    grid.redraw();
+    expect(size).toHaveBeenCalledTimes(1);
+    for (const k of [K.DOWN, K.DOWN, K.RIGHT, K.UP]) {
+      size.mockClear();
+      grid.onKey(ev(k));
+      expect(size).toHaveBeenCalledTimes(1);
+    }
+    size.mockClear();
+    const paints = vi.spyOn(grid.vlist, 'refresh');
+    for (let i = 0; i < 12; i++) grid.onKey(ev(K.DOWN)); // scrolls: each move is one paint
+    expect(paints).toHaveBeenCalledTimes(12);
+    expect(size).toHaveBeenCalledTimes(12);
+    expect(el.querySelector('.g-row.sel').dataset.ch).toBe(String(1000 + 13));
+    grid.destroy(); el.remove();
   });
 
   it('the now line and clock tick every 30 s', async () => {

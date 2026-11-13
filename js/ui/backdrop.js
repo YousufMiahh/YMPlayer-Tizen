@@ -13,6 +13,7 @@ export const SECTION_COLORS = {
 };
 export const FALLBACK = 0x3A3F52; // ImageLoader.average() when nothing usable is found
 export const FADE_MS = 700;
+export const TINT_DELAY_MS = 200; // tint() waits this long for focus to rest before touching the image
 const LRU_MAX = 600;
 
 // ------------------------------------------------------------ colour maths (pure, tested)
@@ -190,6 +191,7 @@ export function install(parent = document.body) {
 export function uninstall() {
   if (host) host.remove();
   host = layerA = layerB = null;
+  cancelTint();
   from = to = lastUrl = null;
 }
 
@@ -220,34 +222,55 @@ function animateTo(target) {
   paint(from, target);
 }
 
+let tintTimer = null; let tintDone = null;
+/** Drop a tint that is still waiting (its promise resolves; nothing is fetched or painted). */
+function cancelTint() {
+  clearTimeout(tintTimer); tintTimer = null;
+  const d = tintDone; tintDone = null;
+  if (d) d();
+}
+
 /** Switch to a section's resting colour, fading from whatever is showing (Ambient hand-off). */
 export function setSection(section) {
   base = SECTION_COLORS[section] ?? SECTION_COLORS.home;
-  lastUrl = null;
+  lastUrl = null; cancelTint();
   animateTo(tone(base));
 }
 
-/** Fade towards the main colour of this artwork (Ambient.tint). Unreadable art leaves it as is. */
-export async function tint(url) {
-  if (!url || url === lastUrl) return;
+/**
+ * Fade towards the main colour of this artwork (Ambient.tint). Unreadable art leaves it as is.
+ * Debounced: holding a direction key passes many cards, and only the one focus rests on has its
+ * image fetched, decoded and faded to. Resolves once this request is applied or superseded.
+ */
+export function tint(url) {
+  if (!url || url === lastUrl) return Promise.resolve();
   lastUrl = url;
-  const c = await colorOf(url);
-  if (c === null || lastUrl !== url) return; // failed (Android: no change) or superseded
-  animateTo(tone(c));
+  cancelTint();
+  return new Promise((resolve) => {
+    tintDone = resolve;
+    tintTimer = setTimeout(async () => {
+      tintTimer = null; tintDone = null;
+      if (lastUrl === url) {
+        const c = await colorOf(url);
+        if (c !== null && lastUrl === url) animateTo(tone(c)); // else failed (Android: no change) or superseded
+      }
+      resolve();
+    }, TINT_DELAY_MS);
+  });
 }
 
 /** Fade back to a fixed colour (Ambient.tintColor). */
 export function tintColor(c) {
-  lastUrl = null;
+  lastUrl = null; cancelTint();
   animateTo(tone(c));
 }
 
 /** Theme changed: repaint with the new BG and tone rules. */
 export function retheme() {
-  lastUrl = null;
+  lastUrl = null; cancelTint();
   from = null; to = null;
   animateTo(tone(base));
 }
 
 export const section = () => Object.keys(SECTION_COLORS).find((k) => SECTION_COLORS[k] === base);
-export const _reset = () => { cache.clear(); failed.clear(); from = to = lastUrl = null; base = SECTION_COLORS.home; };
+export const _reset = () => { cancelTint(); cache.clear(); failed.clear(); from = to = lastUrl = null; base = SECTION_COLORS.home; };

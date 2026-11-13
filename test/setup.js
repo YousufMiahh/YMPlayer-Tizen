@@ -12,4 +12,7 @@ beforeEach(async () => {
   home._reset();
   const coach = await import('../js/ui/coach.js');
   coach._reset();
+  // Tests press OK without releasing it; a real remote always sends the key-up.
+  const dialog = await import('../js/ui/dialog.js');
+  dialog._resetKeys();
 });

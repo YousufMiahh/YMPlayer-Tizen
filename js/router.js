@@ -1,6 +1,7 @@
 // Minimal stack router. One view is mounted in the root at a time.
 // Back at depth 1 emits an `exit` CustomEvent on the root (and calls onExit; the app exits there).
 import { isView } from './view.js';
+import * as coach from './ui/coach.js';
 
 export function createRouter() {
   const factories = new Map();
@@ -33,6 +34,7 @@ export function createRouter() {
     const view = top.view;
     top.view = null;
     try { view.unmount(); } catch (err) { console.error(`View "${top.name}" unmount failed`, err); }
+    coach.dismiss(); // whatever the view did (or threw): its tutorial overlay goes with it
     root.replaceChildren();
   }
 

@@ -393,7 +393,7 @@ export function homeView() {
     unmount() {
       if (screen) { rememberFocus(); memo.scrollTop = screen.scrollTop; }
       mounted = null;
-      cancelTour(); coach.back();
+      cancelTour(); coach.dismiss();
       timers.forEach(clearTimeout); timers = [];
       clearInterval(tick); tick = null;
       clearTimeout(holdTimer); holdTimer = null; held = false; holdCard = null;

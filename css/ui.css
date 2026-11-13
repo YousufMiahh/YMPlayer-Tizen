@@ -63,6 +63,9 @@ body.video-on #backdrop { display: none; }
 }
 .pill-input::placeholder { color: var(--text3); }
 .pill-input:focus { background: var(--focus-bg); color: var(--on-focus); }
+/* The hint on the focused (white / near-black) pill: TEXT3 is made for the page behind and all but
+   vanishes on it, so it takes the focused secondary colour (Ui.ON_FOCUS2), as focused rows do. */
+.pill-input:focus::placeholder { color: var(--on-focus2); }
 
 .section-heading {
   font-size: calc(14 * var(--u)); font-weight: 500; letter-spacing: 0.1em; color: var(--text3);

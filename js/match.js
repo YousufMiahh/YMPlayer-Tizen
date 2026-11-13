@@ -116,15 +116,44 @@ export function score(it, q) {
   return 200;
 }
 
+const byBest = (a, b) => (b.s - a.s) || (a.n - b.n) || (a.i - b.i);
+function consider(it, i, q, hits) {
+  const s = score(it, q);
+  if (s > 0) hits.push({ it, s, i, n: compact(it).length });
+}
+
 /** Match.rank: best score first, then shorter names, otherwise the provider's order. */
 export function rank(all, text, max) {
   const q = query(text);
   if (!q.usable || !all) return [];
   const hits = [];
-  all.forEach((it, i) => {
-    const s = score(it, q);
-    if (s > 0) hits.push({ it, s, i, n: compact(it).length });
-  });
-  hits.sort((a, b) => (b.s - a.s) || (a.n - b.n) || (a.i - b.i));
+  all.forEach((it, i) => consider(it, i, q, hits));
+  hits.sort(byBest);
+  return hits.slice(0, max).map((h) => h.it);
+}
+
+export const RANK_SLICE = 2000;
+
+/**
+ * rank() in slices, yielding between them (as top10.matchAsync does), so the first search over a
+ * library of tens of thousands (every name is squashed and split on first use) never holds up
+ * the remote. Same hits in the same order as rank().
+ * @param o.slice     items per slice
+ * @param o.cancelled () => bool, checked between slices: a newer search has replaced this one
+ * @returns the hits, or null when cancelled
+ */
+export async function rankAsync(all, text, max, o = {}) {
+  const q = query(text);
+  if (!q.usable || !all) return [];
+  const slice = o.slice || RANK_SLICE;
+  const hits = [];
+  for (let i = 0; i < all.length; i++) {
+    consider(all[i], i, q, hits);
+    if ((i + 1) % slice === 0 && i + 1 < all.length) {
+      await new Promise((r) => setTimeout(r, 0));
+      if (o.cancelled && o.cancelled()) return null;
+    }
+  }
+  hits.sort(byBest);
   return hits.slice(0, max).map((h) => h.it);
 }

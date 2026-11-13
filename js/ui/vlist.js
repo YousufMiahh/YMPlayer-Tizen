@@ -151,13 +151,14 @@ export function createVList(o) {
     /**
      * Select row i. opts.focus: give it DOM focus. opts.scroll: 'minimal' (default) | 'top' |
      * px offset from the top of the list (setSelectionFromTop). opts.silent: no onSelect.
+     * opts.defer: the caller calls refresh() straight after, which draws the rows (once).
      */
     select(i, opts = {}) {
       if (!count) return false;
       const prev = sel;
       sel = Math.max(0, Math.min(count - 1, i));
       reveal(sel, opts.scroll || 'minimal');
-      paint();
+      if (!opts.defer) paint();
       if (opts.focus) api.focus();
       if (!opts.silent && sel !== prev && o.onSelect) o.onSelect(sel, prev);
       return true;

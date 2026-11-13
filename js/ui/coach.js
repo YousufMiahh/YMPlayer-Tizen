@@ -49,6 +49,11 @@ export function back() {
   return true;
 }
 
+/** The screen is going away: take any tour down with it (a tour must never outlive its screen). */
+export function dismiss() {
+  if (open) open.finish(true);
+}
+
 const visible = (el) => {
   if (!el || !el.isConnected) return false;
   const r = el.getBoundingClientRect();
@@ -166,13 +171,15 @@ function overlay(steps) {
     if (!e.repeat && (k === KEY.ENTER || k === KEY.RIGHT)) next();
   }
 
-  function finish() {
+  /** @param now the screen has gone: no fade, the overlay leaves at once */
+  function finish(now = false) {
     if (finished) return;
     finished = true;
     open = null;
     cancelAnimationFrame(raf);
     window.removeEventListener('keydown', onKey, true);
     el.classList.remove('on');
+    if (now) { el.remove(); return; }
     setTimeout(() => {
       el.remove();
       if (prevFocus && prevFocus.isConnected) prevFocus.focus({ preventScroll: true });

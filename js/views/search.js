@@ -66,10 +66,13 @@ export function statusText(q, ready, found) {
   return total === 0 ? noResults(q) : '';
 }
 
-/** The matcher: Match.rank over Filters.searchItems, best first, at most `max`. null = not loaded. */
-export async function rankSection(type, q, max, all = repo.cached(type, null)) {
+/**
+ * The matcher: Match.rank over Filters.searchItems, best first, at most `max`, worked through in
+ * slices so a big library never blocks the remote. null = not loaded (or `cancelled` said stop).
+ */
+export async function rankSection(type, q, max, all = repo.cached(type, null), cancelled = null) {
   if (!all) return null;
-  return match.rank(await filters.searchItems(type, all), q, max);
+  return match.rankAsync(await filters.searchItems(type, all), q, max, { cancelled });
 }
 
 export function searchView() {
@@ -153,7 +156,7 @@ export function searchView() {
     if (q.length < 2 || !shows(slot)) return;
     const asGrid = filter !== 0 || forceGrid;
     const max = asGrid ? GRID_MAX : MAX;
-    const list = await rankSection(TYPES[slot], q, max);
+    const list = await rankSection(TYPES[slot], q, max, undefined, () => t !== token || !alive());
     if (!list || t !== token || !alive()) return;
     const focusInside = slots[slot].contains(active());
     hits[slot] = list;
@@ -340,7 +343,7 @@ export function searchView() {
     unmount() {
       if (root && screen) remember();
       token++;
-      cancelTour(); coach.back();
+      cancelTour(); coach.dismiss();
       clearTimeout(timer); clearTimeout(holdTimer);
       for (const [el, ev, fn] of listeners) el.removeEventListener(ev, fn);
       listeners.length = 0;
