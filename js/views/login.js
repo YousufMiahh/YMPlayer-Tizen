@@ -5,6 +5,7 @@
 import * as store from '../store.js';
 import * as api from '../api.js';
 import * as repo from '../repo.js';
+import * as guide from '../guide.js';
 import { router } from '../router.js';
 import * as nav from '../nav.js';
 import * as backdrop from '../ui/backdrop.js';
@@ -116,9 +117,14 @@ export function loginView() {
     acc.pass = p;
     if (adding) acc.ua = '';
     acc.ok = true;
+    const old = !adding && cur ? { server: cur.server, user: cur.user } : null;
     store.saveAccount(acc);
     store.setCurrent(acc.id);
     repo.clear();
+    guide.clear();
+    // Edited to another server / user: the old library is of no use to anyone (unless another
+    // account still signs in with those details).
+    if (old) repo.deleteFilesIfUnused(old.server, old.user).catch(() => {});
     router.resetTo('setup'); // download everything once, with progress, before showing Home
   }
 

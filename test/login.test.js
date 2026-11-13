@@ -206,6 +206,41 @@ describe('login attempt (LoginActivity.attempt)', () => {
     expect(store.accounts()).toEqual([]);
   });
 
+  it('editing the server or user deletes the old library (and the guide listings); the same details keep it', async () => {
+    const { seedLibrary } = await import('./helpers.js');
+    const guide = await import('../js/guide.js');
+    const clear = vi.spyOn(guide, 'clear');
+    seedAccount();
+    seedLibrary();
+    const old = repo._backend().keys();
+    expect(old).toHaveLength(6);
+    api.loginAt.mockResolvedValue(GOOD);
+    router.go('login', { edit: true });
+    fill('pass', 'new'); // only the password: the library is still this account's
+    submit(); await tick(); await tick();
+    expect(repo._backend().keys()).toHaveLength(6);
+    expect(clear).toHaveBeenCalledTimes(1);
+    router.go('login', { edit: true });
+    fill('server', 'other.tv');
+    submit(); await tick(); await tick();
+    expect(store.current().server).toBe('http://other.tv');
+    expect(repo._backend().keys().filter((k) => old.includes(k))).toEqual([]);
+    clear.mockRestore();
+  });
+
+  it('editing one of two accounts that share a library leaves it for the other', async () => {
+    const { seedLibrary } = await import('./helpers.js');
+    const a = seedAccount();
+    const twin = { ...store.newAccount(), name: 'Twin', server: 'http://old.tv', user: 'olga', pass: 'pw', ok: true };
+    store.saveAccount(twin); store.setCurrent(a.id);
+    seedLibrary();
+    api.loginAt.mockResolvedValue(GOOD);
+    router.go('login', { edit: true });
+    fill('user', 'someone-else');
+    submit(); await tick(); await tick();
+    expect(repo._backend().keys()).toHaveLength(6);
+  });
+
   it('a failed edit leaves the saved account untouched', async () => {
     seedAccount();
     api.loginAt.mockRejectedValue(new Error('nope'));

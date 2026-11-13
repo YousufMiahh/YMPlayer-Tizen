@@ -217,6 +217,52 @@ describe('per-account isolation', () => {
   });
 });
 
+describe('the account changes mid-refresh', () => {
+  it('the old refresh stops at once and the new account gets its own', async () => {
+    let releaseLive;
+    api.streams.mockImplementation((t) => (t === 'live' ? new Promise((r) => { releaseLive = () => r(LISTS.live); }) : Promise.resolve(LISTS[t])));
+    const old = repo.refreshAll();
+    old.catch(() => {});
+    await tick();
+    expect(repo.isRefreshing()).toBe(true);
+    const ben = account(undefined, 'http://b.tv', 'ben'); // switched while Live TV is downloading
+    repo.clear();
+    expect(repo.isRefreshing()).toBe(false); // that refresh is not this account's
+    api.streams.mockClear(); api.categories.mockClear();
+    api.streams.mockImplementation(async (t) => [{ type: t, id: `ben-${t}`, name: 'Ben' }]);
+    const mine = repo.refreshIfDue(); // Home on the new account: must not be skipped as "already running"
+    expect(repo.isRefreshing()).toBe(true);
+    releaseLive();
+    await expect(old).rejects.toThrow(/account changed/);
+    expect(repo.isRefreshing()).toBe(true); // the old one ending does not clear the new one's flag
+    expect(await mine).toBe(true);
+    expect(repo.isRefreshing()).toBe(false);
+    // the old loop never went on to Movies / Series (which would have fetched the NEW account's)
+    expect(api.streams.mock.calls.map((c) => c[0])).toEqual(['live', 'movie', 'series']);
+    expect(api.categories).toHaveBeenCalledTimes(3);
+    expect(repo.hasLibrary()).toBe(true);
+    expect((await repo.streams('movie')).map((i) => i.id)).toEqual(['ben-movie']);
+    expect(store.lastRefresh()).toBeGreaterThan(0);
+    store.setCurrent('');
+    expect(store.lastRefresh()).toBe(0); // ann's refresh did not finish
+    expect(ben.id).not.toBe('');
+  });
+});
+
+describe('deleteFilesIfUnused (accounts that share a server + user share one library)', () => {
+  it('keeps the library while any saved account still uses it', async () => {
+    await repo.refreshAll();
+    const twin = account(undefined, 'a.tv', 'ann'); // the same details, saved twice
+    expect(repo.hasLibrary()).toBe(true);
+    store.removeAccount(twin.id);
+    expect(await repo.deleteFilesIfUnused(twin.server, twin.user)).toBe(false);
+    expect(repo._backend().keys()).toHaveLength(6);
+    store.removeAccount('');
+    expect(await repo.deleteFilesIfUnused('http://a.tv', 'ann')).toBe(true);
+    expect(repo._backend().keys()).toHaveLength(0);
+  });
+});
+
 describe('warmUp (splash) and preload', () => {
   it('warmUp does nothing without a saved library', async () => {
     expect(await repo.warmUp()).toBe(false);

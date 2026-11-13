@@ -6,6 +6,7 @@
 //   Remove This Account -> "Remove {label}?" dialog -> delete its library and data, restart Home
 import * as store from './store.js';
 import * as repo from './repo.js';
+import * as guide from './guide.js';
 import { router } from './router.js';
 import { dialog } from './ui/dialog.js';
 
@@ -24,6 +25,7 @@ export function restartHome() {
 export function switchTo(id) {
   store.setCurrent(id);
   repo.clear();
+  guide.clear();
   restartHome();
 }
 
@@ -36,9 +38,11 @@ export async function confirmRemove(acc) {
     negative: 'Cancel',
   });
   if (r !== 'positive') return false;
-  await repo.deleteFiles(acc.server, acc.user);
   store.removeAccount(acc.id);
+  // After the account has gone: another account with the same server and user keeps its library.
+  await repo.deleteFilesIfUnused(acc.server, acc.user);
   repo.clear();
+  guide.clear();
   restartHome();
   return true;
 }

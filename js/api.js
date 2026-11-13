@@ -28,16 +28,75 @@ function apiUrl(action, extra) {
   return u;
 }
 
-// Browsers (and the Tizen webview) treat User-Agent as a forbidden header and silently drop it,
-// so this is best-effort: providers that insist on a specific UA need a native/proxy layer.
-async function get(url) {
-  const res = await fetch(url, { headers: { 'User-Agent': store.userAgent() } });
-  if (!res.ok) throw new Error(`Server returned HTTP ${res.status}`);
-  return res;
+// Http.java: setConnectTimeout(15000) / setReadTimeout(45000). fetch() has no timeouts of its own,
+// so a server that accepts the connection and then says nothing would hang Login and Setup for
+// ever. Here: the answer must START within `headersMs` (login: the connect timeout; the big list
+// downloads: connect + one read, since a provider may take a while to build the list before its
+// first byte, which Android's read timeout allows), and after that the body may never go quiet
+// for longer than the read timeout. (AbortController, not AbortSignal.timeout: Chromium 94.)
+export const CONNECT_TIMEOUT_MS = 15000;
+export const READ_TIMEOUT_MS = 45000;
+
+function timeoutError() {
+  const e = new Error('The server took too long to answer');
+  e.name = 'TimeoutError';
+  return e;
 }
 
-async function getText(url) {
-  return (await (await get(url)).text()).trim();
+/** One request's timer: arm(ms) (re)starts it; when it runs out the request is aborted and `race` rejects. */
+function watchdog() {
+  const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+  let timer = null; let fail;
+  const expired = new Promise((_, reject) => { fail = reject; });
+  expired.catch(() => {}); // only ever observed through race()
+  return {
+    signal: ctl ? ctl.signal : undefined,
+    arm(ms) {
+      clearTimeout(timer);
+      timer = setTimeout(() => { timer = null; fail(timeoutError()); if (ctl) { try { ctl.abort(); } catch { /* already done */ } } }, ms);
+    },
+    done() { clearTimeout(timer); timer = null; },
+    /** p, unless the timer runs out first (also when fetch ignores the abort signal). */
+    race: (p) => Promise.race([p, expired]),
+  };
+}
+
+// Browsers (and the Tizen webview) treat User-Agent as a forbidden header and silently drop it,
+// so this is best-effort: providers that insist on a specific UA need a native/proxy layer.
+/** @returns {{ res: Response, w }} the response once its headers are in; the caller reads the body and calls w.done(). */
+async function get(url, headersMs = CONNECT_TIMEOUT_MS + READ_TIMEOUT_MS) {
+  const w = watchdog();
+  w.arm(headersMs);
+  let res;
+  try {
+    res = await w.race(fetch(url, { headers: { 'User-Agent': store.userAgent() }, signal: w.signal }));
+  } catch (e) { w.done(); throw e; }
+  if (!res.ok) { w.done(); throw new Error(`Server returned HTTP ${res.status}`); }
+  return { res, w };
+}
+
+/** The whole body as text, failing if it goes quiet for longer than the read timeout. */
+async function bodyText({ res, w }) {
+  try {
+    if (!res.body || !res.body.getReader) { // no streams: one read timeout for the whole body
+      w.arm(READ_TIMEOUT_MS);
+      return await w.race(res.text());
+    }
+    const reader = res.body.getReader();
+    const dec = new TextDecoder('utf-8');
+    let out = '';
+    for (;;) {
+      w.arm(READ_TIMEOUT_MS);
+      const { done, value } = await w.race(reader.read());
+      if (done) break;
+      out += dec.decode(value, { stream: true });
+    }
+    return out + dec.decode();
+  } finally { w.done(); }
+}
+
+async function getText(url, headersMs) {
+  return (await bodyText(await get(url, headersMs))).trim();
 }
 
 async function getObject(url) {
@@ -52,10 +111,12 @@ async function getObject(url) {
  * Anything that is not an array (e.g. an error object) yields nothing.
  */
 async function readArray(url, onObject) {
-  const res = await get(url);
+  const r = await get(url);
+  const { res, w } = r;
   if (!res.body || !res.body.getReader) {
+    const text = await bodyText(r); // a timeout is an error, not an empty list
     let arr;
-    try { arr = JSON.parse(await res.text()); } catch { return; }
+    try { arr = JSON.parse(text); } catch { return; }
     if (Array.isArray(arr)) for (const o of arr) if (o && typeof o === 'object') onObject(o);
     return;
   }
@@ -99,17 +160,20 @@ async function readArray(url, onObject) {
     if (depth > 0) buf += chunk.slice(start);
     return true;
   };
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (!feed(dec.decode(value, { stream: true }))) { reader.cancel().catch(() => {}); return; }
-  }
+  try {
+    for (;;) {
+      w.arm(READ_TIMEOUT_MS); // idle timeout: restarted by every piece that arrives
+      const { done, value } = await w.race(reader.read());
+      if (done) break;
+      if (!feed(dec.decode(value, { stream: true }))) { reader.cancel().catch(() => {}); return; }
+    }
+  } finally { w.done(); }
 }
 
 // ---------------------------------------------------------------- account
 
 export async function login() {
-  const body = await getText(apiUrl());
+  const body = await getText(apiUrl(), CONNECT_TIMEOUT_MS);
   if (!body.startsWith('{')) throw new Error("This doesn't look like an Xtream server");
   return JSON.parse(body);
 }
@@ -120,9 +184,7 @@ export async function login() {
  */
 export async function loginAt(serverBase, user, pass) {
   const url = `${serverBase}/player_api.php?username=${enc(user)}&password=${enc(pass)}`;
-  const res = await fetch(url, { headers: { 'User-Agent': store.userAgent() } });
-  if (!res.ok) throw new Error(`Server returned HTTP ${res.status}`);
-  const body = (await res.text()).trim();
+  const body = await getText(url, CONNECT_TIMEOUT_MS);
   if (!body.startsWith('{')) throw new Error("This doesn't look like an Xtream server");
   return JSON.parse(body);
 }

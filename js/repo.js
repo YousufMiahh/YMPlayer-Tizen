@@ -123,7 +123,8 @@ const inflight = new Map(); // one download/read per key at a time (Repo.lock)
 const downloads = new Map(); // "account|type" -> running downloadType promise
 let account = null;
 let generation = 0; // bumps whenever memory is dropped: late results from before are not kept
-let refreshing = false;
+let refreshFor = null; // the account a refreshAll is running for (null: none)
+let refreshRun = 0;
 let setupRunning = false;
 let setupAccount = null;
 let setupPromise = null;
@@ -307,7 +308,9 @@ export function isDue(now = Date.now()) {
   return now - last > h * 3600000;
 }
 
-export const isRefreshing = () => refreshing || setupRunning;
+/** A refresh of the CURRENT account is running (one left over from another account doesn't count). */
+const refreshing = () => refreshFor !== null && refreshFor === accountKey();
+export const isRefreshing = () => refreshing() || setupRunning;
 export const isSetupRunning = () => setupRunning;
 
 /** Items read so far by the running whole-list download of `type` (XtreamApi.progress). */
@@ -356,25 +359,33 @@ async function download(type) {
 export async function refreshAll() {
   check();
   const acct = account;
-  refreshing = true;
+  const run = ++refreshRun;
+  refreshFor = acct;
   try {
-    for (const t of TYPES) await downloadType(t);
-    if (accountKey() === acct) store.setLastRefresh(Date.now());
+    for (const t of TYPES) {
+      // The account changed mid-refresh: stop here (downloadType would otherwise carry on with
+      // the new account's lists under this loop, and the new account's own refresh would be
+      // skipped as "already running").
+      if (accountKey() !== acct) throw new Error('The account changed');
+      await downloadType(t);
+    }
+    if (accountKey() !== acct) throw new Error('The account changed');
+    store.setLastRefresh(Date.now());
   } finally {
-    refreshing = false;
+    if (refreshRun === run) refreshFor = null; // a newer refresh (another account's) owns the flag now
   }
 }
 
 /** Starts a background refresh if one is due. Resolves true when one ran and finished. */
 export function refreshIfDue(whenDone) {
-  if (refreshing || !isDue()) return Promise.resolve(false);
+  if (refreshing() || !isDue()) return Promise.resolve(false);
   return refreshAll().then(() => { if (whenDone) whenDone(); return true; }, () => false);
 }
 
 /** Warm memory from the saved copy, one section at a time (makes search instant). */
 export async function preload() {
   for (const t of TYPES) {
-    if (refreshing) return;
+    if (refreshing()) return;
     try { if (disk().has(file(t, 'all'))) await streams(t, null); } catch { /* ignore */ }
   }
 }
@@ -390,11 +401,24 @@ export async function warmUp() {
   return true;
 }
 
-/** Delete the saved library of one account (Settings -> Remove This Account). */
+/** Delete the saved library of one server + user. */
 export async function deleteFiles(server, user) {
   const prefix = `lib_${hash(`${normalize(server)}|${user}`)}_`;
   const d = disk();
   for (const k of d.keys()) if (k.startsWith(prefix)) { try { await d.del(k); } catch { /* ignore */ } }
+}
+
+/**
+ * Delete the saved library of a server + user unless a saved account still uses it (the library
+ * is stored per server + user, so two accounts with the same details share one copy). Call it
+ * after the account was removed or edited. @returns true if it was deleted.
+ */
+export async function deleteFilesIfUnused(server, user) {
+  if (!server && !user) return false;
+  const k = `${normalize(server)}|${user}`;
+  if (store.accounts().some((a) => `${normalize(a.server)}|${a.user}` === k)) return false;
+  await deleteFiles(server, user);
+  return true;
 }
 
 // ------------------------------------------------------------ first-time setup
@@ -459,7 +483,7 @@ export function _reset(keepBackend = false) {
   dropMemory();
   account = null;
   downloads.clear();
-  refreshing = false; setupRunning = false; setupAccount = null; setupPromise = null;
+  refreshFor = null; setupRunning = false; setupAccount = null; setupPromise = null;
   setupListener = null; onUpdated = null;
   if (!keepBackend) backend = null;
 }

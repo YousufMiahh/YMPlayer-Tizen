@@ -332,6 +332,38 @@ describe('Settings: accounts', () => {
     expect(router.current().name).toBe('home');
   });
 
+  it('removing one of two accounts with the same server and user keeps the library the other uses', async () => {
+    const a = { ...store.newAccount(), name: 'Lounge', server: 'a.tv', user: 'ann', pass: 'x', ok: true };
+    store.saveAccount(a);
+    const b = { ...store.newAccount(), name: 'Bedroom', server: 'http://a.tv/', user: 'ann', pass: 'x', ok: true };
+    store.saveAccount(b);
+    store.setCurrent(a.id);
+    seedLibrary();
+    expect(repo._backend().keys()).toHaveLength(6);
+    router.go('settings');
+    click('remove_account');
+    dlg('[data-value="positive"]').click();
+    await tick();
+    expect(store.accounts().map((x) => x.id)).toEqual([b.id]);
+    expect(repo._backend().keys()).toHaveLength(6); // still there for "Bedroom"
+    expect(repo.hasLibrary()).toBe(true);
+  });
+
+  it('switching or removing an account forgets the TV guide listings', async () => {
+    const guide = await import('../js/guide.js');
+    const clear = vi.spyOn(guide, 'clear');
+    const [, b] = addAccounts();
+    router.go('settings');
+    click(`account_${b.id}`);
+    expect(clear).toHaveBeenCalledTimes(1);
+    router.go('settings');
+    click('remove_account');
+    dlg('[data-value="positive"]').click();
+    await tick();
+    expect(clear).toHaveBeenCalledTimes(2);
+    clear.mockRestore();
+  });
+
   it('removing the last account routes to Login', async () => {
     const a = { ...store.newAccount(), server: 'a.tv', user: 'ann', pass: 'x', ok: true };
     store.saveAccount(a); store.setCurrent(a.id);
