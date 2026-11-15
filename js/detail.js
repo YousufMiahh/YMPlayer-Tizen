@@ -61,7 +61,8 @@ export function movieInfo(r, item) {
   const trailer = youtubeId(str(info, 'youtube_trailer', str(info, 'trailer', null)));
   const data = r.movie_data && typeof r.movie_data === 'object' ? r.movie_data : null;
   const ext = data ? str(data, 'container_extension', null) : null;
-  return { plot, meta, credits: credits || '', backdrop, trailer, ext };
+  const tmdb = str(info, 'tmdb_id', str(info, 'tmdb', null));
+  return { plot, meta, credits: credits || '', backdrop, trailer, ext, tmdb };
 }
 
 /** MovieActivity.buildButtons: [{action, label}] in order. */
@@ -71,8 +72,14 @@ export function movieButtons(item, trailer) {
   if (pos > 0) out.push({ action: 'over', label: '↺  Start Over' });
   if (trailer) out.push({ action: 'trailer', label: '▶  Trailer' });
   out.push({ action: 'fav', label: favLabel(item) });
+  out.push({ action: 'queue', label: queueLabel(item) });
+  out.push({ action: 'watched', label: watchedLabel(item) });
   return out;
 }
+
+/** The movie page's Queue and Watched buttons. */
+export const queueLabel = (item) => (store.inQueue(item) ? '✓  In Queue' : '＋  Queue');
+export const watchedLabel = (item) => (store.isWatched(item) ? '✓  Watched' : '○  Mark Watched');
 
 /** The Favourite button on both pages. */
 export const favLabel = (item) => (store.isFav(item) ? '♥  In Favourites' : '♡  Favourite');
@@ -82,7 +89,7 @@ export const favLabel = (item) => (store.isFav(item) ? '♥  In Favourites' : '�
 /** SeriesActivity.parse (the info half): plot, meta, backdrop, cover, trailer. */
 export function seriesInfo(r, series) {
   const info = r && typeof r.info === 'object' && r.info && !Array.isArray(r.info) ? r.info : null;
-  if (!info) return { meta: series.info || '', plot: null, backdrop: null, cover: null, trailer: null };
+  if (!info) return { meta: series.info || '', plot: null, backdrop: null, cover: null, trailer: null, tmdb: null };
   const plot = str(info, 'plot', null);
   const year = year4(str(info, 'releaseDate', str(info, 'releasedate', null)));
   const meta = joinNonEmpty(year, str(info, 'genre', null), rating(str(info, 'rating', null))) || '';
@@ -92,7 +99,13 @@ export function seriesInfo(r, series) {
   if (bd !== null && bd !== undefined && String(bd) !== '') backdrop = String(bd);
   else if (!series.icon) backdrop = cover;
   const trailer = youtubeId(str(info, 'youtube_trailer', str(info, 'trailer', null)));
-  return { meta, plot, backdrop, cover, trailer };
+  return { meta, plot, backdrop, cover, trailer, tmdb: seriesTmdb(r) };
+}
+
+/** The series' TMDB id when the provider gives one (for Skip Intro). */
+export function seriesTmdb(r) {
+  const info = r && typeof r.info === 'object' && r.info && !Array.isArray(r.info) ? r.info : null;
+  return info ? str(info, 'tmdb', str(info, 'tmdb_id', null)) : null;
 }
 
 const toInt = (v, def) => {
@@ -108,6 +121,7 @@ const toInt = (v, def) => {
  */
 export function parseSeasons(r, series) {
   const map = new Map();
+  const tmdb = seriesTmdb(r) || series.tmdb || null;
   const add = (arr, fallbackSeason) => {
     if (!Array.isArray(arr)) return;
     arr.forEach((e, i) => {
@@ -117,11 +131,12 @@ export function parseSeasons(r, series) {
       if (id === '') return;
       const ep = {
         type: EPISODE, id,
-        num: e.episode_num === undefined || e.episode_num === null ? String(i + 1) : String(e.episode_num),
+        num: str(e, 'episode_num', String(i + 1)),
         name: str(e, 'title', series.name),
-        ext: e.container_extension === undefined || e.container_extension === null ? 'mp4' : String(e.container_extension),
-        parentId: String(series.id), parentName: series.name,
+        ext: str(e, 'container_extension', 'mp4'),
+        parentId: String(series.id), parentName: series.name, season,
       };
+      if (tmdb) ep.tmdb = tmdb;
       if (series.icon) ep.parentIcon = series.icon;
       const ei = e.info && typeof e.info === 'object' && !Array.isArray(e.info) ? e.info : null;
       if (ei) {
@@ -151,6 +166,29 @@ export function parseSeasons(r, series) {
 
 /** The season pill text. */
 export const seasonLabel = (n) => (n === 0 ? 'Specials' : `Season ${n}`);
+
+/** SeriesActivity.updatePillLabels: "Season 2  ✓" when it's all watched, "Season 2  3/10" part way through. */
+export function seasonPillLabel(s) {
+  const base = seasonLabel(s.season);
+  const n = store.watchedCount(s.episodes);
+  return n === 0 ? base : n === s.episodes.length ? `${base}  ✓` : `${base}  ${n}/${s.episodes.length}`;
+}
+
+/**
+ * Episodes.following: all the episodes of this episode's series, in order, for the player, so
+ * an episode started on its own (Continue Watching, the Queue, the last of a season) still knows
+ * what comes next. Specials don't run into the main seasons. Null when there is nothing to go on.
+ */
+export function followingEpisodes(r, ep) {
+  if (!r || ep.parentId == null) return null;
+  const series = { id: String(ep.parentId), name: ep.parentName || '' };
+  if (ep.parentIcon) series.icon = ep.parentIcon;
+  if (ep.tmdb) series.tmdb = ep.tmdb;
+  const special = ep.season === 0;
+  const out = [];
+  for (const s of parseSeasons(r, series)) if ((s.season === 0) === special) out.push(...s.episodes);
+  return out;
+}
 
 /** SeriesActivity.lastWatched: the newest episode of this series in the watch history. */
 export function lastWatched(series) {
@@ -193,10 +231,12 @@ export function startSeason(seasons, last) {
 /** SeriesActivity.buildEpisodes: one card's title, subtitle and progress. */
 export function episodeCard(ep, series) {
   const pos = store.position(ep); const dur = store.duration(ep);
+  const watched = store.isWatched(ep);
   return {
     image: ep.icon || series.icon || null,
     title: `${ep.num}.  ${ep.name}`,
-    sub: pos > 0 && dur > 0 ? `${fmt(Math.max(0, dur - pos))} left` : (ep.duration || ''),
+    sub: watched ? '✓ Watched' : pos > 0 && dur > 0 ? `${fmt(Math.max(0, dur - pos))} left` : (ep.duration || ''),
     progress: dur > 0 ? pos / dur : 0,
+    watched,
   };
 }

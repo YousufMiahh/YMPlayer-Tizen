@@ -70,6 +70,7 @@ describe('Settings: the list', () => {
       'Live TV Preview | On with sound',
       "# HIDE WHAT YOU DON'T WATCH",
       'Countries & Languages | Showing everything',
+      'Rename Categories | Give categories your own names',
       'Hidden Categories | None',
       '# CUSTOMISE HOME SCREEN',
       'Continue Watching | On',
@@ -79,6 +80,7 @@ describe('Settings: the list', () => {
       'Favourite Series | On',
       'Top 10 Movies in the UK | On',
       'Top 10 Series in the UK | On',
+      'Because You Watched… | On',
       'Recently Added Movies | On',
       'Recently Added Series | On',
       '# SUBTITLES',
@@ -98,6 +100,7 @@ describe('Settings: the list', () => {
       'Show Tutorial | Quick tour of the basics',
       '# ABOUT',
       `Version | YM Player ${VERSION} | info`,
+      "What's New | What changed in this version",
       `(credit) ${CREDIT}`,
     ]);
     expect(CREDIT).toBe('Developed by Yousuf Miah');
@@ -426,7 +429,7 @@ describe('Settings: the end of the list', () => {
     const down = () => { const e = new KeyboardEvent('keydown', { keyCode: 40, cancelable: true }); return [view.onKey(e), e.defaultPrevented]; };
     row('clear_history').focus();
     expect(down()[0]).toBe(false); // not the last row: ordinary focus movement
-    row('tutorial').focus();
+    row('whats_new').focus(); // the last row you can land on
     screen.scrollTop = 1600;
     expect(down()).toEqual([true, true]);
     expect(screen.scrollTop).toBe(1920); // 3000 − 1080: the end

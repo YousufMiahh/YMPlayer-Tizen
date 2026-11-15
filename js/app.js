@@ -4,6 +4,7 @@ import * as nav from './nav.js';
 import * as store from './store.js';
 import * as repo from './repo.js';
 import { restoreTvMute } from './live-preview.js';
+import * as whatsNew from './whats-new.js';
 import { applyTheme } from './ui/theme.js';
 import * as backdrop from './ui/backdrop.js';
 import { isSection, prepareBack } from './ui/topbar.js';
@@ -55,6 +56,7 @@ export function exitApp() {
 // Returns a dispose function that removes the global listeners.
 export function boot(rootEl) {
   applyTheme(store.dark());
+  whatsNew.init(); // a fresh install never gets the "What's New" pop-up
   restoreTvMute(); // the app died last time with the TV muted for a preview: give the sound back
   if (globalThis.document && document.body) backdrop.install(document.body);
   router.init(rootEl, { onExit: exitApp });

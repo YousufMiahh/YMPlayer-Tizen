@@ -4,6 +4,7 @@
 // "year · duration · genre · ★ rating" line, the plot, "Director: … · Cast: …" and the buttons
 //   ▶  Resume  H:MM:SS | ↺  Start Over (both only with a saved point; else ▶  Play)
 //   ▶  Trailer (once get_vod_info names one) | ♡  Favourite / ♥  In Favourites
+//   ＋  Queue / ✓  In Queue | ○  Mark Watched / ✓  Watched
 // Focus starts on Play. Coming back from the player or a trailer rebuilds the buttons (onResume),
 // so the Resume time is current and focus is on Play again.
 import * as api from '../api.js';
@@ -11,7 +12,7 @@ import * as store from '../store.js';
 import * as nav from '../nav.js';
 import { play } from '../open.js';
 import { openTrailer } from '../trailer.js';
-import { movieInfo, movieButtons, favLabel } from '../detail.js';
+import { movieInfo, movieButtons, favLabel, queueLabel } from '../detail.js';
 import { pillButton } from '../ui/widgets.js';
 
 export const FADE_MS = 500; // loadBackdrop: alpha 0 -> 1 over 500 ms
@@ -60,6 +61,17 @@ export function movieDetailView() {
 
   function act(action, btn) {
     if (action === 'fav') { store.toggleFav(item); btn.textContent = favLabel(item); return; }
+    if (action === 'queue') {
+      if (store.inQueue(item)) store.queueRemove(item); else store.queueAdd(item);
+      btn.textContent = queueLabel(item);
+      return;
+    }
+    if (action === 'watched') { // watched also clears the resume point, so the row is rebuilt
+      store.setWatched(item, !store.isWatched(item));
+      buildButtons();
+      buttonsEl.lastChild.focus();
+      return;
+    }
     if (action === 'trailer') { openTrailer(trailer); return; }
     if (action === 'over') store.setPosition(item, 0); // Start Over forgets the saved point first
     play([item], 0);
@@ -82,6 +94,7 @@ export function movieDetailView() {
       if (b) b.focus();
     }
     if (m.ext && !item.ext) item.ext = m.ext;
+    if (m.tmdb && !item.tmdb) item.tmdb = m.tmdb;
   }
 
   return {

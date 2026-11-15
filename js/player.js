@@ -74,9 +74,9 @@ function start(av, session, startMs) {
     onevent: () => {},
     ondrmevent: () => {},
   });
-  av.setDisplayRect(0, 0, 1920, 1080);
-  // Android draws the picture fitted inside the screen (PlayerView default / VLC best fit).
-  try { av.setDisplayMethod('PLAYER_DISPLAY_MODE_LETTER_BOX'); } catch { /* older firmware */ }
+  // Android draws the picture fitted inside the screen (PlayerView default / VLC best fit),
+  // unless this channel / film / series has its own picture shape.
+  applyPicture(av, session);
   // The webview drops fetch-layer User-Agent; AVPlay's own streaming property carries it.
   try { av.setStreamingProperty('USER_AGENT', store.userAgent()); } catch { /* property unsupported */ }
   session.buffering = true;
@@ -86,6 +86,7 @@ function start(av, session, startMs) {
       try { av.seekTo(startMs); } catch { /* seek refused: plays from the start */ }
     }
     applyPreferredTracks(av, session);
+    if (session.picture === PIC_FILL) applyPicture(av, session); // Fill needs the video's own shape, known now
     try { av.play(); } catch (e) { onFailure(session, e && (e.message || e.name)); return; }
     session.ready = true;
     session.buffering = false;
@@ -102,26 +103,100 @@ function onFailure(session, what) {
   emit('error', { what: String(what || 'PLAYER_ERROR_UNKNOWN') });
 }
 
+/**
+ * The stream ended. A film or episode that ends well before its end didn't finish: the
+ * connection dropped (PlayerActivity.onEnded). That is reported as { early: true, position } and
+ * the resume point is left alone, so the screen can reconnect where it stopped.
+ */
 function onCompleted(av, session) {
   if (session.item.type !== LIVE) {
+    let len = 0;
+    try { len = Number(av.getDuration()) || 0; } catch { /* not prepared */ }
+    let at = session.pos;
+    try { const t = Number(av.getCurrentTime()); if (Number.isFinite(t) && t > 0) at = t; } catch { /* use the last tick */ }
+    if (len > 0 && at > 0 && at < len * 0.9 && at < len - 60000) {
+      store.setDuration(session.item, len);
+      session.pos = at;
+      emit('ended', { early: true, position: at });
+      return;
+    }
     // Finished: drop the resume point so it doesn't restart at the credits. The duration comes
     // from the player only (a stream that ends before any time tick must not store its start
     // point, or a 0, as its length).
     let d = 0;
     try { d = av.getDuration(); } catch { /* not prepared */ }
     if (d > 0) store.setDuration(session.item, d);
-    store.setPosition(session.item, 0);
+    // Watched, which also clears the resume point. (A stream that ends before it ever played
+    // wasn't watched: only its resume point goes.)
+    if (at > 0 || len <= 0) store.setWatched(session.item, true); else store.setPosition(session.item, 0);
     session.pos = 0;
     session.finished = true;
   }
-  emit('ended');
+  emit('ended', { early: false, position: 0 });
+}
+
+// ---------------------------------------------------------------- picture shape
+
+export const PIC_FIT = 0;
+export const PIC_FILL = 1;
+export const PIC_STRETCH = 2;
+export const PIC_16_9 = 3;
+export const PIC_4_3 = 4;
+const SCREEN_W = 1920; const SCREEN_H = 1080;
+
+/** The playing video's own width / height, or 0 when the TV doesn't say. */
+function videoAspect(av) {
+  try {
+    const v = (av.getCurrentStreamInfo() || []).find((t) => t.type === 'VIDEO');
+    const info = v ? parse(v.extra_info) : {};
+    const w = Number(info.Width); const h = Number(info.Height);
+    return w > 0 && h > 0 ? w / h : 0;
+  } catch { return 0; }
+}
+
+/**
+ * Where the picture goes for a shape: [x, y, w, h, method].
+ * Fit letter-boxes; Stretch fills the screen; 16:9 and 4:3 are a box of that shape with the
+ * picture stretched into it; Fill zooms until the screen is covered (the edges are cropped),
+ * which needs the video's own shape (aspect), else it falls back to Fit until that is known.
+ */
+export function pictureRect(mode, aspect = 0) {
+  const LETTER = 'PLAYER_DISPLAY_MODE_LETTER_BOX'; const FULL = 'PLAYER_DISPLAY_MODE_FULL_SCREEN';
+  if (mode === PIC_STRETCH || mode === PIC_16_9) return [0, 0, SCREEN_W, SCREEN_H, FULL];
+  if (mode === PIC_4_3) { const w = Math.round(SCREEN_H * 4 / 3); return [Math.round((SCREEN_W - w) / 2), 0, w, SCREEN_H, FULL]; }
+  if (mode === PIC_FILL && aspect > 0) {
+    const screen = SCREEN_W / SCREEN_H;
+    if (Math.abs(aspect - screen) < 0.01) return [0, 0, SCREEN_W, SCREEN_H, FULL];
+    if (aspect > screen) { const w = Math.round(SCREEN_H * aspect); return [Math.round((SCREEN_W - w) / 2), 0, w, SCREEN_H, FULL]; }
+    const h = Math.round(SCREEN_W / aspect);
+    return [0, Math.round((SCREEN_H - h) / 2), SCREEN_W, h, FULL];
+  }
+  return [0, 0, SCREEN_W, SCREEN_H, LETTER];
+}
+
+function applyPicture(av, session) {
+  const mode = session.picture || PIC_FIT;
+  const [x, y, w, h, method] = pictureRect(mode, mode === PIC_FILL ? videoAspect(av) : 0);
+  try {
+    av.setDisplayRect(x, y, w, h);
+  } catch { // a box bigger than the screen was refused: fill the screen the plain way
+    try { av.setDisplayRect(0, 0, SCREEN_W, SCREEN_H); } catch { /* not now */ }
+  }
+  try { av.setDisplayMethod(method); } catch { /* older firmware */ }
+}
+
+/** Engine.setPicture: this session's picture shape, now and whenever the stream is reopened. */
+export function setPicture(mode) {
+  if (!s) return;
+  s.picture = mode;
+  applyPicture(getAvplay(), s);
 }
 
 /**
  * Open and start `item` (ExoEngine.load). Live uses `format` (default: the Settings format); VOD
  * starts at startMs. Any previous session is saved and released first.
  */
-export function open(item, { startMs = 0, format } = {}) {
+export function open(item, { startMs = 0, format, picture = PIC_FIT } = {}) {
   const av = getAvplay();
   if (s) stop();
   if (!av) { // say so on screen (the player's error state) rather than fail silently
@@ -133,7 +208,7 @@ export function open(item, { startMs = 0, format } = {}) {
   const live = item.type === LIVE;
   s = {
     item, pos: live ? 0 : startMs, format: live ? (format || store.liveFormat()) : 'ts',
-    token: 0, ready: false, buffering: false, subsOff: store.subtitleLanguage() === 'off', seeking: false, pendingSeek: null,
+    picture, token: 0, ready: false, buffering: false, subsOff: store.subtitleLanguage() === 'off', seeking: false, pendingSeek: null,
   };
   start(av, s, live ? 0 : startMs);
 }
@@ -319,6 +394,9 @@ function applyPreferredTracks(av, session) {
 
 // ---------------------------------------------------------------- stop
 
+/** Finished (or into the credits): within the last minute, or 90% of the way through. */
+export const finishedAt = (p, d) => d > 0 && (p > d - 60000 || p >= d * 0.9);
+
 /** Stop and release. Persists resume position + duration for VOD/episodes (never live). */
 export function stop() {
   if (!s) return;
@@ -329,10 +407,11 @@ export function stop() {
   if (session.item.type !== LIVE && !session.finished) {
     let dur = 0;
     try { dur = prepared(av) ? Number(av.getDuration()) || 0 : 0; } catch { /* not prepared */ }
-    // PlayerActivity.savePosition: within the last minute counts as watched (off Continue
-    // Watching); otherwise only a point past 10 s is kept. A 0 never erases a resume point.
+    // PlayerActivity.savePosition: within the last minute, or 90% of the way through (into the
+    // credits), counts as watched (off Continue Watching, ✓ on its card); otherwise only a point
+    // past 10 s is kept. A 0 never erases a resume point.
     if (dur > 0) store.setDuration(session.item, dur);
-    if (dur > 0 && p > dur - 60000) store.setPosition(session.item, 0);
+    if (finishedAt(p, dur)) store.setWatched(session.item, true); // also clears the resume point
     else if (p > 10000) store.setPosition(session.item, p);
   }
   teardown(av);

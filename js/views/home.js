@@ -6,16 +6,19 @@ import * as store from '../store.js';
 import * as repo from '../repo.js';
 import * as nav from '../nav.js';
 import * as top10 from '../top10.js';
+import * as recs from '../recs.js';
+import * as whatsNew from '../whats-new.js';
+import { showItemMenu } from '../item-menu.js';
 import { router } from '../router.js';
-import { MOVIE, SERIES, EPISODE, key } from '../item.js';
+import { LIVE, MOVIE, SERIES, key } from '../item.js';
 import {
-  localRows, remoteRows, recentlyAdded, cwCard, sig, liveSiblings, openTarget, favToast, removeName,
+  localRows, remoteRows, recentlyAdded, cwCard, sig, liveSiblings, openTarget, favToast,
   LANDSCAPE, POSTER, CW_HINT, FIRST_RUN, WELCOME,
 } from '../home-rows.js';
 import { mountSection, tabFocused } from '../ui/topbar.js';
-import { shelfTitle, initials } from '../ui/widgets.js';
+import { shelfTitle, initials, watchedBadge } from '../ui/widgets.js';
 import { LONG_PRESS_MS } from '../ui/theme.js';
-import { showDialog } from '../ui/dialog.js';
+import { isOpen as dialogOpen } from '../ui/dialog.js';
 import { toast } from '../ui/toast.js';
 import * as coach from '../ui/coach.js';
 import { bringIntoView } from '../ui/scroll.js';
@@ -28,13 +31,14 @@ const KEY_ENTER = 13;
 const KEY_MENU = 10133;
 export const TOP10_EVERY = 60 * 60000; // HomeActivity.TOP10_EVERY
 export const COACH_DELAY_MS = 1500;
+export const WHATS_NEW_DELAY_MS = 3000;
 
 // ------------------------------------------------------------ state kept between visits
 // Android keeps HomeActivity alive under the screens it opens, with its loaded rows and focus.
 // The router remounts Home instead, so that state lives here, per account.
 
 const fresh = (acct) => ({
-  acct, newMovies: null, newSeries: null, topMovies: null, topSeries: null, topSig: '',
+  acct, newMovies: null, newSeries: null, topMovies: null, topSeries: null, topSig: '', recRows: null, recSig: null,
   loadingNew: false, focus: null, scrollTop: 0,
 });
 let memo = fresh('');
@@ -86,10 +90,23 @@ async function loadTop10() {
   if (mounted) mounted.remoteChanged(true);
 }
 
+/** HomeActivity.loadRecs: "Because you watched …" rows (TMDB recommendations that your provider has). */
+async function loadRecs() {
+  if (!store.homeShows('recommended')) return;
+  const m = memoNow();
+  const r = await top10.enqueue(() => recs.rows()).catch(() => null);
+  if (!r || m !== memo) return;
+  const s = r.map((row) => row.title + sig(row.items)).join('');
+  if (s === m.recSig) return;
+  m.recSig = s;
+  m.recRows = r;
+  if (mounted) mounted.remoteChanged(true);
+}
+
 // ------------------------------------------------------------ cards
 
 /** Cards.card + Cards.shelf's per-item extras (progress, "… left", series art for episodes). */
-export function renderCard(row, it, i) {
+export function renderCard(row, it, i, watched = null) {
   const shape = row.shape;
   let image = it.icon || null; let sub = null; let progress = 0;
   if (shape === LANDSCAPE) ({ image, sub, progress } = cwCard(it));
@@ -117,6 +134,7 @@ export function renderCard(row, it, i) {
     bar.appendChild(fill);
     art.appendChild(bar);
   }
+  if (watched ? watched.has(key(it)) : store.isWatched(it)) art.appendChild(watchedBadge());
   const title = document.createElement('span');
   title.className = 'title'; title.textContent = it.name || '';
   b.append(art, title);
@@ -135,8 +153,9 @@ function renderShelf(row) {
   sec.dataset.row = row.key; sec.dataset.title = row.title;
   const strip = document.createElement('div');
   strip.className = 'strip';
-  row.items.forEach((it, i) => strip.appendChild(renderCard(row, it, i)));
-  sec.append(shelfTitle(row.title, row.key === 'continue' ? CW_HINT : ''), strip);
+  const watched = store.watchedKeys(); // read once per shelf, not once per card
+  row.items.forEach((it, i) => strip.appendChild(renderCard(row, it, i, watched)));
+  sec.append(shelfTitle(row.title, row.key === 'continue' || row.key === 'queue' ? CW_HINT : ''), strip);
   sec._row = row;
   return sec;
 }
@@ -234,28 +253,31 @@ export function homeView() {
     router.go(t.name, t.params);
   }
 
-  /** Hold OK / ☰: Continue Watching asks to remove; any other row toggles the favourite. */
+  /** Hold OK / ☰: a channel goes straight in / out of favourites; anything else gets its options. */
   function menu(card) {
     const x = itemOf(card);
     if (!x || !x.it) return;
-    const { row, it } = x;
-    if (row.key === 'continue') {
-      card.classList.add('keep-focus'); // the dialog has focus; the card still looks focused beneath it
-      showDialog({
-        title: 'Remove from Continue Watching?', message: removeName(it),
-        positive: 'Remove', negative: 'Cancel', focus: 'negative', // a stray OK won't remove anything
-      }).result.then((v) => {
-        card.classList.remove('keep-focus');
-        if (v !== 'positive' || !root) return;
-        store.setPosition(it, 0); // no resume point = off the list
-        refreshKeepingPlace(card.isConnected ? card : active());
-      });
+    const { it } = x;
+    if (it.type === LIVE) {
+      const now = store.toggleFav(it);
+      toast(favToast(now, it));
+      refreshKeepingPlace(card);
       return;
     }
-    if (it.type === EPISODE) return;
-    const now = store.toggleFav(it);
-    toast(favToast(now, it));
-    refreshKeepingPlace(card);
+    card.classList.add('keep-focus'); // the dialog has focus; the card still looks focused beneath it
+    showItemMenu(it).then((changed) => {
+      card.classList.remove('keep-focus');
+      if (!changed || !root) return;
+      const inRemote = remoteEl.contains(card);
+      const idx = Number(card.dataset.tile) || 0; const title = card.closest('.home-row')?.dataset.title;
+      refreshKeepingPlace(card.isConnected ? card : active());
+      if (inRemote) { // the ✓ on a Top 10 / Because You Watched / Recently Added card
+        buildRemote();
+        const sec = [...remoteEl.children].find((s) => s.dataset.title === title);
+        const list = sec ? cards(sec) : [];
+        if (list.length) focusCard(list[Math.min(idx, list.length - 1)]); else focusFirstCard();
+      }
+    });
   }
 
   /** HomeActivity.homeTour (Settings → Show Tutorial runs it again). */
@@ -265,7 +287,7 @@ export function homeView() {
         body: 'Move along the top bar to switch between Home, Live TV, Movies, Series, Search and Settings. Just pause on one and it opens.' },
       { target: () => localEl.firstElementChild || remoteEl.firstElementChild, title: 'Your Home screen',
         body: 'Continue Watching, Recent Channels, your favourites and the UK Top 10 all live here. '
-          + 'Hold OK on a card to favourite it, or to remove it from Continue Watching.' },
+          + 'Hold OK on a card to favourite it, add it to your Queue, mark it watched or remove it from Continue Watching.' },
       { target: null, title: 'Make it yours',
         body: 'In Settings you can choose which rows Home shows, hide countries and categories you never watch, '
           + 'change subtitle style and switch accounts. You can watch this tour again from Settings too.' },
@@ -357,7 +379,7 @@ export function homeView() {
       document.addEventListener('visibilitychange', onVisibility);
       nav.register(root);
 
-      repo.setOnUpdated(() => { loadNewArrivals(); loadTop10(); }); // Movies/Series replaced in the background
+      repo.setOnUpdated(() => { loadNewArrivals(); loadTop10(); loadRecs(); }); // Movies/Series replaced in the background
 
       buildLocal();
       if (resumed) {
@@ -371,8 +393,11 @@ export function homeView() {
         startLibrary();
         if (!tabFocused()) focusFirstCard();
         timers.push(setTimeout(() => { if (root) coach.offer(homeTour); }, COACH_DELAY_MS));
+        // Just updated? Say what's new (not over the tutorial or another dialog).
+        timers.push(setTimeout(() => { if (root && !coach.showing() && !dialogOpen()) whatsNew.maybeShow(); }, WHATS_NEW_DELAY_MS));
       }
       startTop10();
+      loadRecs(); // cached for a few hours
     },
     onKey(e) {
       const f = active();

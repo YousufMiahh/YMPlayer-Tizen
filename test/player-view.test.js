@@ -2,9 +2,13 @@
 // The full-screen player (PlayerActivity.java) on the real engine (js/player.js) and the AVPlay shim.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-vi.mock('../js/api.js', async (orig) => ({ ...(await orig()), epg: vi.fn() }));
+vi.mock('../js/api.js', async (orig) => ({ ...(await orig()), epg: vi.fn(), seriesInfo: vi.fn() }));
+vi.mock('../js/tmdb.js', async (orig) => ({ ...(await orig()), findId: vi.fn() }));
+vi.mock('../js/intros.js', async (orig) => ({ ...(await orig()), get: vi.fn() }));
 
 import * as api from '../js/api.js';
+import * as tmdb from '../js/tmdb.js';
+import * as intros from '../js/intros.js';
 import * as store from '../js/store.js';
 import * as player from '../js/player.js';
 import { shim } from '../js/avplay-shim.js';
@@ -55,6 +59,9 @@ beforeEach(() => {
   globalThis.webapis = { avplay: shim };
   document.body.innerHTML = '<div id="root"></div><object id="av" type="application/avplayer" hidden></object>';
   root = document.getElementById('root');
+  api.seriesInfo.mockReset(); api.seriesInfo.mockResolvedValue(null);
+  tmdb.findId.mockReset(); tmdb.findId.mockResolvedValue(null);
+  intros.get.mockReset(); intros.get.mockResolvedValue(intros.NONE);
   api.epg.mockReset();
   api.epg.mockResolvedValue([prog('Evening News', 1700000000, 1700003600), prog('Weather', 1700003600, 1700003900)]);
   router.init(root);
@@ -254,7 +261,7 @@ describe('live', () => {
     expect(view()._state().panel).toBe('tracks');
     expect($('.pl-channels').hidden).toBe(true);
     const heads = [...document.querySelectorAll('.tp-header')].map((h) => h.textContent);
-    expect(heads).toEqual(['FAVOURITES', 'SUBTITLES', 'AUDIO', 'SUBTITLE SIZE']);
+    expect(heads).toEqual(['FAVOURITES', 'SUBTITLES', 'AUDIO', 'PICTURE  ·  FOR THIS CHANNEL', 'SUBTITLE SIZE']);
     const fav = document.querySelector('.tp-opt');
     expect(fav.textContent).toBe('♡  Add to Favourites');
     fav.click();
@@ -734,6 +741,7 @@ describe('Subtitles & Audio', () => {
       '[FAVOURITES]', '♡  Add to Favourites',
       '[SUBTITLES]', 'Off', 'English ✓', 'Spanish',
       '[AUDIO]', 'English  ·  Dolby Digital  ·  5.1 ✓', 'German  ·  AAC  ·  Stereo',
+      '[PICTURE  ·  FOR THIS FILM]', 'Fit ✓', 'Fill screen (zoom)', 'Stretch', '16:9', '4:3',
       '[SUBTITLE SIZE]', 'Small', 'Medium ✓', 'Large', 'Extra Large',
     ]);
     expect(document.activeElement.textContent).toBe('English✓');
@@ -823,5 +831,206 @@ describe('Subtitles & Audio', () => {
   it('subtitle style and text helpers', () => {
     expect(subStyle()).toMatchObject({ fontSize: 60.5, color: '#FFFFFF', bottom: 76 });
     expect(cleanText('{\\an8}Top\\Nline &amp; more')).toBe('Top\nline & more');
+  });
+});
+
+
+// ------------------------------------------------------------------ watched, queue, skip intro, picture
+
+describe('finishing, the queue and what plays next', () => {
+  const D = 30 * 60000;
+  const SEASON = (n) => [1, 2].map((e) => ({ id: String(n * 100 + e), episode_num: e, title: `S${n}E${e}`, container_extension: 'mp4', season: n }));
+  const SERIES_INFO = { info: { tmdb: '70523' }, episodes: { 1: SEASON(1), 2: SEASON(2) } };
+
+  it('a film that runs to its end is marked watched; leaving in the last 10% counts too', () => {
+    vod([MOVIE], 0, D);
+    shim.tick(D - 1000);
+    shim.complete();
+    expect(store.isWatched(MOVIE)).toBe(true);
+    expect(store.position(MOVIE)).toBe(0);
+    store.setWatched(MOVIE, false);
+    vod([MOVIE], 0, D);
+    shim.tick(D * 0.92); // into the credits, more than a minute from the end
+    press(KEY.BACK); press(KEY.BACK);
+    expect(router.current().name).toBe('home');
+    expect(store.isWatched(MOVIE)).toBe(true);
+    expect(store.continueWatching()).toEqual([]);
+  });
+
+  it('an episode finishing puts the next one in Continue Watching, ready at the start', () => {
+    vod(EPS, 0, D);
+    shim.tick(D - 20000);
+    press(KEY.BACK); press(KEY.BACK); press(KEY.BACK); // the card, the overlay, then out
+    expect(router.current().name).toBe('home');
+    expect(store.isWatched(EPS[0])).toBe(true);
+    expect(store.isUpNext(EPS[1])).toBe(true);
+    expect(store.continueWatching().map((e) => e.id)).toEqual(['902']);
+  });
+
+  it('a stream that ends early reconnects where it stopped, three times, then saves your place and leaves', () => {
+    vod([MOVIE], 0, D);
+    for (let i = 1; i <= 3; i++) {
+      shim.tick(600000);
+      shim.complete();
+      expect(txt('.pl-status')).toBe('Reconnecting…');
+      expect(opens()).toHaveLength(1 + i);
+      expect(shim.calls.filter((c) => c.name === 'seekTo').at(-1).args).toEqual([600000]);
+    }
+    shim.tick(600000);
+    shim.complete();
+    expect(txt('.pl-status')).toBe('The stream stopped — your place is saved');
+    expect(store.isWatched(MOVIE)).toBe(false);
+    later(2500);
+    expect(router.current().name).toBe('home');
+    expect(store.position(MOVIE)).toBe(600000);
+  });
+
+  it('a film with something in your Queue: the card says "Next in Queue" and plays it on its own', () => {
+    const other = { type: 'movie', id: '8', name: 'Ronin', ext: 'mp4' };
+    store.queueAdd(other);
+    vod([MOVIE], 0, D);
+    shim.tick(D - 20000); later(500);
+    expect(view()._state().nextShown).toBe(true);
+    expect([...document.querySelectorAll('.nu-label')].map((l) => l.textContent)).toEqual(['Next in Queue', 'Next in Queue']);
+    press(KEY.ENTER);
+    expect(opens().at(-1)).toBe('http://h.com:80/movie/u/p/8.mp4');
+    expect(view()._state().queue).toEqual([other]);
+    expect(store.isWatched(MOVIE)).toBe(true);
+    shim.tick(D - 1000); shim.complete(); // Ronin ends: watched, so it leaves the queue, and nothing is left
+    expect(store.queue()).toEqual([]);
+    expect(router.current().name).toBe('home');
+  });
+
+  it('an episode keeps "Next Episode"; the queue only follows the last one', () => {
+    store.queueAdd(MOVIE);
+    vod(EPS, 0, D);
+    shim.tick(D - 20000); later(500);
+    expect($('.nu-label').textContent).toBe('Next Episode');
+    vod(EPS, 2, D);
+    shim.tick(D - 20000); later(500);
+    expect($('.nu-label').textContent).toBe('Next in Queue');
+  });
+
+  it('an episode played on its own fetches its series, so the next episode follows (also across seasons)', async () => {
+    api.seriesInfo.mockResolvedValue(SERIES_INFO);
+    const ep = { type: 'episode', id: '102', name: 'S1E2', num: '2', ext: 'mp4', parentId: '55', parentName: 'Dark' };
+    vod([ep], 0, D);
+    await flush(); await flush();
+    expect(api.seriesInfo).toHaveBeenCalledWith('55');
+    const st = view()._state();
+    expect(st.queue.map((e) => e.id)).toEqual(['101', '102', '201', '202']);
+    expect(st.index).toBe(1);
+    expect(st.queue[1]).toBe(ep);
+    expect(ep.season).toBe(1); // an entry saved by an older version learns its season and the series' TMDB id
+    expect(ep.tmdb).toBe('70523');
+    shim.tick(D - 1000); shim.complete();
+    expect(opens().at(-1)).toBe('http://h.com:80/series/u/p/201.mp4');
+  });
+});
+
+describe('Skip Intro', () => {
+  const D = 45 * 60000;
+  const ep = () => ({ type: 'episode', id: '901', name: 'Chapter 1', num: '1', ext: 'mp4', parentId: '55', parentName: 'Dark', season: 1, tmdb: '70523' });
+
+  it('asks the intro database by TMDB id, season and episode; the button shows during the intro and OK jumps past it', async () => {
+    tmdb.findId.mockResolvedValue('70523');
+    intros.get.mockResolvedValue({ introStart: 30000, introEnd: 95000, creditsStart: -1 });
+    vod([ep(), EPS[1]], 0, D);
+    await flush(); await flush();
+    expect(tmdb.findId).toHaveBeenCalledWith('tv', 'Dark', '70523');
+    expect(intros.get).toHaveBeenCalledWith('70523', 1, 1);
+    shim.tick(20000); later(500);
+    expect(visible('.pl-skip')).toBe(false);
+    shim.tick(31000); later(500);
+    expect(visible('.pl-skip')).toBe(true);
+    expect(txt('.pl-skip')).toBe('OK   Skip Intro');
+    press(KEY.ENTER);
+    expect(shim.calls.at(-1)).toEqual({ name: 'seekTo', args: [95000] });
+    expect(txt('.pl-status')).toBe('Skipped the intro');
+    expect(view()._state().skipShown).toBe(false);
+    expect(player.isPlaying()).toBe(true); // OK skipped; it did not pause
+  });
+
+  it('gone 1.5 s before the intro ends; OK is play / pause again', async () => {
+    tmdb.findId.mockResolvedValue('70523');
+    intros.get.mockResolvedValue({ introStart: 0, introEnd: 60000, creditsStart: -1 });
+    vod([ep()], 0, D);
+    await flush(); await flush();
+    shim.tick(5000); later(500);
+    expect(visible('.pl-skip')).toBe(true);
+    shim.tick(58600); later(500);
+    expect(view()._state().skipShown).toBe(false);
+    press(KEY.ENTER);
+    expect(player.isPlaying()).toBe(false);
+  });
+
+  it('no button for a film, an episode without a season, or a series the database does not have', async () => {
+    vod([MOVIE], 0, D);
+    await flush();
+    expect(tmdb.findId).not.toHaveBeenCalled();
+    vod(EPS, 0, D); // saved by an older version: no season
+    await flush();
+    expect(tmdb.findId).not.toHaveBeenCalled();
+    tmdb.findId.mockResolvedValue('1');
+    vod([ep()], 0, D);
+    await flush(); await flush();
+    shim.tick(40000); later(500);
+    expect(visible('.pl-skip')).toBe(false);
+  });
+
+  it('the Next Episode card comes up when the credits start, if the database knows where that is', async () => {
+    tmdb.findId.mockResolvedValue('70523');
+    intros.get.mockResolvedValue({ introStart: -1, introEnd: -1, creditsStart: D - 120000 });
+    vod([ep(), EPS[1]], 0, D);
+    await flush(); await flush();
+    shim.tick(D - 125000); later(500);
+    expect(view()._state().nextShown).toBe(false);
+    shim.tick(D - 119000); later(500);
+    expect(view()._state().nextShown).toBe(true);
+  });
+});
+
+describe('Picture shape', () => {
+  const rects = () => shim.calls.filter((c) => c.name === 'setDisplayRect').map((c) => c.args);
+
+  it('Fit by default; the panel sets it for this film and it is used again next time', () => {
+    vod([MOVIE]);
+    expect(rects().at(-1)).toEqual([0, 0, 1920, 1080]);
+    expect(shim.displayMethod).toBe('PLAYER_DISPLAY_MODE_LETTER_BOX');
+    hold(KEY.ENTER);
+    const opt = [...document.querySelectorAll('.tp-opt')].find((o) => o.querySelector('.tp-label').textContent === '4:3');
+    opt.click();
+    expect(store.picture(MOVIE)).toBe(4);
+    expect(rects().at(-1)).toEqual([240, 0, 1440, 1080]);
+    expect(shim.displayMethod).toBe('PLAYER_DISPLAY_MODE_FULL_SCREEN');
+    expect(txt('.pl-status')).toBe('Picture: 4:3');
+    later(300);
+    expect([...document.querySelectorAll('.tp-opt')].find((o) => o.querySelector('.tp-label').textContent === '4:3').textContent).toBe('4:3✓');
+    press(KEY.BACK); press(KEY.BACK); press(KEY.BACK);
+    shim.calls = [];
+    vod([MOVIE]);
+    expect(rects().at(-1)).toEqual([240, 0, 1440, 1080]);
+  });
+
+  it('episodes share their series\' shape; each channel has its own', () => {
+    store.setPicture(EPS[0], 2);
+    expect(store.picture(EPS[2])).toBe(2);
+    store.setPicture(CH[1], 2);
+    live(0);
+    expect(shim.displayMethod).toBe('PLAYER_DISPLAY_MODE_LETTER_BOX');
+    press(KEY.DOWN); later(400);
+    expect(shim.displayMethod).toBe('PLAYER_DISPLAY_MODE_FULL_SCREEN');
+    store.setPicture(CH[1], 0);
+    expect(store.picture(CH[1])).toBe(0);
+  });
+
+  it('pictureRect: Stretch and 16:9 fill the screen; Fill zooms a wide or narrow video until it covers it', () => {
+    const FULL = 'PLAYER_DISPLAY_MODE_FULL_SCREEN';
+    expect(player.pictureRect(player.PIC_STRETCH)).toEqual([0, 0, 1920, 1080, FULL]);
+    expect(player.pictureRect(player.PIC_16_9)).toEqual([0, 0, 1920, 1080, FULL]);
+    expect(player.pictureRect(player.PIC_FILL, 2.4)).toEqual([-336, 0, 2592, 1080, FULL]);
+    expect(player.pictureRect(player.PIC_FILL, 4 / 3)).toEqual([0, -180, 1920, 1440, FULL]);
+    expect(player.pictureRect(player.PIC_FILL, 16 / 9)).toEqual([0, 0, 1920, 1080, FULL]);
+    expect(player.pictureRect(player.PIC_FILL, 0)).toEqual([0, 0, 1920, 1080, 'PLAYER_DISPLAY_MODE_LETTER_BOX']); // shape not known yet
   });
 });

@@ -75,7 +75,9 @@ describe('the app package', () => {
       expect(existsSync(resolve(ROOT, gone)), gone).toBe(false);
     }
     const src = files('js').map(read).join('\n');
-    expect(src).not.toMatch(/hasTmdb|hasYoutube|api\.themoviedb\.org|googleapis\.com\/youtube/);
+    expect(src).not.toMatch(/hasTmdb|hasYoutube|googleapis\.com\/youtube/); // nothing is gated on a key the user must supply
+    // The Movie Database is used the way the Android app uses it (Skip Intro, Because You Watched), from one module.
+    expect(files('js').filter((f) => /api\.themoviedb\.org/.test(read(f)))).toEqual(['js/tmdb.js']);
     const homeRows = await import('../js/home-rows.js');
     expect(homeRows.REMOTE_ROWS.map((r) => r.key)).toEqual(['top_movies', 'top_series', 'new_movies', 'new_series']);
   });

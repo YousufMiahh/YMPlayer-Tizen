@@ -103,15 +103,18 @@ describe('meta, credits and labels (pure)', () => {
     expect(D.movieInfo({ info: [] }, MOVIE)).toBeNull();
   });
 
-  it('movie buttons by state: Play | Resume + Start Over | Trailer | Favourite', () => {
+  it('movie buttons by state: Play | Resume + Start Over | Trailer | Favourite | Queue | Watched', () => {
     const lab = (t) => D.movieButtons(MOVIE, t).map((b) => b.label);
-    expect(lab(null)).toEqual(['▶  Play', '♡  Favourite']);
-    expect(lab('2GfZl4kuVNI')).toEqual(['▶  Play', '▶  Trailer', '♡  Favourite']);
+    expect(lab(null)).toEqual(['▶  Play', '♡  Favourite', '＋  Queue', '○  Mark Watched']);
+    expect(lab('2GfZl4kuVNI')).toEqual(['▶  Play', '▶  Trailer', '♡  Favourite', '＋  Queue', '○  Mark Watched']);
     store.setPosition(MOVIE, 4521000);
     store.toggleFav(MOVIE);
-    expect(lab('2GfZl4kuVNI')).toEqual(['▶  Resume  1:15:21', '↺  Start Over', '▶  Trailer', '♥  In Favourites']);
+    store.queueAdd(MOVIE);
+    expect(lab('2GfZl4kuVNI')).toEqual(['▶  Resume  1:15:21', '↺  Start Over', '▶  Trailer', '♥  In Favourites', '✓  In Queue', '○  Mark Watched']);
     store.setPosition(MOVIE, 754000);
-    expect(lab(null)).toEqual(['▶  Resume  12:34', '↺  Start Over', '♥  In Favourites']);
+    expect(lab(null)).toEqual(['▶  Resume  12:34', '↺  Start Over', '♥  In Favourites', '✓  In Queue', '○  Mark Watched']);
+    store.setWatched(MOVIE, true); // watched: no resume point, and out of the queue
+    expect(lab(null)).toEqual(['▶  Play', '♥  In Favourites', '＋  Queue', '✓  Watched']);
   });
 
   it('series meta is "year  ·  genre  ·  ★ rating"; without info the list line stays', () => {
@@ -153,7 +156,7 @@ describe('meta, credits and labels (pure)', () => {
 
   it('episode card: "N.  title", "M:SS left" while part-watched else the duration, progress', () => {
     const e = D.parseSeasons(SERIES_INFO, SERIES)[1].episodes[0];
-    expect(D.episodeCard(e, SERIES)).toEqual({ image: 'http://x/1002.jpg', title: '2.  Ep 1002', sub: '52 min', progress: 0 });
+    expect(D.episodeCard(e, SERIES)).toEqual({ image: 'http://x/1002.jpg', title: '2.  Ep 1002', sub: '52 min', progress: 0, watched: false });
     store.setDuration(e, 3120000); store.setPosition(e, 1200000);
     expect(D.episodeCard(e, SERIES)).toMatchObject({ sub: '32:00 left', progress: 1200000 / 3120000 });
     store.setPosition(e, 0); // watched to the end: back to the duration, no bar (Android draws no tick)
@@ -204,14 +207,14 @@ describe('movie page', () => {
     router.go('movie-detail', { item: MOVIE });
     expect(root.querySelector('.dp-title').textContent).toBe('Heat (1995)');
     expect(root.querySelector('.dp-meta').textContent).toBe('Crime  ·  ★ 8.2');
-    expect(labels()).toEqual(['▶  Play', '♡  Favourite']);
+    expect(labels()).toEqual(['▶  Play', '♡  Favourite', '＋  Queue', '○  Mark Watched']);
     expect(document.activeElement.textContent).toBe('▶  Play');
     await tick();
     expect(api.vodInfo).toHaveBeenCalledWith('100');
     expect(root.querySelector('.dp-meta').textContent).toBe('1995  ·  2 hr 50 min  ·  Crime  ·  ★ 8.3');
     expect(root.querySelector('.dp-plot').textContent).toBe('Cops and robbers.');
     expect(root.querySelector('.dp-credits').textContent).toBe('Director: Michael Mann  ·  Cast: Al Pacino, Robert De Niro');
-    expect(labels()).toEqual(['▶  Play', '▶  Trailer', '♡  Favourite']);
+    expect(labels()).toEqual(['▶  Play', '▶  Trailer', '♡  Favourite', '＋  Queue', '○  Mark Watched']);
     expect(document.activeElement.textContent).toBe('▶  Play');
   });
 
@@ -222,7 +225,7 @@ describe('movie page', () => {
     router.go('movie-detail', { item: MOVIE });
     root.querySelectorAll('.dp-buttons button')[1].focus(); // Start Over
     resolve(VOD_INFO); await tick();
-    expect(labels()).toEqual(['▶  Resume  12:34', '↺  Start Over', '▶  Trailer', '♡  Favourite']);
+    expect(labels()).toEqual(['▶  Resume  12:34', '↺  Start Over', '▶  Trailer', '♡  Favourite', '＋  Queue', '○  Mark Watched']);
     expect(document.activeElement.textContent).toBe('↺  Start Over');
   });
 
@@ -231,7 +234,7 @@ describe('movie page', () => {
     router.go('movie-detail', { item: MOVIE });
     await tick();
     expect(root.querySelector('.dp-meta').textContent).toBe('Crime  ·  ★ 8.2');
-    expect(labels()).toEqual(['▶  Play', '♡  Favourite']);
+    expect(labels()).toEqual(['▶  Play', '♡  Favourite', '＋  Queue', '○  Mark Watched']);
   });
 
   it('Resume plays with the saved point kept; Start Over clears it first; both are Open.play([movie], 0)', async () => {
@@ -254,7 +257,7 @@ describe('movie page', () => {
     root.querySelector('[data-action="play"]').click();
     store.setPosition(MOVIE, 61000); // the player saved a point
     router.back();
-    expect(labels()).toEqual(['▶  Resume  1:01', '↺  Start Over', '▶  Trailer', '♡  Favourite']);
+    expect(labels()).toEqual(['▶  Resume  1:01', '↺  Start Over', '▶  Trailer', '♡  Favourite', '＋  Queue', '○  Mark Watched']);
     expect(document.activeElement.textContent).toBe('▶  Resume  1:01');
     expect(root.querySelector('.dp-meta').textContent).toBe('1995  ·  2 hr 50 min  ·  Crime  ·  ★ 8.3');
     expect(api.vodInfo).toHaveBeenCalledTimes(1);

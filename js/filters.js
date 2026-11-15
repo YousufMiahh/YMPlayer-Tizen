@@ -133,8 +133,14 @@ export function isHidden(cat, tags, cats, shows) {
 export function categories(type, all) {
   if (!all) return all;
   const tags = hiddenTags(); const cats = hiddenCategories(type); const shows = alwaysShown(type);
-  if (!tags.size && !cats.size) return all;
-  return all.filter((c) => !isHidden(c, tags, cats, shows));
+  const out = []; let same = true;
+  for (const c of all) {
+    if (isHidden(c, tags, cats, shows)) { same = false; continue; }
+    const n = store.catName(type, c.id); // renamed by you (the original name still decides country filters)
+    if (n !== null) same = false;
+    out.push(n !== null ? { ...c, name: n } : c);
+  }
+  return same ? all : out;
 }
 
 const CACHE = new Map(); // list -> { v, out, ns, forSearch }

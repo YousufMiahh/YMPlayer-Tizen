@@ -5,7 +5,9 @@
 //   ▶  Play / ▶  Resume S1 · E3 / ▶  Play S1 · E4 | ▶  Trailer | ♡  Favourite
 // Under it a row of season pills (focusing one switches the season, no OK needed) and a shelf of
 // 300×169 episode cards ("N.  title", "M:SS left" or the duration, progress bar). ▲ from a card
-// goes to the active season's pill. Menu (☰) toggles the favourite with a toast.
+// goes to the active season's pill. Menu (☰) toggles the favourite with a toast; on an episode
+// card ☰ or Hold OK opens its options (Add to Queue, Mark as Watched, Mark Season as Watched…).
+// Watched episodes carry a ✓, and the season pills count them ("Season 2  3/10", "Season 2  ✓").
 // An episode plays with its own season as the queue (Open.play(eps, i)).
 import * as api from '../api.js';
 import * as store from '../store.js';
@@ -13,14 +15,17 @@ import * as nav from '../nav.js';
 import { play, toggleFav } from '../open.js';
 import { openTrailer } from '../trailer.js';
 import {
-  seriesInfo, parseSeasons, seasonLabel, lastWatched, seriesPlayLabel, playTargetEpisode,
+  seriesInfo, parseSeasons, seasonPillLabel, lastWatched, seriesPlayLabel, playTargetEpisode,
   startSeason, episodeCard, favLabel,
 } from '../detail.js';
+import { showItemMenu } from '../item-menu.js';
+import { LONG_PRESS_MS } from '../ui/theme.js';
 import { pillButton, card } from '../ui/widgets.js';
 import { bringIntoView } from '../ui/scroll.js';
 import { detailFrame } from './movie-detail.js';
 
 const KEY_UP = 38;
+const KEY_ENTER = 13;
 const KEY_MENU = 10133;
 
 export const LOADING = 'Loading episodes…';
@@ -31,7 +36,8 @@ export function seriesDetailView() {
   let root; let params; let series; let page;
   let metaEl; let epLabelEl; let plotEl; let buttonsEl; let pillsEl; let shelfEl;
   let seasons = []; let active = null; let trailer = null; let loaded = false; let seq = 0;
-  let onActivate; let onClick; let onFocusIn;
+  let onActivate; let onClick; let onFocusIn; let onKeyUp;
+  let hold = null; // OK held on an episode card: { card, timer, held }
 
   const eps = () => (seasons.find((s) => s.season === active) || { episodes: [] }).episodes;
   const activePill = () => pillsEl.querySelector(`[data-season="${active}"]`);
@@ -54,8 +60,37 @@ export function seriesDetailView() {
     params.shownEpisode = ep.id;
   }
 
+  function updatePillLabels() {
+    for (const p of pillsEl.children) {
+      const s = seasons.find((x) => x.season === Number(p.dataset.season));
+      if (s) p.textContent = seasonPillLabel(s);
+    }
+  }
+
+  /** ☰ / Hold OK on an episode: Add to Queue, Mark as Watched, Mark Season as Watched… */
+  function episodeMenu(c) {
+    const list = eps();
+    const idx = Number(c.dataset.ep);
+    const ep = list[idx];
+    if (!ep) return;
+    c.classList.add('keep-focus');
+    showItemMenu(ep, list).then((changed) => {
+      hold = null; // the dialog may have swallowed the key's release
+      if (!root) return;
+      c.classList.remove('keep-focus');
+      if (!changed) return;
+      const left = shelfEl.parentElement.scrollLeft;
+      buildEpisodes();
+      buildButtons();
+      shelfEl.parentElement.scrollLeft = left;
+      const again = shelfEl.children[idx];
+      if (again) again.focus({ preventScroll: true });
+    });
+  }
+
   function buildEpisodes() {
     const list = eps();
+    updatePillLabels();
     shelfEl.replaceChildren(...list.map((ep, i) => {
       const c = card({ shape: 'landscape', ...episodeCard(ep, series) });
       c.dataset.ep = String(i);
@@ -98,7 +133,7 @@ export function seriesDetailView() {
     pillsEl.replaceChildren(...seasons.map((s) => {
       const p = document.createElement('button');
       p.type = 'button'; p.className = 'season-pill'; p.dataset.season = String(s.season);
-      p.textContent = seasonLabel(s.season);
+      p.textContent = seasonPillLabel(s);
       return p;
     }));
     loaded = true;
@@ -161,6 +196,7 @@ export function seriesDetailView() {
         if (b && buttonsEl.contains(b)) { act(b.dataset.action, b); return; }
         const c = t.closest('.card');
         if (c && shelfEl.contains(c)) {
+          if (hold && hold.held) return; // the release of a Hold OK
           const list = eps();
           const ep = list[Number(c.dataset.ep)];
           if (ep) { rememberFocus(); play(list, list.indexOf(ep)); }
@@ -179,6 +215,14 @@ export function seriesDetailView() {
           bringIntoView(t, shelfEl.parentElement, false, true);
         }
       };
+      // OK on an episode is decided on release: a short press plays, a hold is the menu.
+      onKeyUp = (e) => {
+        if (e.keyCode !== KEY_ENTER || !hold) return;
+        const h = hold; hold = null;
+        clearTimeout(h.timer);
+        if (!h.held && root && h.card === document.activeElement) h.card.click();
+      };
+      document.addEventListener('keyup', onKeyUp);
       root.addEventListener('click', onClick);
       root.addEventListener('activate', onActivate);
       page.el.addEventListener('focusin', onFocusIn);
@@ -205,6 +249,21 @@ export function seriesDetailView() {
     },
     onKey(e) {
       if (!root) return false;
+      const onEpisode = () => {
+        const f = document.activeElement;
+        return f && f.dataset && f.dataset.ep !== undefined && shelfEl.contains(f) ? f : null;
+      };
+      if (e.keyCode === KEY_MENU && onEpisode()) { e.preventDefault(); episodeMenu(onEpisode()); return true; }
+      if (e.keyCode === KEY_ENTER && onEpisode()) {
+        e.preventDefault();
+        if (!e.repeat && !hold) {
+          const c = onEpisode();
+          const h = { card: c, held: false, timer: null };
+          h.timer = setTimeout(() => { h.timer = null; h.held = true; if (root && h.card === document.activeElement) episodeMenu(h.card); }, LONG_PRESS_MS);
+          hold = h;
+        }
+        return true;
+      }
       if (e.keyCode === KEY_MENU) { // SeriesActivity.onKeyDown(KEYCODE_MENU)
         e.preventDefault();
         toggleFav(series);
@@ -223,6 +282,8 @@ export function seriesDetailView() {
     },
     unmount() {
       seq++;
+      if (hold) { clearTimeout(hold.timer); hold = null; }
+      document.removeEventListener('keyup', onKeyUp);
       if (root) {
         if (page && loaded) rememberFocus();
         root.removeEventListener('click', onClick);

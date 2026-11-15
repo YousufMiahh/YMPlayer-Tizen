@@ -183,3 +183,12 @@
 .tp-opt:focus { background: var(--focus-bg); color: var(--on-focus); }
 .tp-label { flex: 1; min-width: 0; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
 .tp-check { flex: none; }
+
+/* ---------------------------------------------------------------- Skip Intro (PlayerActivity.skipBtn) */
+/* Bottom-right, where the Next Episode card goes: white at 95%, black SemiBold 20u, 8u corners. */
+.pl-skip {
+  position: absolute; right: calc(72 * var(--u)); bottom: calc(64 * var(--u));
+  padding: calc(14 * var(--u)) calc(28 * var(--u)); border-radius: calc(8 * var(--u));
+  background: rgba(255, 255, 255, 0.949); color: #000000;
+  font-size: calc(20 * var(--u)); font-weight: 600; white-space: pre;
+}

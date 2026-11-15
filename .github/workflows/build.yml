@@ -129,10 +129,17 @@ jobs:
           name: YMPlayer.wgt
           path: out/YMPlayer.wgt
 
+      - name: Release notes (the app's What's New)
+        run: |
+          set -euo pipefail
+          node --input-type=module -e "import { NOTES } from './js/whats-new-notes.js'; process.stdout.write(NOTES.trim() + '\n');" > "$RUNNER_TEMP/notes.md"
+          cat "$RUNNER_TEMP/notes.md"
+
       - name: Publish release (permanent latest link)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ github.run_number }}
           name: YM Player Tizen v${{ github.run_number }}
+          body_path: ${{ runner.temp }}/notes.md
           files: out/YMPlayer.wgt
           make_latest: true

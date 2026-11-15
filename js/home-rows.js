@@ -13,6 +13,7 @@ export const LANDSCAPE = 'landscape';
 /** HomeActivity.buildLocalRows / buildRemoteRows, in order, with their Settings keys. */
 export const LOCAL_ROWS = [
   { key: 'continue', title: 'Continue Watching', shape: LANDSCAPE },
+  { key: 'queue', title: 'Your Queue', shape: LANDSCAPE },
   { key: 'recent', title: 'Recent Channels', shape: CHANNEL },
   { key: 'fav_live', title: 'Favourite Channels', shape: CHANNEL },
   { key: 'fav_movie', title: 'Favourite Movies', shape: POSTER },
@@ -26,8 +27,8 @@ export const REMOTE_ROWS = [
 ];
 export const ROWS = [...LOCAL_ROWS, ...REMOTE_ROWS];
 
-/** Cards.titleWithMenuHint on a remote without ☰: "Hold OK to remove from list". */
-export const CW_HINT = 'Hold OK to remove from list';
+/** Cards.titleWithMenuHint on a remote without ☰ (Continue Watching and Your Queue). */
+export const CW_HINT = 'Hold OK for options';
 export const RECENT_CHANNELS = 20;   // HomeActivity: limit(prefs.history(true), 20)
 export const RECENT_POOL = 300;      // HomeActivity.recent: Repo.recentlyAdded(type, 300)
 export const RECENT_KEEP = 24;       //   ... filtered, then the newest 24
@@ -61,7 +62,8 @@ export function joinNonEmpty(...parts) {
 export function cwCard(it) {
   const pos = store.position(it); const dur = store.duration(it);
   const progress = dur > 0 ? pos / dur : 0;
-  const left = dur > 0 ? `${fmt(Math.max(0, dur - pos))} left` : null;
+  const left = pos > 0 && dur > 0 ? `${fmt(Math.max(0, dur - pos))} left`
+    : it.type === EPISODE && store.isUpNext(it) ? 'Next episode' : null;
   let image = it.icon || null;
   let sub;
   if (it.type === EPISODE) {
@@ -77,8 +79,10 @@ export function cwCard(it) {
 export function localRows() {
   const out = [];
   const add = (r, items) => { if (store.homeShows(r.key) && items && items.length) out.push({ ...r, items }); };
-  const [cw, recent, favLive, favMovie, favSeries] = LOCAL_ROWS;
+  const [cw, queue, recent, favLive, favMovie, favSeries] = LOCAL_ROWS;
   add(cw, continueWatching());
+  const q = store.queue(); // always shown while there is something in it (no Settings switch)
+  if (q.length) out.push({ ...queue, items: q });
   add(recent, store.history(true).slice(0, RECENT_CHANNELS));
   add(favLive, store.favs(LIVE));
   add(favMovie, store.favs(MOVIE));
@@ -88,7 +92,7 @@ export function localRows() {
 
 /**
  * HomeActivity.buildRemoteRows from what has been loaded so far.
- * @param data {topMovies, topSeries, newMovies, newSeries} (null = not loaded yet)
+ * @param data {topMovies, topSeries, recRows, newMovies, newSeries} (null = not loaded yet)
  */
 export function remoteRows(data = {}) {
   const lists = [data.topMovies, data.topSeries, data.newMovies, data.newSeries];
@@ -96,6 +100,11 @@ export function remoteRows(data = {}) {
   REMOTE_ROWS.forEach((r, i) => {
     const items = lists[i];
     if (store.homeShows(r.key) && items && items.length) out.push({ ...r, items });
+    if (r.key === 'top_series' && store.homeShows('recommended')) { // "Because you watched …" sit under the Top 10
+      (data.recRows || []).forEach((rec, n) => {
+        if (rec.items && rec.items.length) out.push({ key: `rec_${n}`, title: rec.title, shape: POSTER, items: rec.items });
+      });
+    }
   });
   return out;
 }

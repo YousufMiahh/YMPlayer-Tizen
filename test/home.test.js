@@ -89,7 +89,7 @@ describe('home rows (HomeActivity.buildLocalRows / buildRemoteRows)', () => {
     await settle();
     expect(ids('continue')).toEqual(['c', 'a']);
     const h = root.querySelector('.home-row[data-row="continue"] .shelf-title');
-    expect(h.querySelector('.shelf-hint').textContent).toBe('      Hold OK to remove from list');
+    expect(h.querySelector('.shelf-hint').textContent).toBe('      Hold OK for options');
   });
 
   it('Recent Channels shows the newest 20 of the live history', async () => {
@@ -222,31 +222,79 @@ describe('opening cards (Open.item)', () => {
 });
 
 describe('hold OK / ☰ on Home cards', () => {
-  it('Hold OK on a favourite card removes it with the Android toast and keeps focus on that shelf', async () => {
+  const menuItems = () => [...document.querySelectorAll('.dialog-item')].map((b) => b.textContent);
+  const choose = async (label) => {
+    [...document.querySelectorAll('.dialog-item')].find((b) => b.textContent === label).click();
+    await settle();
+  };
+
+  it('Hold OK on a favourite channel removes it straight away with the Android toast and keeps focus on that shelf', async () => {
     vi.useFakeTimers();
     try {
-      ['1', '2', '3'].forEach((id) => store.toggleFav({ type: 'movie', id, name: `Film ${id}` }));
+      ['1', '2', '3'].forEach((id) => store.toggleFav({ type: 'live', id, name: `Channel ${id}` }));
       router.go('home');
       await vi.advanceTimersByTimeAsync(10);
-      card('fav_movie', 1).focus();
+      card('fav_live', 1).focus();
       press(13);
       await vi.advanceTimersByTimeAsync(450);
       release(13);
-      expect(toast.current()).toBe('Removed from Favourites — Film 2');
-      expect(ids('fav_movie')).toEqual(['1', '3']);
-      expect(document.activeElement).toBe(card('fav_movie', 1));
+      expect(document.querySelector('.dialog')).toBeNull(); // channels have no menu
+      expect(toast.current()).toBe('Removed from Favourites — Channel 2');
+      expect(ids('fav_live')).toEqual(['1', '3']);
+      expect(document.activeElement).toBe(card('fav_live', 1));
       expect(router.current().name).toBe('home'); // the release after a hold does not open anything
     } finally { vi.useRealTimers(); }
   });
 
-  it('☰ on a Recently Added card adds it to Favourite Movies ("Added to Favourites — …")', async () => {
+  it('☰ on a film opens its options: Favourite, Queue, Watched (ItemMenu)', async () => {
     router.go('home'); await settle();
     const c = card('new_movies');
     c.focus();
     press(MENU);
+    expect(document.querySelector('.dialog-title').textContent).toBe('M3');
+    expect(menuItems()).toEqual(['♡  Add to Favourites', '＋  Add to Queue', '✓  Mark as Watched']);
+    await choose('♡  Add to Favourites');
     expect(toast.current()).toBe('Added to Favourites — M3');
     expect(ids('fav_movie')).toEqual(['3']);
-    expect(document.activeElement).toBe(c); // a remote row keeps its card
+    expect(document.activeElement).toBe(card('new_movies')); // a remote row keeps its place
+  });
+
+  it('Add to Queue: a "Your Queue" row under Continue Watching, with the hint; Remove takes it out', async () => {
+    router.go('home'); await settle();
+    card('new_movies').focus();
+    press(MENU);
+    await choose('＋  Add to Queue');
+    expect(toast.current()).toBe('Added to your Queue — M3');
+    expect(store.queue().map((q) => q.id)).toEqual(['3']);
+    expect(rowKeys()[0]).toBe('queue');
+    const h = root.querySelector('.home-row[data-row="queue"] .shelf-title');
+    expect(h.textContent).toBe('Your Queue      Hold OK for options');
+    card('queue').focus();
+    press(MENU);
+    expect(menuItems()).toEqual(['♡  Add to Favourites', '−  Remove from Queue', '✓  Mark as Watched']);
+    await choose('−  Remove from Queue');
+    expect(store.queue()).toEqual([]);
+    expect(rowKeys()).not.toContain('queue');
+  });
+
+  it('Mark as Watched: a ✓ on the card, off Continue Watching and out of the queue', async () => {
+    const m = M('3'); // also in Recently Added
+    store.addHistory(m); store.setPosition(m, 30000); store.queueAdd(m);
+    router.go('home'); await settle();
+    expect(card('new_movies').querySelector('.watched-badge')).toBeNull();
+    card('continue').focus();
+    press(MENU);
+    expect(menuItems()).toEqual(['♡  Add to Favourites', '−  Remove from Queue', '✓  Mark as Watched', '✕  Remove from Continue Watching']);
+    await choose('✓  Mark as Watched');
+    expect(store.isWatched(m)).toBe(true);
+    expect(store.position(m)).toBe(0);
+    expect(store.queue()).toEqual([]);
+    expect(rowKeys()).not.toContain('continue');
+    router.go('home'); await settle();
+    expect(card('new_movies').querySelector('.watched-badge').textContent).toBe('✓');
+    card('new_movies').focus();
+    press(MENU);
+    expect(menuItems()).toContain('○  Mark as Unwatched');
   });
 
   it('removing the last favourite moves focus to the shelf that took its place', async () => {
@@ -255,11 +303,12 @@ describe('hold OK / ☰ on Home cards', () => {
     router.go('home'); await settle();
     card('fav_movie').focus();
     press(MENU);
+    await choose('♥  Remove from Favourites');
     expect(rowKeys()).not.toContain('fav_movie');
     expect(document.activeElement).toBe(card('fav_series'));
   });
 
-  it('Continue Watching asks first: title, name, Remove / Cancel with Cancel focused', async () => {
+  it('an episode in Continue Watching: "Series  ·  Episode" options without Favourite; Remove takes it off the list', async () => {
     const ep = { type: 'episode', id: 'e', name: 'Pilot', parentName: 'Show' };
     const m = M('m');
     store.addHistory(m); store.setPosition(m, 30000);
@@ -267,28 +316,34 @@ describe('hold OK / ☰ on Home cards', () => {
     router.go('home'); await settle();
     card('continue').focus();
     press(MENU);
-    const d = document.querySelector('.dialog');
-    expect(d.querySelector('.dialog-title').textContent).toBe('Remove from Continue Watching?');
-    expect(d.querySelector('.dialog-message').textContent).toBe('Show · Pilot');
-    expect([...d.querySelectorAll('.dialog-button')].map((b) => b.textContent)).toEqual(['Cancel', 'Remove']);
-    expect(document.activeElement.textContent).toBe('Cancel');
-    expect(toast.current()).toBeNull(); // no favourite toggled
-    d.querySelector('[data-value="positive"]').click();
-    await settle();
+    expect(document.querySelector('.dialog-title').textContent).toBe('Show  ·  Pilot');
+    expect(menuItems()).toEqual(['＋  Add to Queue', '✓  Mark as Watched', '✕  Remove from Continue Watching']);
+    await choose('✕  Remove from Continue Watching');
     expect(store.position(ep)).toBe(0);
     expect(ids('continue')).toEqual(['m']);
     expect(document.activeElement).toBe(card('continue'));
   });
 
-  it('Cancel leaves Continue Watching alone', async () => {
+  it('Back out of the menu leaves everything alone', async () => {
     const m = M('m'); store.addHistory(m); store.setPosition(m, 30000);
     router.go('home'); await settle();
     card('continue').focus();
     press(MENU);
-    document.querySelector('[data-value="negative"]').click();
+    press(10009);
+    document.dispatchEvent(new Event('back'));
     await settle();
     expect(store.position(m)).toBe(30000);
     expect(ids('continue')).toEqual(['m']);
+  });
+
+  it('the next episode after one you finished sits in Continue Watching as "Next episode"', async () => {
+    const ep = { type: 'episode', id: 'e2', name: 'Two', parentName: 'Show', parentId: '9' };
+    store.markUpNext(ep);
+    router.go('home'); await settle();
+    expect(ids('continue')).toEqual(['e2']);
+    expect(card('continue').querySelector('.sub').textContent).toBe('Show  ·  Next episode');
+    store.setPosition(ep, 20000); // started: an ordinary entry from now on
+    expect(store.isUpNext(ep)).toBe(false);
   });
 });
 

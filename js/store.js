@@ -4,12 +4,12 @@ import { key, fromJson, toJson } from './item.js';
 
 export const DEFAULT_UA = 'XtreamPlayer/1.0 (Linux; Android; Fire TV)';
 export const HOME_KEYS = ['continue', 'recent', 'fav_live', 'fav_movie', 'fav_series',
-  'top_movies', 'top_series', 'new_movies', 'new_series'];
+  'top_movies', 'top_series', 'recommended', 'new_movies', 'new_series'];
 
 export const HOME_NAMES = {
   continue: 'Continue Watching', recent: 'Recent Channels', fav_live: 'Favourite Channels',
   fav_movie: 'Favourite Movies', fav_series: 'Favourite Series', top_movies: 'Top 10 Movies in the UK',
-  top_series: 'Top 10 Series in the UK', new_movies: 'Recently Added Movies', new_series: 'Recently Added Series',
+  top_series: 'Top 10 Series in the UK', recommended: 'Because You Watched…', new_movies: 'Recently Added Movies', new_series: 'Recently Added Series',
 };
 
 const HISTORY_MAX = 40;
@@ -74,7 +74,8 @@ export function saveAccount(acc) {
 }
 
 function isAccountData(k) {
-  return /^(fav_|favcat_|pos_|dur_|hist_|lib_time|hide_tags|hide_cat_|show_cat_)/.test(k);
+  return /^(fav_|favcat_|pos_|dur_|hist_|lib_time|hide_tags|hide_cat_|show_cat_|catname_|pic_)/.test(k)
+    || k === 'watched' || k === 'queue' || k === 'upnext';
 }
 
 export function removeAccount(id) {
@@ -203,6 +204,7 @@ export const setHomeShows = (k, on) => setStr(`home_${k}`, !!on);
 
 export const position = (item) => getInt(`${ns()}pos_${key(item)}`, 0);
 export function setPosition(item, ms) {
+  clearUpNext(item); // started (or removed): an ordinary entry from now on
   const k = `${ns()}pos_${key(item)}`;
   if (ms <= 0) ls().removeItem(k); else setStr(k, Math.floor(ms));
 }
@@ -210,6 +212,109 @@ export function setPosition(item, ms) {
 export const duration = (item) => getInt(`${ns()}dur_${key(item)}`, 0);
 export function setDuration(item, ms) {
   if (ms > 0) setStr(`${ns()}dur_${key(item)}`, Math.floor(ms));
+}
+
+// ================================================================ up next (Continue Watching)
+
+const keySet = (k) => new Set(getArr(`${ns()}${k}`).map(String));
+const saveKeySet = (k, set) => setJson(`${ns()}${k}`, [...set]);
+
+/** The next episode after one you finished: shown in Continue Watching at the start. */
+export function markUpNext(item) {
+  addHistory(item);
+  const s = keySet('upnext');
+  if (!s.has(key(item))) { s.add(key(item)); saveKeySet('upnext', s); }
+}
+
+export const isUpNext = (item) => !!item && keySet('upnext').has(key(item));
+
+function clearUpNext(item) {
+  const s = keySet('upnext');
+  if (s.delete(key(item))) saveKeySet('upnext', s);
+}
+
+// ================================================================ picture shape (per channel / film / series)
+
+export const PICTURE = ['Fit', 'Fill screen (zoom)', 'Stretch', '16:9', '4:3'];
+export const PICTURE_SHORT = ['Fit', 'Fill', 'Stretch', '16:9', '4:3'];
+
+/** Episodes share their series' setting. */
+const pictureKey = (item) => (item.type === 'episode' && item.parentId != null ? `series_${item.parentId}` : key(item));
+
+/** 0 Fit, 1 Fill, 2 Stretch, 3 16:9, 4 4:3. */
+export function picture(item) {
+  if (!item) return 0;
+  const m = getInt(`${ns()}pic_${pictureKey(item)}`, 0);
+  return m > 0 && m < PICTURE.length ? m : 0;
+}
+
+export function setPicture(item, mode) {
+  const k = `${ns()}pic_${pictureKey(item)}`;
+  if (mode <= 0) ls().removeItem(k); else setStr(k, mode);
+}
+
+// ================================================================ already watched (per account)
+
+/** The keys of everything marked watched, for drawing many cards at once. */
+export const watchedKeys = () => keySet('watched');
+export const isWatched = (item) => !!item && keySet('watched').has(key(item));
+
+/**
+ * One item or a list (a season). Watched: off Continue Watching and out of the queue;
+ * unwatched: shows as new again.
+ */
+export function setWatched(itemOrList, watched) {
+  if (!itemOrList) return;
+  const list = Array.isArray(itemOrList) ? itemOrList : [itemOrList];
+  const s = keySet('watched');
+  for (const it of list) { if (watched) s.add(key(it)); else s.delete(key(it)); }
+  saveKeySet('watched', s);
+  if (!watched) return;
+  for (const it of list) setPosition(it, 0);
+  const gone = new Set(list.map(key));
+  const q = queue();
+  const kept = q.filter((x) => !gone.has(key(x)));
+  if (kept.length !== q.length) saveQueue(kept);
+}
+
+export function watchedCount(items) {
+  const s = keySet('watched');
+  return items.reduce((n, it) => n + (s.has(key(it)) ? 1 : 0), 0);
+}
+
+// ================================================================ playback queue (per account, in order)
+
+export const queue = () => getArr(`${ns()}queue`).map(fromJson);
+const saveQueue = (l) => setJson(`${ns()}queue`, l.map(toJson));
+export const inQueue = (item) => !!item && queue().some((q) => key(q) === key(item));
+
+export function queueAdd(item) {
+  const l = queue();
+  if (l.some((q) => key(q) === key(item))) return;
+  l.push(fromJson(item));
+  saveQueue(l);
+}
+
+export function queueRemove(item) {
+  if (!item) return;
+  const l = queue();
+  const kept = l.filter((q) => key(q) !== key(item));
+  if (kept.length !== l.length) saveQueue(kept);
+}
+
+/** What plays after this (the first queued item that isn't this one), or null. */
+export function queueNextAfter(cur) {
+  return queue().find((q) => !cur || key(q) !== key(cur)) || null;
+}
+
+// ================================================================ your own category names (per account)
+
+export const catName = (type, id) => { const v = ls().getItem(`${ns()}catname_${type}_${id}`); return v === null || v === '' ? null : v; };
+
+export function setCatName(type, id, name) {
+  const k = `${ns()}catname_${type}_${id}`;
+  const n = name == null ? '' : String(name).trim();
+  if (n === '') ls().removeItem(k); else setStr(k, n);
 }
 
 // ================================================================ watch history (per account, newest first)
@@ -237,13 +342,14 @@ export function clearHistory() {
     const rest = n === '' ? k : (k.startsWith(n) ? k.slice(n.length) : null);
     if (rest === null) continue;
     if (n === '' && /^a\d+_/.test(rest)) continue;
-    if (rest.startsWith('pos_') || rest.startsWith('dur_') || rest.startsWith('hist_')) ls().removeItem(k);
+    if (rest.startsWith('pos_') || rest.startsWith('dur_') || rest.startsWith('hist_') || rest === 'upnext') ls().removeItem(k);
   }
 }
 
 /** Prefs.continueWatching: movies and episodes started but not finished. */
 export function continueWatching() {
-  return history(false).filter((i) => position(i) > 0);
+  const up = keySet('upnext');
+  return history(false).filter((i) => position(i) > 0 || up.has(key(i)));
 }
 
 /** Prefs.continueMovies. */

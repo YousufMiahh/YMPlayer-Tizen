@@ -60,6 +60,14 @@ export function shelfTitle(text, hint) {
   return h;
 }
 
+/** Cards.watchedBadge: the small "✓" in the corner of a card you've already watched. */
+export function watchedBadge() {
+  const b = document.createElement('span');
+  b.className = 'watched-badge';
+  b.textContent = '✓';
+  return b;
+}
+
 /** Cards.initials(): punctuation out, then the first letter of the first two words, upper case. */
 export function initials(name) {
   return String(name || '').replace(/[^\p{L}\p{N} ]/gu, ' ').trim().split(/\s+/).filter(Boolean).slice(0, 2)
@@ -96,7 +104,7 @@ export function rowCell({ title, sub, num, logo, trail, active } = {}) {
  * an optional one-line subtitle, and a progress bar along the bottom of the art when > 0.
  * Same markup and CSS (.card) as Home's shelves.
  */
-export function card({ shape = 'landscape', image = null, title = '', sub = '', progress = 0 } = {}) {
+export function card({ shape = 'landscape', image = null, title = '', sub = '', progress = 0, watched = false } = {}) {
   const b = document.createElement('button');
   b.type = 'button';
   b.className = `card ${shape}`;
@@ -120,6 +128,7 @@ export function card({ shape = 'landscape', image = null, title = '', sub = '', 
     bar.appendChild(fill);
     art.appendChild(bar);
   }
+  if (watched) art.appendChild(watchedBadge());
   const t = document.createElement('span');
   t.className = 'title'; t.textContent = title || '';
   b.append(art, t);

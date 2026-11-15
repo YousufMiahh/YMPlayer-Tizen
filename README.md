@@ -7,13 +7,16 @@ AVPlay.
 
 ## What is in it
 
-- **Home**: Continue Watching, Recent Channels, your favourites, **Top 10 Movies / Series on
-  Netflix UK** and Recently Added.
-- **Live TV, Movies, Series**: categories with search, favourites and hiding, a live preview, and
-  the **TV guide**.
-- **Movie and series pages** with Play / Resume, Start Over, Favourite and **trailers**.
-- **Player**: channel list, subtitles and audio tracks, scrubbing, Next Episode, automatic
-  recovery when a stream stalls.
+- **Home**: Continue Watching (the next episode takes a finished one's place), **Your Queue**,
+  Recent Channels, your favourites, **Top 10 Movies / Series on Netflix UK**, **Because You
+  Watched…** and Recently Added.
+- **Live TV, Movies, Series**: categories with search, favourites, your own names and hiding, a
+  live preview, and the **TV guide**.
+- **Movie and series pages** with Play / Resume, Start Over, Favourite, Queue, Watched and
+  **trailers**. Watched films and episodes carry a ✓; season pills count them.
+- **Player**: channel list, subtitles and audio tracks, picture shape (Fit, Fill, Stretch, 16:9,
+  4:3, remembered per channel / film / series), scrubbing, **Skip Intro**, Next Episode / Next in
+  Queue, automatic recovery when a stream stalls or drops out part-way.
 - **Search** across channels, movies and series at once (All / Live TV / Movies / Series).
 - **Settings**: several accounts, theme (dark / light), what Home shows, hidden countries and
   categories, subtitle style, stream format, library refresh, and the tutorial.
@@ -50,11 +53,11 @@ Samsung remotes have no menu key, so anything Android does with ☰ is done by *
 | Where | Keys |
 | --- | --- |
 | Everywhere | D-pad moves; OK selects; Back goes back (Back on Home closes the app). ▲ goes to the top bar; resting on a tab opens it |
-| Home | Hold OK on a card: favourite it, or remove it from Continue Watching |
-| Live TV / Movies / Series | ▶ from a category opens it; Hold OK on a category: favourite or hide; Hold OK on an item: favourite. In Live TV, ▶ from the channel list opens the TV guide |
+| Home | Hold OK on a card: favourite it, add it to your Queue, mark it watched, or remove it from Continue Watching |
+| Live TV / Movies / Series | ▶ from a category opens it; Hold OK on a category: favourite, rename or hide; Hold OK on a film or series: favourite, queue, watched (a channel: favourite). In Live TV, ▶ from the channel list opens the TV guide |
 | TV guide | ▲▼ channels, ◀▶ programmes, OK watches, Hold OK shows programme details, Back returns to the list |
-| Watching live | ▲▼ or CH+/CH− change channel; OK channel list; ◀▶ or Info channel info; Hold OK favourite, subtitles and audio |
-| Watching a film or episode | OK pause / play; ◀ back 5 s, ▶ forward 10 s (press again to go further); ▼ scrub; Hold OK subtitles, audio and favourite |
+| Watching live | ▲▼ or CH+/CH− change channel; OK channel list; ◀▶ or Info channel info; Hold OK favourite, subtitles, audio and picture |
+| Watching a film or episode | OK pause / play; ◀ back 5 s, ▶ forward 10 s (press again to go further); ▼ scrub; OK on Skip Intro; Hold OK subtitles, audio, picture and favourite |
 | Search | Type at least two characters; Enter / Done goes to the first result; Hold OK on a result: favourite |
 
 ## What differs from the Android app

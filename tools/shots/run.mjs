@@ -19,7 +19,7 @@ const CHROME = process.env.CHROME || '/usr/bin/google-chrome';
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Put an account plus some history and favourites in the app's store, as a returning user. */
-async function seed(page, url, coach = null) {
+async function seed(page, url, coach = null, extra = {}) {
   const abs = (s) => (s && s.startsWith('/') ? url + s : s);
   const liveItem = (s) => ({ type: 'live', id: String(s.stream_id), name: s.name, icon: abs(s.stream_icon), num: String(s.num), categoryId: s.category_id });
   const movieItem = (s) => ({ type: 'movie', id: String(s.stream_id), name: s.name, icon: abs(s.stream_icon), ext: 'mp4', categoryId: s.category_id, added: s.added });
@@ -34,6 +34,9 @@ async function seed(page, url, coach = null) {
     favMovies: fx.movies.slice(10, 20).map(movieItem),
     favSeries: fx.series.slice(5, 13).map(seriesItem),
     coach,
+    whatsNew: !!extra.whatsNew,
+    queue: extra.queue ? [fx.movies[55], fx.movies[61]].map(movieItem) : [],
+    watched: extra.watched ? [fx.movies[0], fx.movies[2], fx.movies[5], fx.movies[41], fx.movies[52]].map(movieItem) : [],
   };
   await page.evaluate(async (d) => {
     const s = await import('/js/store.js');
@@ -44,6 +47,9 @@ async function seed(page, url, coach = null) {
     [...d.cont].reverse().forEach((i, n) => { s.addHistory(i); s.setDuration(i, 6000000); s.setPosition(i, 900000 * (n + 1)); });
     s.addHistory(d.episode); s.setDuration(d.episode, 2700000); s.setPosition(d.episode, 1220000); // newest: an episode
     if (d.coach !== 'offer') localStorage.setItem('coach_asked', 'true'); // the welcome offer has its own screen
+    if (!d.whatsNew) { const wn = await import('/js/whats-new.js'); localStorage.setItem('whatsnew_seen', wn.hash(wn.NOTES.trim())); }
+    (d.queue || []).forEach((i) => s.queueAdd(i));
+    (d.watched || []).forEach((i) => s.setWatched(i, true));
     if (d.coach === 'tour' || d.coach === 'tour-browse') localStorage.setItem('coach_on', 'true');
     if (d.coach === 'tour-browse') localStorage.setItem('coach_seen_home', 'true'); // straight to a section's tour
     d.favLive.forEach((i) => s.toggleFav(i));
@@ -62,6 +68,7 @@ async function seedEmpty(page, url) {
     localStorage.clear();
     s.saveAccount(acc); s.setCurrent('');
     localStorage.setItem('coach_asked', 'true');
+    const wn = await import('/js/whats-new.js'); localStorage.setItem('whatsnew_seen', wn.hash(wn.NOTES.trim()));
     const repo = await import('/js/repo.js');
     await repo.refreshAll();
   }, { id: '', name: 'Demo', server: url, user: USER, pass: PASS, ua: '', ok: true });
@@ -162,10 +169,12 @@ async function openPlayer(page, url, what, setup = {}) {
     } else if (what === 'movie') {
       const item = { type: 'movie', id: String(fxMovie.stream_id), name: fxMovie.name, icon: abs(fxMovie.stream_icon), ext: 'mp4' };
       store.setPosition(item, setup.resume || 0);
+      if (setup.queued) store.queueAdd({ type: 'movie', id: String(setup.queued.stream_id), name: setup.queued.name, icon: abs(setup.queued.stream_icon), ext: 'mp4' });
       router.go('player-vod', { queue: [item], index: 0 });
     } else {
       const queue = [1, 2, 3].map((n) => ({ type: 'episode', id: String(fxSeries.series_id * 100 + n), name: ['The Lighthouse Keeper', 'Low Tide', 'What the Fog Hid'][n - 1],
-        num: String(n), ext: 'mp4', parentId: String(fxSeries.series_id), parentName: fxSeries.name, parentIcon: abs(fxSeries.cover) }));
+        num: String(n), ext: 'mp4', parentId: String(fxSeries.series_id), parentName: fxSeries.name, parentIcon: abs(fxSeries.cover),
+        ...(setup.season ? { season: 1 } : {}) }));
       router.go('player-vod', { queue, index: 0 });
     }
   }, { what, url, fxLive: fx.live.slice(0, 40), fxMovie: fx.movies[3], fxSeries: fx.series[2], setup });
@@ -229,6 +238,146 @@ const openSettings = async (page, key, already = false) => {
 };
 
 const SCREENS = {
+  // ---- added with the Android app's newer features (watched, queue, skip intro, picture, rename)
+  'home-queue': { // "Your Queue" under Continue Watching, ✓ on watched cards
+    seed: true, extra: { queue: true, watched: true },
+    steps: async (page) => { await toHome(page); await press(page, 'ArrowDown', 1, 300); await wait(1100); },
+  },
+  'home-menu': { // Hold OK on a Continue Watching film: Favourite, Queue, Watched, Remove
+    seed: true, extra: { queue: true },
+    steps: async (page) => { await toHome(page); await press(page, 'ArrowRight'); await holdOk(page); await wait(500); },
+  },
+  'home-menu-episode': { // ... on an episode: "Series  ·  Episode", no Favourite
+    seed: true,
+    steps: async (page) => { await toHome(page); await holdOk(page); await wait(500); },
+  },
+  'home-recs': { // "Because you watched …" rows under the Top 10 (TMDB stand-in)
+    seed: true, extra: { watched: true },
+    steps: async (page) => {
+      await toHome(page);
+      await page.waitForSelector('.home-row[data-row="rec_0"]', { timeout: 15000 });
+      await press(page, 'ArrowDown', 7, 300); await press(page, 'ArrowRight', 1); await wait(1100);
+    },
+  },
+  'home-whatsnew': { // the first Home after an update: What's New
+    seed: true, extra: { whatsNew: true },
+    steps: async (page) => { await toHome(page); await page.waitForSelector('.dialog', { timeout: 8000 }); await wait(500); },
+  },
+  'movies-watched': { // the grid: ✓ on films you've seen
+    seed: true, extra: { watched: true },
+    steps: async (page) => {
+      await toHome(page); await hoverTab(page, 2);
+      await press(page, 'ArrowDown'); await press(page, 'ArrowDown', 3, 200); await wait(500);
+      await press(page, 'ArrowRight'); await page.waitForSelector('.poster-cell:focus', { timeout: 8000 });
+      await press(page, 'ArrowRight'); await wait(1100);
+    },
+  },
+  'movies-menu': { // Hold OK on a poster: Favourite, Add to Queue, Mark as Watched
+    seed: true, extra: { watched: true },
+    steps: async (page) => {
+      await toHome(page); await hoverTab(page, 2);
+      await press(page, 'ArrowDown'); await press(page, 'ArrowDown', 3, 200); await wait(500);
+      await press(page, 'ArrowRight'); await page.waitForSelector('.poster-cell:focus', { timeout: 8000 });
+      await press(page, 'ArrowRight'); await wait(400); await holdOk(page); await wait(500);
+    },
+  },
+  'live-rename': { // Hold OK on a category → ✎ Rename: the name box, Original Name / Cancel / Save
+    seed: true,
+    steps: async (page) => {
+      await toHome(page); await hoverTab(page, 1);
+      await press(page, 'ArrowDown'); await press(page, 'ArrowDown', 5, 200); await wait(500);
+      await holdOk(page); await wait(500);
+      await press(page, 'ArrowDown'); await press(page, 'Enter'); await page.waitForSelector('.dialog-input', { timeout: 8000 }); await wait(500);
+    },
+  },
+  'live-renamed': { // ... saved: the list shows your name, toast
+    seed: true,
+    steps: async (page) => {
+      await toHome(page); await hoverTab(page, 1);
+      await press(page, 'ArrowDown'); await press(page, 'ArrowDown', 5, 200); await wait(500);
+      await holdOk(page); await wait(500);
+      await press(page, 'ArrowDown'); await press(page, 'Enter'); await page.waitForSelector('.dialog-input', { timeout: 8000 });
+      await page.fill('.dialog-input', 'Weekend football');
+      await press(page, 'ArrowDown'); await press(page, 'ArrowRight', 2); await press(page, 'Enter'); await wait(700);
+    },
+  },
+  'settings-rename': { // Settings → Rename Categories: pick a section
+    seed: true,
+    steps: async (page) => { await openSettings(page, 'rename'); await press(page, 'Enter'); await wait(600); },
+  },
+  'settings-whatsnew': { // Settings → What's New
+    seed: true,
+    steps: async (page) => { await openSettings(page, 'whats_new'); await press(page, 'Enter'); await wait(600); },
+  },
+  'movie-queue': { // a film in your Queue and watched: ✓ In Queue, ✓ Watched
+    seed: true, extra: { queue: true },
+    steps: async (page) => {
+      await openDetail(page, 'movie', fx.movies[55].stream_id); await wait(900);
+      await press(page, 'ArrowRight', 4, 200); await press(page, 'Enter'); await wait(700);
+    },
+  },
+  'series-watched': { // E1–E3 marked watched: ✓ on the cards, "Season 1  3/…" on the pill
+    seed: true,
+    steps: async (page) => {
+      await openDetail(page, 'series', SHOW, { history: WATCHED });
+      await page.evaluate(async (id) => {
+        const store = await import('/js/store.js');
+        for (const i of [0, 1, 2]) store.setWatched({ type: 'episode', id: String(id * 100 + 10 + i) }, true);
+      }, SHOW);
+      await press(page, 'ArrowDown', 2, 300); await press(page, 'ArrowRight', 1, 300);
+      await press(page, 'ArrowUp', 1, 300); await press(page, 'ArrowDown', 1, 300); await wait(900);
+    },
+  },
+  'series-epmenu': { // Hold OK on an episode: Queue, Watched, the whole season
+    seed: true,
+    steps: async (page) => {
+      await openDetail(page, 'series', SHOW, { history: WATCHED }); await wait(600);
+      await press(page, 'ArrowDown', 2, 300); await press(page, 'ArrowRight', 1, 300); await holdOk(page); await wait(500);
+    },
+  },
+  'series-season-watched': { // ... Mark Season as Watched: every card ✓, "Season 1  ✓"
+    seed: true,
+    steps: async (page) => {
+      await openDetail(page, 'series', SHOW, { history: WATCHED }); await wait(600);
+      await press(page, 'ArrowDown', 2, 300); await press(page, 'ArrowRight', 1, 300); await holdOk(page); await wait(500);
+      await press(page, 'ArrowDown', 2, 150); await press(page, 'Enter'); await wait(900);
+    },
+  },
+  'player-skip': { // an episode's opening titles: the Skip Intro button
+    seed: true,
+    steps: async (page, h) => { await openPlayer(page, h.url, 'episode', { season: true }); await wait(6000); },
+  },
+  'player-skipped': { // OK: past the intro, "Skipped the intro"
+    seed: true,
+    steps: async (page, h) => { await openPlayer(page, h.url, 'episode', { season: true }); await wait(6000); await press(page, 'Enter'); await wait(700); },
+  },
+  'player-picture': { // Hold OK in a film, down to Picture: Fit ✓, Fill, Stretch, 16:9, 4:3
+    seed: true,
+    steps: async (page, h) => {
+      await openPlayer(page, h.url, 'movie'); await wait(1000);
+      await holdOk(page); await wait(300); await press(page, 'ArrowDown', 8, 120); await wait(500);
+    },
+  },
+  'player-picture-43': { // ... 4:3 picked: the picture is a 4:3 box, the status pill says so
+    seed: true,
+    steps: async (page, h) => {
+      await openPlayer(page, h.url, 'movie'); await wait(1000);
+      await holdOk(page); await wait(300);
+      for (let i = 0; i < 25; i++) {
+        if (await page.evaluate(() => document.activeElement.querySelector('.tp-label')?.textContent === '4:3')) break;
+        await press(page, 'ArrowDown', 1, 120);
+      }
+      await press(page, 'Enter'); await wait(700);
+    },
+  },
+  'player-nextqueue': { // the end of a film with something queued: Watch credits | Next in Queue
+    seed: true,
+    steps: async (page, h) => {
+      await openPlayer(page, h.url, 'movie', { queued: fx.movies[55] }); await wait(1200);
+      await shimDo(page, () => window.__shim.seekTo(112 * 60000 - 29000));
+      await wait(4200);
+    },
+  },
   splash: { seed: false, steps: async () => { await wait(1000); } },
   login: { // first run: empty form, focus on the server field
     seed: false,
@@ -294,16 +443,16 @@ const SCREENS = {
       await press(page, 'ArrowDown', 8, 300); await press(page, 'ArrowRight', 9, 200); await wait(1100);
     },
   },
-  'home-remove': { // Hold OK on Continue Watching
+  'home-remove': { // Hold OK on Continue Watching: the film's options
     seed: true,
     steps: async (page) => { await toHome(page); await press(page, 'ArrowRight'); await holdOk(page); await wait(500); },
   },
-  'home-fav': { // Hold OK on a Recently Added card: favourite toggled, toast
+  'home-fav': { // Hold OK on a Recently Added card, Add to Favourites: toast
     seed: true,
     steps: async (page) => {
       await toHome(page);
       await page.waitForSelector('.home-row[data-row="new_movies"]', { timeout: 15000 });
-      await press(page, 'ArrowDown', 7, 300); await holdOk(page); await wait(600);
+      await press(page, 'ArrowDown', 7, 300); await holdOk(page); await wait(400); await press(page, 'Enter'); await wait(600);
     },
   },
   'home-return': { // open a Top 10 card, Back: Home comes back on the same card
@@ -441,7 +590,7 @@ const SCREENS = {
       await hoverTab(page, 1); await press(page, 'ArrowDown'); await press(page, 'ArrowDown', 1, 200); await wait(1100);
     },
   },
-  'live-catmenu': { // Hold OK on a category: Favourite / Hide
+  'live-catmenu': { // Hold OK on a category: Favourite / Rename / Hide
     seed: true,
     steps: async (page) => {
       await toHome(page); await hoverTab(page, 1);
@@ -454,7 +603,7 @@ const SCREENS = {
     steps: async (page) => {
       await toHome(page); await hoverTab(page, 1);
       await press(page, 'ArrowDown'); await press(page, 'ArrowDown', 5, 200); await wait(500);
-      await holdOk(page); await wait(400); await press(page, 'ArrowDown'); await press(page, 'Enter'); await wait(700);
+      await holdOk(page); await wait(400); await press(page, 'ArrowDown', 2); await press(page, 'Enter'); await wait(700);
     },
   },
   'live-favcat': { // ... Favourite: pinned under the special entries with a ♥
@@ -636,7 +785,7 @@ const SCREENS = {
   },
   'settings-about': { // the end of the list: Version and the credit
     seed: true,
-    steps: async (page) => { await openSettings(page, 'tutorial'); await press(page, 'ArrowDown'); await wait(600); },
+    steps: async (page) => { await openSettings(page, 'whats_new'); await press(page, 'ArrowDown'); await wait(600); },
   },
   'settings-remove': { // Remove This Account: the confirm dialog
     seed: true, accounts: 2,
@@ -861,6 +1010,21 @@ export async function shoot(names, { log = console.log } = {}) {
           return route.fulfill({ status: 200, contentType: 'text/tab-separated-values; charset=utf-8',
             headers: { 'Access-Control-Allow-Origin': '*', ETag: '"fixture"' }, body: fx.top10Tsv() });
         }
+        // The Movie Database and TheIntroDB (Because You Watched, Skip Intro): local stand-ins.
+        const cors = { 'Access-Control-Allow-Origin': '*' };
+        if (u.hostname === 'api.themoviedb.org') {
+          const tv = u.pathname.includes('/tv');
+          let body = { results: [] };
+          if (u.pathname.includes('/search/')) body = { results: [{ id: 4242 }] };
+          else if (u.searchParams.get('page') === '1') {
+            body = { results: (tv ? fx.series.slice(14, 26) : fx.movies.slice(84, 100)).map((x) => (tv ? { name: x.name } : { title: x.name })) };
+          }
+          return route.fulfill({ status: 200, contentType: 'application/json', headers: cors, body: JSON.stringify(body) });
+        }
+        if (u.hostname === 'api.theintrodb.org') {
+          return route.fulfill({ status: 200, contentType: 'application/json', headers: cors,
+            body: JSON.stringify({ intro: [{ start_ms: 0, end_ms: 90000 }], credits: [{ start_ms: 41 * 60000, end_ms: null }] }) });
+        }
         if (u.hostname === 'www.youtube-nocookie.com' && u.pathname.startsWith('/embed/')) {
           return route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: fx.trailerStandIn(u.pathname.split('/')[2], !!scr.trailerFail) });
         }
@@ -879,7 +1043,7 @@ export async function shoot(names, { log = console.log } = {}) {
         await seedEmpty(page, server.url);
         await page.reload();
       } else if (scr.seed) {
-        await seed(page, server.url, scr.coach || null);
+        await seed(page, server.url, scr.coach || null, scr.extra || {});
         if (scr.light) await page.evaluate(() => localStorage.setItem('dark', 'false'));
         if (scr.accounts === 2) { // a second saved account, for Settings → ACCOUNTS
           await page.evaluate(async (server) => {

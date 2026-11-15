@@ -82,7 +82,7 @@ export function emptyText(type, catId, size, query = '') {
 }
 
 /** Hints (Samsung remotes have no ☰ key: Android's "Hold OK" wording). */
-export const CAT_HINT = `${HOLD_OK}  Favourite or hide`;
+export const CAT_HINT = `${HOLD_OK}  Favourite, rename or hide`;
 export const PANEL_HINT = `▶  TV guide      ${HOLD_OK}  Favourite`;
 export const GUIDE_PANEL_HINT = `OK  Watch      ${HOLD_OK}  Full programme details      ◀  Back to channels`;
 /** The TV guide's button hints, in a line along the bottom (applyMode, MODE_GUIDE). */
@@ -124,10 +124,10 @@ export function programmeDetails(ch, p, now) {
 
 export const favCategoryToast = (now, name) => `${now ? 'Added to favourite categories — ' : 'Removed from favourite categories — '}${name}`;
 export const hiddenToast = (name) => `Hidden: ${name}  (Settings → Hidden Categories to bring it back)`;
-export const categoryMenuItems = (fav) => [fav ? '♥  Remove from favourites' : '♡  Favourite', 'Hide'];
+export const categoryMenuItems = (fav) => [fav ? '♥  Remove from favourites' : '♡  Favourite', '✎  Rename', 'Hide'];
 
 /** BrowseActivity.catTip (non-Fire wording). */
-export const CAT_TIP = 'Hold OK on a category to make it a favourite (it moves near the top with a ♥) or to hide it.';
+export const CAT_TIP = 'Hold OK on a category to make it a favourite (it moves near the top with a ♥), to rename it or to hide it.';
 
 /** The section tour (Coach): Live TV has four tips, Movies / Series two. */
 export function tourSteps(type, t) {
@@ -142,7 +142,7 @@ export function tourSteps(type, t) {
   }
   return [
     { target: t.cats, title: 'Categories', body: `Search this section at the top, then your favourites, Continue Watching and everything else. ${CAT_TIP}` },
-    { target: t.mid, title: 'Pick something', body: `OK opens the details page, with Play, Resume, the trailer and Favourite. ${HOLD_OK} here adds it to your favourites.` },
+    { target: t.mid, title: 'Pick something', body: `OK opens the details page, with Play, Resume, the trailer and Favourite. ${HOLD_OK} here for Favourite, Add to Queue and Mark as Watched.` },
   ];
 }
 

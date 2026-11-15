@@ -160,14 +160,14 @@ describe('category list (BrowseActivity.buildCategoryList)', () => {
     expect(B.loadError('The server took too long to answer')).toBe("Couldn't load this list\nThe server took too long to answer");
     expect(B.catError('x')).toBe("Couldn't load categories\nx");
     expect(B.searchHint('live')).toBe('Search all channels');
-    expect(B.CAT_HINT).toBe('Hold OK  Favourite or hide');
+    expect(B.CAT_HINT).toBe('Hold OK  Favourite, rename or hide');
     expect(B.PANEL_HINT).toBe('▶  TV guide      Hold OK  Favourite');
   });
 
   it('section tours: Live four tips, Movies / Series two', () => {
     const l = B.tourSteps('live', {});
     expect(l.map((s) => s.title)).toEqual(['Categories', 'Channels', "What's on", 'The TV guide']);
-    expect(l[0].body).toBe('Search is at the top. Hold OK on a category to make it a favourite (it moves near the top with a ♥) or to hide it.');
+    expect(l[0].body).toBe('Search is at the top. Hold OK on a category to make it a favourite (it moves near the top with a ♥), to rename it or to hide it.');
     expect(B.tourSteps('movie', {}).map((s) => s.title)).toEqual(['Categories', 'Pick something']);
     expect(B.tourKey('series')).toBe('vod');
   });
@@ -298,13 +298,13 @@ describe('Browse screen: arrival and categories', () => {
 });
 
 describe('Browse screen: favourites and hiding', () => {
-  it('Hold OK on a category: dialog "♡  Favourite" / "Hide"; Favourite pins it under the special entries', async () => {
+  it('Hold OK on a category: dialog "♡  Favourite" / "✎  Rename" / "Hide"; Favourite pins it under the special entries', async () => {
     await open('live');
     for (let i = 0; i < 7; i++) press(K.DOWN); // Radio
     await holdOk();
     const items = [...document.querySelectorAll('.dialog-item')].map((b) => b.textContent);
     expect(document.querySelector('.dialog-title').textContent).toBe('Radio');
-    expect(items).toEqual(['♡  Favourite', 'Hide']);
+    expect(items).toEqual(['♡  Favourite', '✎  Rename', 'Hide']);
     document.querySelector('.dialog-item[data-value="0"]').click();
     await wait(0);
     expect(catNames().slice(4)).toEqual(['Radio', 'UK | News', 'UK | Sports', 'FR | Général']);
@@ -321,7 +321,30 @@ describe('Browse screen: favourites and hiding', () => {
     expect(document.querySelector('.dialog')).toBeNull();
   });
 
-  it('Hide (dialog or ☰): gone from the list, toast, unfavourited, and "All" opens if it was open', async () => {
+  it('☰ on a category opens the same menu; Rename shows your own name in the list, and blank restores the original', async () => {
+    await open('live');
+    for (let i = 0; i < 7; i++) press(K.DOWN); // Radio
+    press(K.MENU);
+    await wait(0);
+    expect(document.querySelector('.dialog-title').textContent).toBe('Radio');
+    document.querySelector('.dialog-item[data-value="1"]').click();
+    await wait(0); await wait(0);
+    expect(document.querySelector('.dialog-title').textContent).toBe('Rename “Radio”');
+    const box = document.querySelector('.dialog-input');
+    expect(box.value).toBe('Radio');
+    expect([...document.querySelectorAll('.dialog-button')].map((b) => b.textContent)).toEqual(['Original Name', 'Cancel', 'Save']);
+    box.value = 'My Stations';
+    document.querySelector('.dialog-button[data-value="positive"]').click();
+    await wait(0); await wait(0); await wait(0);
+    expect(toast.current()).toBe('Renamed to My Stations');
+    expect(store.catName('live', '4')).toBe('My Stations');
+    expect(catNames()).toContain('My Stations');
+    expect(catNames()).not.toContain('Radio');
+    store.setCatName('live', '4', '');
+    expect(store.catName('live', '4')).toBeNull();
+  });
+
+  it('Hide (from the menu): gone from the list, toast, unfavourited, and "All" opens if it was open', async () => {
     store.toggleFavCategory('live', '1');
     await open('live');
     for (let i = 0; i < 4; i++) press(K.DOWN); // ♥ UK | News, pinned at 4
@@ -330,6 +353,8 @@ describe('Browse screen: favourites and hiding', () => {
     press(K.LEFT);
     press(K.MENU);
     await wait(0);
+    document.querySelector('.dialog-item[data-value="2"]').click();
+    await wait(0); await wait(0);
     expect(catNames()).not.toContain('UK | News');
     expect(store.isFavCategory('live', '1')).toBe(false);
     expect(filters.hiddenCategories('live').has('1')).toBe(true);

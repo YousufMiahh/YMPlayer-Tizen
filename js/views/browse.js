@@ -21,14 +21,16 @@ import * as coach from '../ui/coach.js';
 import * as B from '../browse.js';
 import * as match from '../match.js';
 import { router } from '../router.js';
-import { LIVE, MOVIE } from '../item.js';
+import { LIVE, MOVIE, key as itemKey } from '../item.js';
+import { showItemMenu } from '../item-menu.js';
+import * as filterSettings from '../filter-settings.js';
 import { openTarget, favToast } from '../home-rows.js';
 import { mountSection, tabFocused } from '../ui/topbar.js';
 import { createGlider } from '../ui/glider.js';
 import { createVList } from '../ui/vlist.js';
 import { showDialog } from '../ui/dialog.js';
 import { toast } from '../ui/toast.js';
-import { rowCell, pillInput } from '../ui/widgets.js';
+import { rowCell, pillInput, watchedBadge } from '../ui/widgets.js';
 import { u, LONG_PRESS_MS } from '../ui/theme.js';
 import { createPreview } from '../live-preview.js';
 import { createEpgGrid, nowSec } from '../ui/epg-grid.js';
@@ -95,7 +97,7 @@ export function browseView(type) {
     let catsBox; let catScroller; let catHint; let mid; let searchBox; let frame; let contentScroller;
     let emptyEl; let spinner; let info = null; let preview = null;
     let catList; let content; let catGlider; let contentGlider = null;
-    let cats = []; let items = []; let favSet = new Set();
+    let cats = []; let items = []; let favSet = new Set(); let watchedSet = new Set();
     let currentCat = null; let activeIdx = -1; let picked = false; let hideActive = true; let slideDir = 1;
     let loadToken = 0; let searchToken = 0; let searchResults = [];
     let pendingCat = null; let pendingEpg = null; let pendingSearch = null; let tourTimer = null; let cancelTour = null;
@@ -156,7 +158,14 @@ export function browseView(type) {
     function posterCell(i, el) {
       const it = items[i];
       const title = favSet.has(it.id) ? `♥ ${it.name || ''}` : (it.name || '');
-      if (el && el.dataset.id === it.id) { el.querySelector('.title').textContent = title; return el; }
+      const watched = watchedSet.has(itemKey(it));
+      if (el && el.dataset.id === it.id) {
+        el.querySelector('.title').textContent = title;
+        const badge = el.querySelector('.watched-badge');
+        if (watched && !badge) el.querySelector('.art').appendChild(watchedBadge());
+        else if (!watched && badge) badge.remove();
+        return el;
+      }
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'poster-cell'; b.tabIndex = -1;
       b.dataset.id = it.id;
@@ -167,6 +176,7 @@ export function browseView(type) {
         img.onerror = () => img.remove();
         art.appendChild(img);
       }
+      if (watched) art.appendChild(watchedBadge());
       const name = document.createElement('span'); name.className = 'title'; name.textContent = title;
       b.append(art, name);
       return b;
@@ -333,7 +343,8 @@ export function browseView(type) {
         if (!alive()) return;
         catGlider.freeze(false);
         if (which === 0) toggleFavCategory(pos);
-        else if (which === 1) hideCategory(c);
+        else if (which === 1) renameCategory(c);
+        else if (which === 2) hideCategory(c);
         else catList.focus();
       });
     }
@@ -349,6 +360,18 @@ export function browseView(type) {
       cats.forEach((x, i) => { if (x.id === c.id) sel = i; if (activeId !== null && x.id === activeId) activeIdx = i; });
       catList.setCount(cats.length, true);
       catList.select(sel, { focus: true, silent: true });
+    }
+
+    /** ✎ Rename: your own name for the category (the list shows it from now on). */
+    async function renameCategory(c) {
+      const raw = await filterSettings.rawCategory(type, c);
+      if (!alive()) return;
+      catGlider.freeze(true);
+      const changed = await filterSettings.askName(type, raw);
+      if (!alive()) return;
+      catGlider.freeze(false);
+      if (changed) await reloadCategories(false);
+      if (alive()) catList.focus();
     }
 
     function hideCategory(c) {
@@ -422,6 +445,7 @@ export function browseView(type) {
     function setItems(list, keep = false) {
       items = list;
       favSet = store.favIds(type);
+      watchedSet = store.watchedKeys();
       content.setCount(list.length, keep);
     }
 
@@ -451,14 +475,33 @@ export function browseView(type) {
       router.go(t.name, t.params);
     }
 
+    /** Hold OK / ☰ on a film or series: Favourite, Add to Queue, Mark as Watched… */
+    function itemMenu(pos) {
+      const it = items[pos];
+      if (!it) return;
+      showItemMenu(it).then((changed) => {
+        if (!alive()) return;
+        if (changed) favChanged();
+        if (content.count) content.select(Math.min(content.selected, content.count - 1), { focus: true, silent: true });
+        else catList.focus();
+      });
+    }
+
     function toggleFav(pos) {
       const it = items[pos];
       if (!it) return;
+      if (!live) { itemMenu(pos); return; }
       const now = store.toggleFav(it);
       toast(favToast(now, it));
+      favChanged();
+    }
+
+    /** BrowseActivity.favChanged: the hearts and ✓ again; the Favourites list itself is re-read. */
+    function favChanged() {
       favSet = store.favIds(type);
-      if (currentCat && currentCat.id === B.FAV) {
-        const l = store.favs(type);
+      watchedSet = store.watchedKeys();
+      if (currentCat && (currentCat.id === B.FAV || currentCat.id === B.CONTINUE)) {
+        const l = B.specialList(currentCat.id, type); // Favourites, or Continue Watching after a "Remove" / "Watched"
         items = l;
         content.setCount(l.length, true); // the selection stays where it was (or the new last one)
         if (live) showChannelInfo(l.length ? content.selected : -1);
@@ -872,7 +915,8 @@ export function browseView(type) {
         return consume();
       }
       if (k === K.MENU) {
-        if (z === 'cats') { const c = cats[catList.selected]; if (c && !B.isPseudo(c.id)) hideCategory(c); } else toggleFav(content.selected);
+        if (z === 'cats') categoryMenu(catList.selected); // ☰: favourite, rename or hide
+        else toggleFav(content.selected);
         return consume();
       }
       if (k === K.BACK || k === K.ESC) {

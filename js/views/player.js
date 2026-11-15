@@ -3,7 +3,8 @@
 // Live TV: ▲/▼ and CH+/CH− change channel (the banner at once, the stream 350 ms after the last
 // press), OK the Channels list, Hold OK favourite / subtitles & audio, ◀ ▶ INFO the banner.
 // Films & episodes: OK play/pause, ◀ back 5 s, ▶ forward 10 s (presses add up), ▼ scrub, Hold OK
-// subtitles & audio, the Next Episode card near the end of an episode.
+// subtitles, audio & picture, Skip Intro during an episode's opening titles (OK), and the Next
+// Episode / Next in Queue card near the end (when the credits start, if the intro database knows).
 //
 // Params: { queue: Item[], index } (Open.play), or the older shapes { channels, index } (live)
 // and { item, queue?, index? } (VOD).
@@ -12,6 +13,9 @@ import * as api from '../api.js';
 import * as player from '../player.js';
 import { router } from '../router.js';
 import { LIVE, EPISODE, SERIES } from '../item.js';
+import * as tmdb from '../tmdb.js';
+import * as intros from '../intros.js';
+import { followingEpisodes } from '../detail.js';
 import { u, HOLD_OK, LONG_PRESS_MS } from '../ui/theme.js';
 import { toast } from '../ui/toast.js';
 import { createSheet } from '../ui/sheet.js';
@@ -26,9 +30,9 @@ import { fmt, joinNonEmpty, favToast } from '../home-rows.js';
 
 export const BACK_MS = 5000;
 export const FORWARD_MS = 10000;
-export const VOD_HINT = `◀  5 sec      ▶  10 sec      OK  Play / Pause      ▼  Scrub      ${HOLD_OK}  Subtitles & Audio`;
+export const VOD_HINT = `◀  5 sec      ▶  10 sec      OK  Play / Pause      ▼  Scrub      ${HOLD_OK}  Subtitles, Audio & Picture`;
 export const SCRUB_HINT = '◀ ▶  Move (hold to go faster)      OK  Play from here      Back  Cancel';
-export const LIVE_HINT = `▲▼  Change channel      OK  Channel list      ${HOLD_OK}  Favourite, subtitles & audio`;
+export const LIVE_HINT = `▲▼  Change channel      OK  Channel list      ${HOLD_OK}  Favourite, subtitles, audio & picture`;
 export const CHANNELS_HINT = `${HOLD_OK}  Add or remove favourite`;
 export const OVERLAY_MS = 4000;
 export const BANNER_MS = 6000;
@@ -39,12 +43,15 @@ export const SCRUB_COMMIT_MS = 1000;
 export const TICK_MS = 500;
 export const WATCHDOG_MS = 1000;
 export const RETRY_MS = 1500;
+export const END_RETRIES = 3;       // a stream that ends early is reconnected this many times
+export const GIVE_UP_MS = 2500;     // "The stream stopped": then back
+export const SKIP_LABEL = 'OK   Skip Intro';
 export const FADE_IN = 200;
 export const FADE_OUT = 250;
 export const COACH_LIVE = { title: 'Watching Live TV', body: `▲ ▼  Change channel\nOK  Channel list\n◀ ▶  Channel info\n${HOLD_OK}  Favourite, subtitles & audio\nBack  Leave` };
 export const COACH_VOD = {
   title: 'Watching films & series',
-  body: `OK  Pause / play\n◀  Back 5 seconds     ▶  Forward 10 seconds (press again to go further)\n▼  Scrub: move the knob with ◀ ▶, OK to jump there\n${HOLD_OK}  Subtitles, audio & favourite\nBack  Leave — your place is saved`,
+  body: `OK  Pause / play\n◀  Back 5 seconds     ▶  Forward 10 seconds (press again to go further)\n▼  Scrub: move the knob with ◀ ▶, OK to jump there\n${HOLD_OK}  Subtitles, audio, picture & favourite\nBack  Leave — your place is saved`,
 };
 
 export const KEY = {
@@ -103,7 +110,7 @@ export function playerView() {
   // overlays
   let vod; let vodSub; let vodTitle; let bubble; let scrubRow; let scrubCard; let scrubTime; let vodBar; let timeLeft; let timeRight; let vodHint;
   let center; let banner; let liveLogo; let liveNum; let liveName; let liveNow; let liveTime; let liveBar; let liveNext;
-  let spinner; let errorEl; let statusEl; let nextCard; let subs;
+  let spinner; let errorEl; let statusEl; let nextCard; let subs; let skipBtn;
   let chSheet; let chList; let chGlider; let playingId = null; let trSheet; let trList;
   let favIds = new Set(); // the favourite channels, read once per paint of the Channels list
   // state
@@ -113,6 +120,10 @@ export function playerView() {
   let lastPos = -1; let stallTicks = 0; let recoveries = 0; let buffering = false;
   let scrubbing = false; let scrubPos = 0;
   let nextShown = false; let nextDismissed = false;
+  let resumeMs = 0;       // where you were when the app went into the background
+  let endRetries = 0;     // stream ended early: reconnect attempts for this item
+  let segments = null; let skipShown = false; // the intro database's answer for this episode
+  let picture = 0;        // this channel / film / series' picture shape
   let okDown = false; let okHeld = false; let okAt = 0;
   let panelOk = null; // OK pressed inside a panel: { at, held }
   let heldKey = null; let repeatCount = 0;
@@ -175,7 +186,9 @@ export function playerView() {
     nextCard = createNextUpCard(p);
     nextCard.el.classList.add('pl-fade');
     nextCard.credits.addEventListener('click', () => watchCredits());
-    nextCard.next.addEventListener('click', () => playNextEpisode());
+    nextCard.next.addEventListener('click', () => playNext());
+
+    skipBtn = el('div', 'pl-skip pl-fade', SKIP_LABEL); skipBtn.hidden = true; p.appendChild(skipBtn);
 
     center = el('div', 'pl-center'); center.hidden = true;
     center.innerHTML = '<svg viewBox="0 0 120 120" aria-hidden="true"><path class="pl-tri" d="M36.96 21.6 L98.4 60 L36.96 98.4 Z"/>'
@@ -251,10 +264,15 @@ export function playerView() {
     if (scrubbing) cancelScrub();
     hideNextCard();
     nextDismissed = false;
+    if (!resume) endRetries = 0;
+    showSkip(false);
     const it = current();
+    picture = store.picture(it); // each channel / film / series has its own
     let start = 0;
+    const back = resumeMs;
+    resumeMs = 0;
     if (!isLive() && resume) {
-      const pos = store.position(it);
+      const pos = back > 10000 ? back : store.position(it);
       if (pos > 10000) {
         start = pos;
         if (firstStart) toast(`Resuming from ${fmt(pos)}`);
@@ -262,6 +280,8 @@ export function playerView() {
     }
     load(start);
     store.addHistory(it);
+    loadSegments();
+    extendSeries();
     if (isLive()) {
       fade(vod, false);
       showBanner();
@@ -281,7 +301,7 @@ export function playerView() {
     lastPos = -1;
     stallTicks = 0;
     subs.clear();
-    player.open(current(), { startMs, format: liveFormat });
+    player.open(current(), { startMs, format: liveFormat, picture });
   }
 
   function resetLiveState() {
@@ -296,14 +316,23 @@ export function playerView() {
     errorEl.hidden = true;
   }
 
-  function onEnded() {
+  function onEnded({ early = false, position = 0 } = {}) {
     if (isLive()) { play(false); return; } // the server dropped the stream: reconnect
-    store.setPosition(current(), 0);
-    if (current().type === EPISODE && index < queue.length - 1) {
-      index++;
-      retries = 0;
-      play(false);
-    } else {
+    // Ended well before the end: the connection dropped, it didn't finish. Pick up where it stopped.
+    if (early) {
+      if (endRetries++ < END_RETRIES) {
+        status('Reconnecting…');
+        load(position);
+      } else {
+        store.setPosition(current(), position);
+        status('The stream stopped — your place is saved');
+        later('giveUp', finish, GIVE_UP_MS);
+      }
+      return;
+    }
+    if (upNext()) playNext(true); // next episode, or the next thing in your Queue
+    else {
+      finishedCurrent();
       finish();
     }
   }
@@ -562,6 +591,11 @@ export function playerView() {
     // (Audio Sync and the Player choice are left out: AVPlay can't shift the sound and is the
     // only engine. See docs/parity/phase-6-report.md.)
 
+    header(`Picture  ·  for ${cur.type === EPISODE ? 'this series' : isLive() ? 'this channel' : 'this film'}`);
+    store.PICTURE.forEach((name, m) => {
+      option(name, picture === m, () => choosePicture(m));
+    });
+
     header('Subtitle Size');
     SUB_SIZE_NAMES.forEach((name, s) => {
       option(name, store.subtitleSize() === s, () => {
@@ -650,25 +684,99 @@ export function playerView() {
     vodHint.textContent = VOD_HINT;
   }
 
-  // ------------------------------------------------------------ next episode
+  // ------------------------------------------------------------ picture shape
+
+  function choosePicture(mode) {
+    picture = mode;
+    store.setPicture(current(), mode);
+    player.setPicture(mode);
+    status(`Picture: ${store.PICTURE_SHORT[mode]}`);
+  }
+
+  // ------------------------------------------------------------ next episode / next in queue
+
+  /**
+   * This film / episode is done: marked watched, and the next episode (if there is one) goes
+   * into Continue Watching, ready at the start, the way Netflix does it.
+   */
+  function finishedCurrent() {
+    const cur = current();
+    store.setWatched(cur, true);
+    if (cur.type !== EPISODE || cur.parentId == null || index >= queue.length - 1) return;
+    const nx = queue[index + 1];
+    if (nx.type === EPISODE && String(cur.parentId) === String(nx.parentId) && !store.isWatched(nx) && store.position(nx) === 0) {
+      store.markUpNext(nx);
+    }
+  }
+
+  /** PlayerActivity.savePosition, before the engine is stopped: a finished one is marked, with its next episode. */
+  function savePosition() {
+    if (!queue.length || isLive()) return;
+    if (player.finishedAt(player.position(), player.duration())) finishedCurrent();
+  }
+
+  /**
+   * An episode played on its own (from Continue Watching or the Queue), or the last of a season:
+   * fetch the series so the next episode follows on, and can go into Continue Watching.
+   */
+  function extendSeries() {
+    const cur = current();
+    if (cur.type !== EPISODE || cur.parentId == null || index < queue.length - 1) return;
+    Promise.resolve().then(() => api.seriesInfo(cur.parentId)).then((r) => followingEpisodes(r, cur)).catch(() => null).then((all) => {
+      if (!all || !alive || current() !== cur) return;
+      const at = all.findIndex((e) => String(e.id) === String(cur.id));
+      if (at < 0) return;
+      // An episode saved by an older version doesn't know its season or the series' TMDB id.
+      if (cur.season === undefined && all[at].season !== undefined) {
+        cur.season = all[at].season;
+        if (!cur.tmdb && all[at].tmdb) cur.tmdb = all[at].tmdb;
+        if (!segments) loadSegments();
+      }
+      if (at >= all.length - 1) return;
+      const q = all.slice();
+      q[at] = cur;
+      queue = q;
+      index = at;
+    });
+  }
+
+  /** What plays after this: the next episode, or else the next thing in your Queue. */
+  function upNext() {
+    const cur = current();
+    if (cur.type === EPISODE && index < queue.length - 1) return queue[index + 1];
+    return store.queueNextAfter(cur);
+  }
+
+  /** When the card appears: when the credits start (if the intro database knows), else 30 s from the end. */
+  function cardAt(d) {
+    const credits = segments ? segments.creditsStart : -1;
+    if (credits > 60000 && credits > d * 0.7 && credits < d - 5000) return credits;
+    return d - 30000;
+  }
 
   function checkNextCard() {
-    if (isLive() || current().type !== EPISODE || index >= queue.length - 1) return;
+    if (isLive()) return;
     const d = player.duration(); const p = player.position();
     if (d < 5 * 60000) return;
-    const left = d - p;
-    if (left > 45000) nextDismissed = false; // went back: offer it again later
+    const at = cardAt(d); const left = d - p;
+    if (p < at - 15000) nextDismissed = false; // went back: offer it again later
     if (nextShown) {
-      if (left > 35000) hideNextCard();
+      if (p < at - 5000) hideNextCard();
       else nextCard.setPaused(!player.isPlaying());
       return;
     }
-    if (left <= 30000 && left > 2000 && !nextDismissed && !scrubbing && player.isPlaying()) {
+    if (p >= at && left > 2000 && !nextDismissed && !scrubbing && !panelOpen() && player.isPlaying()) {
+      const nx = upNext();
+      if (!nx) return;
+      const cur = current();
+      const sameSeries = cur.type === EPISODE && nx.type === EPISODE && cur.parentId != null && String(cur.parentId) === String(nx.parentId);
+      nextCard.setLabel(sameSeries ? 'Next Episode' : 'Next in Queue');
       nextShown = true;
+      showSkip(false);
       fade(vod, false);
       fade(nextCard.el, true);
       nextCard.next.focus();
-      nextCard.start(() => playNextEpisode());
+      nextCard.start(() => playNext());
     }
   }
 
@@ -688,13 +796,63 @@ export function playerView() {
     hideNextCard();
   }
 
-  function playNextEpisode() {
+  /**
+   * Next episode (in its series' list), or the next item in your Queue (played on its own).
+   * @param ended the stream ran to its end (the engine has nothing more to say about where it was)
+   */
+  function playNext(ended = false) {
+    const nx = upNext();
     hideNextCard();
-    if (index >= queue.length - 1) return;
-    store.setPosition(current(), 0);
-    index++;
+    if (!nx) return;
+    const d = player.duration(); const p = player.position();
+    if (ended || d <= 0 || player.finishedAt(p, d) || p >= cardAt(d) - 2000) finishedCurrent(); // at the end
+    else if (p > 10000) store.setPosition(current(), p); // skipped ahead early: not watched, keep your place
+    if (current().type === EPISODE && index < queue.length - 1 && queue[index + 1] === nx) {
+      index++;
+    } else {
+      queue = [nx];
+      index = 0;
+    }
     retries = 0;
     play(false);
+  }
+
+  // ------------------------------------------------------------ skip intro
+
+  /** Episodes: ask the intro database where this one's intro and credits are. */
+  function loadSegments() {
+    segments = null;
+    const ep = current();
+    if (ep.type !== EPISODE || !(ep.season >= 0) || !ep.parentName) return;
+    const n = Number.parseInt(String(ep.num == null ? '' : ep.num).trim(), 10);
+    if (!Number.isFinite(n)) return;
+    tmdb.findId(tmdb.TV, ep.parentName, ep.tmdb)
+      .then((id) => (id === null ? null : intros.get(id, ep.season, n)))
+      .catch(() => null)
+      .then((seg) => { if (alive && current() === ep) segments = seg; });
+  }
+
+  /** The "Skip Intro" button shows while the intro is playing. */
+  function checkIntro() {
+    if (isLive() || !intros.hasIntro(segments) || scrubbing || nextShown || panelOpen() || !player.isReady()) {
+      showSkip(false);
+      return;
+    }
+    const p = player.position();
+    showSkip(p >= segments.introStart && p < segments.introEnd - 1500);
+  }
+
+  function showSkip(on) {
+    if (!skipBtn || on === skipShown) return;
+    skipShown = on;
+    fade(skipBtn, on);
+  }
+
+  function skipIntro() {
+    if (!segments) return;
+    player.seek(segments.introEnd);
+    showSkip(false);
+    status('Skipped the intro');
   }
 
   // ------------------------------------------------------------ remote control
@@ -842,7 +1000,7 @@ export function playerView() {
     if (nextShown && !panelOpen() && !scrubbing) {
       e.preventDefault();
       okDown = okHeld = false;
-      if (document.activeElement === nextCard.credits) watchCredits(); else playNextEpisode();
+      if (document.activeElement === nextCard.credits) watchCredits(); else playNext();
       return;
     }
     if (panelOpen()) {
@@ -863,7 +1021,8 @@ export function playerView() {
     if (okDown && !okHeld && !errorVisible()) {
       e.preventDefault();
       const held = Date.now() - okAt >= LONG_PRESS_MS;
-      if (isLive()) { if (held) openTracks(); else openChannels(); } else if (scrubbing) commitScrub(); else if (held) openTracks(); else togglePause();
+      if (isLive()) { if (held) openTracks(); else openChannels(); } else if (scrubbing) commitScrub(); else if (held) openTracks();
+      else if (skipShown) skipIntro(); else togglePause();
     }
     okDown = okHeld = false;
   }
@@ -872,7 +1031,7 @@ export function playerView() {
 
   function startTickers() {
     stopTickers();
-    ticker = setInterval(() => { if (!alive) return; updateProgress(); checkNextCard(); }, TICK_MS);
+    ticker = setInterval(() => { if (!alive) return; updateProgress(); checkNextCard(); checkIntro(); }, TICK_MS);
     watchdog = setInterval(() => { if (alive) checkStall(); }, WATCHDOG_MS);
   }
   function stopTickers() { clearInterval(ticker); clearInterval(watchdog); ticker = watchdog = null; }
@@ -892,6 +1051,8 @@ export function playerView() {
       cancel('zap');
       if (scrubbing) cancelScrub();
       hideNextCard();
+      if (!isLive()) resumeMs = player.position();
+      savePosition();
       player.stop();
       subs.clear();
     } else {
@@ -944,6 +1105,7 @@ export function playerView() {
       for (const [t, type, fn] of handlers) { if (t) t.removeEventListener(type, fn); else player.off(type, fn); }
       handlers.length = 0;
       if (nextCard) nextCard.stopTimer();
+      if (queue.length && player.current()) savePosition(); // a finished episode puts its next one in Continue Watching
       player.stop();
       if (chGlider) chGlider.destroy();
       if (chList) chList.destroy();
@@ -962,6 +1124,7 @@ export function playerView() {
     // for tests
     _state: () => ({
       index, queue, scrubbing, scrubPos, seekTarget, burst, nextShown, nextDismissed, retries, triedAltFormat,
+      skipShown, segments, picture, endRetries,
       recoveries, liveFormat, stallTicks, panel: chSheet && chSheet.isOpen() ? 'channels' : trSheet && trSheet.isOpen() ? 'tracks' : null,
     }),
   };

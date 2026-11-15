@@ -2,6 +2,7 @@
 // Hidden Categories, both multi-choice AlertDialogs.
 import * as filters from './filters.js';
 import * as repo from './repo.js';
+import * as store from './store.js';
 import { LIVE, MOVIE, SERIES } from './item.js';
 import { showDialog } from './ui/dialog.js';
 import { toast, LONG } from './ui/toast.js';
@@ -9,6 +10,8 @@ import { toast, LONG } from './ui/toast.js';
 export const SECTION = "Hide What You Don't Watch";
 export const COUNTRIES = 'Countries & Languages';
 export const HIDDEN = 'Hidden Categories';
+export const RENAME = 'Rename Categories';
+export const RENAME_VALUE = 'Give categories your own names';
 
 export function countriesLabel() {
   const n = filters.hiddenTags().size;
@@ -105,4 +108,58 @@ export async function hidden(onSaved) {
   });
   if (onSaved) onSaved(hiddenLabel());
   return rows;
+}
+
+// ------------------------------------------------------------ your own category names
+
+/**
+ * FilterSettings.askName: type a new name for one category (blank, or the provider's own name,
+ * restores the original). `cat` is the category as the provider names it.
+ * Resolves true when the name changed.
+ */
+export async function askName(type, cat) {
+  const mine = store.catName(type, cat.id);
+  const d = showDialog({
+    title: `Rename “${cat.name}”`, input: { value: mine === null ? cat.name : mine },
+    positive: 'Save', neutral: 'Original Name', negative: 'Cancel',
+  });
+  const v = await d.result;
+  if (v === 'positive') {
+    const n = d.value().trim();
+    const original = n === '' || n === cat.name;
+    store.setCatName(type, cat.id, original ? null : n);
+    filters.changed();
+    toast(original ? 'Original name restored' : `Renamed to ${n}`);
+    return true;
+  }
+  if (v === 'neutral') {
+    store.setCatName(type, cat.id, null);
+    filters.changed();
+    return true;
+  }
+  return false;
+}
+
+/** The category as the provider names it (lists may show your own name for it). */
+export async function rawCategory(type, c) {
+  try {
+    const hit = (await repo.categories(type)).find((r) => r.id === c.id);
+    if (hit) return hit;
+  } catch { /* no list: rename what we were given */ }
+  return c;
+}
+
+/** Settings → Rename Categories: pick a section, pick a category, type a new name. */
+export async function rename() {
+  const types = [LIVE, MOVIE, SERIES];
+  const w = await showDialog({ title: 'Rename categories in…', items: ['Live TV', 'Movies', 'Series'] }).result;
+  if (typeof w !== 'number') return false;
+  const type = types[w];
+  let cats = null;
+  try { cats = await repo.categories(type); } catch { cats = null; }
+  if (!cats || !cats.length) { toast("Couldn't load the categories"); return false; }
+  const labels = cats.map((c) => { const mine = store.catName(type, c.id); return mine === null ? c.name : `✎  ${mine}   (${c.name})`; });
+  const i = await showDialog({ title: 'Pick a category to rename', items: labels }).result;
+  if (typeof i !== 'number') return false;
+  return askName(type, cats[i]);
 }

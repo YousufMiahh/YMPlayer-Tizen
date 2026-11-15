@@ -1,5 +1,6 @@
 // Item contract: a plain object {type, id, name, icon, num, ext, categoryId, plot, info, added, parentId}.
-// Only type and id are required. Episodes may also carry parentName/parentIcon/duration.
+// Only type and id are required. Episodes may also carry parentName/parentIcon/duration and
+// season (0 = specials); films and episodes a tmdb id (The Movie Database) when the provider gives one.
 
 export const LIVE = 'live';
 export const MOVIE = 'movie';
@@ -8,7 +9,7 @@ export const EPISODE = 'episode';
 export const CATEGORY = 'cat';
 
 const FIELDS = ['type', 'id', 'name', 'icon', 'num', 'ext', 'categoryId', 'plot', 'info',
-  'added', 'parentId', 'parentName', 'parentIcon', 'duration'];
+  'added', 'parentId', 'parentName', 'parentIcon', 'duration', 'season', 'tmdb'];
 
 /** Unique key for an item: "{type}:{id}". */
 export function key(item) {

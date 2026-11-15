@@ -45,6 +45,10 @@ export function createNextUpCard(parent) {
 
   const api = {
     el, credits, next,
+    /** "Next Episode", or "Next in Queue" when your Queue carries on with something else. */
+    setLabel(text) {
+      for (const l of el.querySelectorAll('.nu-label')) l.lastChild.textContent = text;
+    },
     /** Shows the countdown from empty and starts it. */
     start(cb) {
       onNext = cb;

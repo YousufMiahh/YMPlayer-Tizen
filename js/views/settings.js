@@ -5,12 +5,12 @@
 //   ACCOUNTS                  {account} ✓ In use / Switch · Subscription · Add Account ·
 //                             Edit This Account · Remove This Account (confirm)
 //   APPEARANCE                Theme (Dark / Light, restarts Home) · Live TV Preview
-//   HIDE WHAT YOU DON'T WATCH Countries & Languages · Hidden Categories
-//   CUSTOMISE HOME SCREEN     the nine Home rows, On / Off
+//   HIDE WHAT YOU DON'T WATCH Countries & Languages · Rename Categories · Hidden Categories
+//   CUSTOMISE HOME SCREEN     the ten Home rows, On / Off
 //   SUBTITLES                 Size · Colour · Background · Background Opacity · sample frame
 //   PLAYBACK                  Live Stream Format · Fix Frozen Video Automatically · User Agent
 //   LIBRARY                   Refresh Automatically · Refresh Now · Clear Watch History · Show Tutorial
-//   ABOUT                     Version, then "Developed by Yousuf Miah"
+//   ABOUT                     Version · What's New, then "Developed by Yousuf Miah"
 //
 // Android rows left out on purpose: Video Player, Last Error Report and Remembered Player Choices
 // (one engine, AVPlay), and Check for Updates (no APK updates on a TV). The player's Audio Sync
@@ -30,6 +30,7 @@ import { toast } from '../ui/toast.js';
 import { sectionHeading, settingsRow } from '../ui/widgets.js';
 import { bringIntoView, scrollBy } from '../ui/scroll.js';
 import { appVersion } from '../version.js';
+import * as whatsNew from '../whats-new.js';
 import {
   SUB_COLOR_NAMES, SUB_COLORS, SUB_SIZE_NAMES, SUB_OPACITY_NAMES, SUB_OPACITY_ALPHA,
 } from '../ui/subtitles.js';
@@ -170,6 +171,9 @@ export function settingsView() {
     row('countries', filterSettings.COUNTRIES, filterSettings.countriesLabel(), (v, r) => {
       filterSettings.countries((t) => { if (v.isConnected) { v.textContent = t; r.focus({ preventScroll: true }); } });
     });
+    row('rename', filterSettings.RENAME, filterSettings.RENAME_VALUE, (v, r) => {
+      filterSettings.rename().then(() => { if (r.isConnected) r.focus({ preventScroll: true }); });
+    });
     row('hidden', filterSettings.HIDDEN, filterSettings.hiddenLabel(), (v, r) => {
       filterSettings.hidden((t) => { if (v.isConnected) { v.textContent = t; r.focus({ preventScroll: true }); } });
     });
@@ -236,6 +240,7 @@ export function settingsView() {
 
     section('About');
     row('version', 'Version', `YM Player ${appVersion()}`);
+    row('whats_new', "What's New", 'What changed in this version', () => { whatsNew.show(); });
     const credit = document.createElement('p');
     credit.className = 'settings-credit';
     credit.textContent = CREDIT;
