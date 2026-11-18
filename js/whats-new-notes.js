@@ -1,11 +1,11 @@
 // What changed in this version: the What's New pop-up and the GitHub release notes.
 // Keep it to what fits the pop-up without scrolling: seven short lines.
 export const NOTES = `
-- Watched: films and episodes you finish get a ✓. Hold OK to mark one, or a whole season.
-- Your Queue: hold OK on a film or episode, Add to Queue. It plays next and has a row on Home.
-- Skip Intro: press OK when the button shows during a series' opening titles.
-- Continue Watching: when you finish an episode, the next one takes its place.
-- Because You Watched: Home suggests films and series like the ones you watch.
-- Picture: hold OK while watching for Fit, Fill, Stretch, 16:9 or 4:3, kept per channel and title.
-- Categories: hold OK on a category to favourite, rename or hide it.
+- Skip Intro and Skip Recap now work from TheIntroDB; the player's menu shows what it found.
+- The player, Netflix-style: press ▲ for Back, Play From Beginning, Next Episode, Episodes, Settings.
+- Paused: the title shows at the top right. Hold OK opens the menu straight away.
+- Film and series pages: Resume with progress, Play From Beginning, Episodes & More.
+- Something you're part way through plays behind its page; Home cards widen and play a preview.
+- Because you watched: only what you really watched. Hold OK for "Don't recommend based on this".
+- Turn previews off in Settings → Film & Series Previews.
 `;
