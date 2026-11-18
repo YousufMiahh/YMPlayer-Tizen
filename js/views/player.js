@@ -12,7 +12,7 @@ import * as store from '../store.js';
 import * as api from '../api.js';
 import * as player from '../player.js';
 import { router } from '../router.js';
-import { LIVE, EPISODE, SERIES } from '../item.js';
+import { LIVE, EPISODE, SERIES, key } from '../item.js';
 import * as tmdb from '../tmdb.js';
 import * as intros from '../intros.js';
 import { followingEpisodes } from '../detail.js';
@@ -46,6 +46,7 @@ export const RETRY_MS = 1500;
 export const END_RETRIES = 3;       // a stream that ends early is reconnected this many times
 export const GIVE_UP_MS = 2500;     // "The stream stopped": then back
 export const SKIP_LABEL = 'OK   Skip Intro';
+export const SKIP_RECAP_LABEL = 'OK   Skip Recap';
 export const FADE_IN = 200;
 export const FADE_OUT = 250;
 export const COACH_LIVE = { title: 'Watching Live TV', body: `▲ ▼  Change channel\nOK  Channel list\n◀ ▶  Channel info\n${HOLD_OK}  Favourite, subtitles & audio\nBack  Leave` };
@@ -577,6 +578,10 @@ export function playerView() {
     }
     if (!text.length) note('This stream has no subtitles');
 
+    if (cur.type === EPISODE) {
+      header('Skip Intro');
+      note(segments ? segments.status || 'No times for this episode' : 'Looking up this episode…');
+    }
     header('Audio');
     const audio = player.tracks(player.AUDIO);
     for (const t of audio) {
@@ -827,19 +832,27 @@ export function playerView() {
     const n = Number.parseInt(String(ep.num == null ? '' : ep.num).trim(), 10);
     if (!Number.isFinite(n)) return;
     tmdb.findId(tmdb.TV, ep.parentName, ep.tmdb)
-      .then((id) => (id === null ? null : intros.get(id, ep.season, n)))
+      .then((id) => intros.get(id, ep.season, n, store.duration(ep)))
       .catch(() => null)
-      .then((seg) => { if (alive && current() === ep) segments = seg; });
+      // still on this episode? (by what it is: the list around it may have been reloaded meanwhile)
+      .then((seg) => { if (alive && seg && current() && key(current()) === key(ep)) segments = seg; });
   }
 
-  /** The "Skip Intro" button shows while the intro is playing. */
+  /** Which part the Skip button is for right now: 1 recap, 2 intro, 0 none. */
+  let skipWhat = 0;
+
+  /** The Skip button shows while the recap or the intro is playing. */
   function checkIntro() {
-    if (isLive() || !intros.hasIntro(segments) || scrubbing || nextShown || panelOpen() || !player.isReady()) {
+    if (isLive() || !(intros.hasIntro(segments) || intros.hasRecap(segments)) || scrubbing || nextShown || panelOpen() || !player.isReady()) {
       showSkip(false);
       return;
     }
     const p = player.position();
-    showSkip(p >= segments.introStart && p < segments.introEnd - 1500);
+    let what = 0;
+    if (intros.hasRecap(segments) && p >= segments.recapStart - 500 && p < segments.recapEnd - 1500) what = 1;
+    else if (intros.hasIntro(segments) && p >= segments.introStart - 500 && p < segments.introEnd - 1500) what = 2;
+    if (what && what !== skipWhat) { skipWhat = what; skipBtn.textContent = what === 1 ? SKIP_RECAP_LABEL : SKIP_LABEL; }
+    showSkip(what !== 0);
   }
 
   function showSkip(on) {
@@ -850,9 +863,12 @@ export function playerView() {
 
   function skipIntro() {
     if (!segments) return;
-    player.seek(segments.introEnd);
+    const recap = skipWhat === 1 && intros.hasRecap(segments);
+    const to = recap ? segments.recapEnd : segments.introEnd;
+    if (!(to > 0)) return;
+    player.seek(to);
     showSkip(false);
-    status('Skipped the intro');
+    status(recap ? 'Skipped the recap' : 'Skipped the intro');
   }
 
   // ------------------------------------------------------------ remote control

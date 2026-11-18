@@ -938,7 +938,7 @@ describe('Skip Intro', () => {
     vod([ep(), EPS[1]], 0, D);
     await flush(); await flush();
     expect(tmdb.findId).toHaveBeenCalledWith('tv', 'Dark', '70523');
-    expect(intros.get).toHaveBeenCalledWith('70523', 1, 1);
+    expect(intros.get).toHaveBeenCalledWith('70523', 1, 1, 0);
     shim.tick(20000); later(500);
     expect(visible('.pl-skip')).toBe(false);
     shim.tick(31000); later(500);
@@ -962,6 +962,21 @@ describe('Skip Intro', () => {
     expect(view()._state().skipShown).toBe(false);
     press(KEY.ENTER);
     expect(player.isPlaying()).toBe(false);
+  });
+
+  it('a recap gets its own Skip Recap button, then Skip Intro for the intro', async () => {
+    tmdb.findId.mockResolvedValue('70523');
+    intros.get.mockResolvedValue({ recapStart: 0, recapEnd: 40000, introStart: 60000, introEnd: 95000, creditsStart: -1, status: '' });
+    vod([ep(), EPS[1]], 0, D);
+    await flush(); await flush();
+    shim.tick(5000); later(500);
+    expect(txt('.pl-skip')).toBe('OK   Skip Recap');
+    press(KEY.ENTER);
+    expect(shim.calls.at(-1)).toEqual({ name: 'seekTo', args: [40000] });
+    expect(txt('.pl-status')).toBe('Skipped the recap');
+    shim.tick(61000); later(500);
+    expect(visible('.pl-skip')).toBe(true);
+    expect(txt('.pl-skip')).toBe('OK   Skip Intro');
   });
 
   it('no button for a film, an episode without a season, or a series the database does not have', async () => {

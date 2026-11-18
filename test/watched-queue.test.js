@@ -230,27 +230,37 @@ describe('Tmdb', () => {
 });
 
 describe('Intros (TheIntroDB)', () => {
-  it('parse: the first intro and credits segments; a null start is the beginning; {0,0} means none', () => {
+  const T = (o) => ({ introStart: -1, introEnd: -1, recapStart: -1, recapEnd: -1, creditsStart: -1, status: '', ...o });
+
+  it('parse: intro, recap and credits; a null start is the beginning; {0,0} means none; the longest of several', () => {
     expect(intros.parse({ intro: [{ start_ms: 30000, end_ms: 95000 }], credits: [{ start_ms: 2500000, end_ms: null }] }))
-      .toEqual({ introStart: 30000, introEnd: 95000, creditsStart: 2500000 });
-    expect(intros.parse({ data: { intro: { start_ms: null, end_ms: 60000 } } })).toEqual({ introStart: 0, introEnd: 60000, creditsStart: -1 });
-    expect(intros.parse({ intro: [{ start_ms: 0, end_ms: 0 }], credits: [] })).toEqual(intros.NONE);
+      .toEqual(T({ introStart: 30000, introEnd: 95000, creditsStart: 2500000 }));
+    expect(intros.parse({ data: { intro: { start_ms: null, end_ms: 60000 } } })).toEqual(T({ introStart: 0, introEnd: 60000 }));
+    expect(intros.parse({ intro: [{ start_ms: 0, end_ms: 0 }], credits: [] })).toEqual(T({}));
+    expect(intros.parse({ recap: [{ start_ms: null, end_ms: 45000 }], intro: [{ start_ms: 50000, end_ms: 60000 }, { start_ms: 120000, end_ms: 175000 }] }))
+      .toEqual(T({ recapStart: 0, recapEnd: 45000, introStart: 120000, introEnd: 175000 }));
+    expect(intros.parse({ intro: [{ startMs: 5000, endMs: 65000 }] })).toEqual(T({ introStart: 5000, introEnd: 65000 })); // camelCase too
     expect(intros.hasIntro(intros.parse({ intro: [{ start_ms: 5000, end_ms: 65000 }] }))).toBe(true);
+    expect(intros.hasRecap(intros.parse({ recap: [{ start_ms: null, end_ms: 40000 }] }))).toBe(true);
     expect(intros.hasIntro(intros.NONE)).toBe(false);
     expect(intros.hasIntro(null)).toBe(false);
   });
 
-  it('get: asks by tmdb id, season and episode, once per episode; nothing known or offline is no button', async () => {
-    const f = vi.fn(() => json({ intro: [{ start_ms: 1000, end_ms: 50000 }] }));
+  it('get: asks by tmdb id, season, episode (and length), once per episode; says what happened', async () => {
+    const f = vi.fn(() => json({ recap: [{ start_ms: null, end_ms: 30000 }], intro: [{ start_ms: 61000, end_ms: 92000 }], credits: [{ start_ms: 2500000, end_ms: null }] }));
     tmdb.setFetch(f);
-    expect(await intros.get('70523', 1, 3)).toMatchObject({ introEnd: 50000 });
-    expect(await intros.get('70523', 1, 3)).toMatchObject({ introEnd: 50000 });
+    const s = await intros.get('70523', 1, 3, 2700000);
+    expect(s).toMatchObject({ introStart: 61000, introEnd: 92000, recapEnd: 30000 });
+    expect(s.status).toBe('TMDB 70523 S1E3: recap 0:00–0:30  intro 1:01–1:32  credits 41:40');
+    expect(await intros.get('70523', 1, 3)).toBe(s);
     expect(f).toHaveBeenCalledTimes(1);
-    expect(f.mock.calls[0][0]).toBe('https://api.theintrodb.org/v4/media?tmdb_id=70523&season=1&episode=3');
-    expect(await intros.get(null, 1, 3)).toBe(intros.NONE);
-    expect(await intros.get('1', -1, 3)).toBe(intros.NONE);
+    expect(f.mock.calls[0][0]).toBe('https://api.theintrodb.org/v4/media?tmdb_id=70523&season=1&episode=3&duration_ms=2700000');
+    expect(await intros.get(null, 1, 3)).toMatchObject({ introEnd: -1, status: "Couldn't find this show on TMDB" });
+    expect(await intros.get('1', -1, 3)).toMatchObject({ introEnd: -1, status: 'No season / episode number for this episode' });
     tmdb.setFetch(() => json({}, false));
-    expect(await intros.get('1', 2, 1)).toBe(intros.NONE);
+    const missing = await intros.get('1', 2, 1);
+    expect(intros.hasIntro(missing)).toBe(false);
+    expect(missing.status).toMatch(/^(Not in TheIntroDB|Couldn't reach TheIntroDB)/);
   });
 });
 

@@ -1,54 +1,82 @@
-// Intros.java: where the intro and the end credits are in an episode, from TheIntroDB
+// Intros.java: where the recap, intro and end credits are in an episode, from TheIntroDB
 // (theintrodb.org), a free community database looked up by the series' TMDB id, season and
-// episode. Many popular shows are covered; when one isn't, there's simply no Skip Intro button.
+// episode (and the episode's length, so it picks the right cut). When an episode isn't covered
+// there's simply no Skip button for it.
 import { getJson } from './tmdb.js';
 
 export const URL = 'https://api.theintrodb.org/v4/media';
 
-/** Times in ms, -1 where unknown. */
-const none = () => ({ introStart: -1, introEnd: -1, creditsStart: -1 });
+/** Times in ms, -1 where unknown; status says what happened (shown in the player's panel). */
+const none = (status = '') => ({ introStart: -1, introEnd: -1, recapStart: -1, recapEnd: -1, creditsStart: -1, status });
 export const NONE = Object.freeze(none());
 export const hasIntro = (s) => !!s && s.introEnd > 0 && s.introEnd > s.introStart;
+export const hasRecap = (s) => !!s && s.recapEnd > 0 && s.recapEnd > s.recapStart;
 
 const CACHE = new Map();
 /** Tests. */
 export function _reset() { CACHE.clear(); }
 
-const ms = (v) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? -1 : Math.trunc(Number(v)));
+const num = (o, a, b) => {
+  const v = o[a] !== undefined ? o[a] : o[b];
+  return v === null || v === undefined || !Number.isFinite(Number(v)) ? -1 : Math.trunc(Number(v));
+};
 
-/** First segment as [start, end] (start null = from the beginning, end null = to the end → -1). */
-function first(seg) {
-  let o = null;
-  if (Array.isArray(seg)) o = seg.length ? seg[0] : null;
-  else if (seg && typeof seg === 'object') o = seg;
-  if (!o || typeof o !== 'object') return null;
-  const start = ms(o.start_ms); const end = ms(o.end_ms);
-  if (start <= 0 && end <= 0) return null; // {0,0}: confirmed there isn't one
-  return [start, end];
+/**
+ * The segment as [start, end] in ms: a missing start means from the beginning (0); a missing end,
+ * to the end of the episode (-1). With several entries, the longest. Null if there isn't one.
+ */
+function longest(seg) {
+  const list = Array.isArray(seg) ? seg : seg && typeof seg === 'object' ? [seg] : [];
+  let best = null;
+  for (const o of list) {
+    if (!o || typeof o !== 'object') continue;
+    let start = num(o, 'start_ms', 'startMs'); const end = num(o, 'end_ms', 'endMs');
+    if (start <= 0 && end <= 0) continue; // {0,0} / {null,null}: confirmed there isn't one
+    if (start < 0) start = 0;
+    if (!best || (end > 0 && best[1] > 0 && end - start > best[1] - best[0])) best = [start, end];
+  }
+  return best;
 }
+
+export const clock = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 /** Intros.get's parsing, on its own for tests. */
 export function parse(body) {
   let o = body && typeof body === 'object' ? body : {};
   if (!('intro' in o) && o.data && typeof o.data === 'object') o = o.data;
   const s = none();
-  const intro = first(o.intro);
-  if (intro) { s.introStart = intro[0] < 0 ? 0 : intro[0]; s.introEnd = intro[1]; }
-  const credits = first(o.credits);
+  const intro = longest(o.intro);
+  if (intro) { s.introStart = intro[0]; s.introEnd = intro[1]; }
+  const recap = longest(o.recap);
+  if (recap) { s.recapStart = recap[0]; s.recapEnd = recap[1]; }
+  const credits = longest(o.credits);
   if (credits && credits[0] > 0) s.creditsStart = credits[0];
   return s;
 }
 
-export async function get(tmdbId, season, episode) {
-  if (tmdbId == null || !(season >= 0) || !(episode > 0)) return NONE;
+/** The last lookup's result, for the player's panel. */
+export let lastStatus = '';
+
+export async function get(tmdbId, season, episode, durationMs = 0) {
+  if (tmdbId == null) { lastStatus = "Couldn't find this show on TMDB"; return none(lastStatus); }
+  if (!(season >= 0) || !(episode > 0)) { lastStatus = 'No season / episode number for this episode'; return none(lastStatus); }
   const k = `${tmdbId}:${season}:${episode}`;
-  if (CACHE.has(k)) return CACHE.get(k);
+  if (CACHE.has(k)) { lastStatus = CACHE.get(k).status; return CACHE.get(k); }
+  const what = `TMDB ${tmdbId} S${season}E${episode}`;
   let s;
   try {
-    s = parse(await getJson(`${URL}?tmdb_id=${encodeURIComponent(tmdbId)}&season=${season}&episode=${episode}`));
-  } catch {
-    return NONE; // not in the database, or offline: no button (asked again next time)
+    s = parse(await getJson(`${URL}?tmdb_id=${encodeURIComponent(tmdbId)}&season=${season}&episode=${episode}${durationMs > 60000 ? `&duration_ms=${Math.floor(durationMs)}` : ''}`));
+    const parts = [];
+    if (hasRecap(s)) parts.push(`recap ${clock(s.recapStart)}–${clock(s.recapEnd)}`);
+    if (hasIntro(s)) parts.push(`intro ${clock(s.introStart)}–${clock(s.introEnd)}`);
+    if (s.creditsStart > 0) parts.push(`credits ${clock(s.creditsStart)}`);
+    s.status = `${what}: ${parts.length ? parts.join('  ') : 'no times yet'}`;
+  } catch (e) {
+    const m = String((e && e.message) || e);
+    if (/404/.test(m)) s = none(`Not in TheIntroDB (${what})`);
+    else { lastStatus = `Couldn't reach TheIntroDB: ${m}`; return none(lastStatus); } // offline: asked again next time
   }
+  lastStatus = s.status;
   CACHE.set(k, s);
   return s;
 }
