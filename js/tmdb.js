@@ -37,6 +37,21 @@ export async function getJson(url, ms = TIMEOUT_MS) {
 
 const get = (path) => getJson(`${BASE}${path}${path.includes('?') ? '&' : '?'}api_key=${KEY}&language=en-GB`);
 
+const IMDB = new Map();
+/** A series' IMDb id ("tt0903747") from its TMDB id, for the skip-intro databases that use it; null if none. */
+export async function imdbId(tvId) {
+  if (IMDB.has(String(tvId))) return IMDB.get(String(tvId));
+  let id = null;
+  try {
+    const v = String((await get(`/tv/${encodeURIComponent(tvId)}/external_ids`)).imdb_id || '');
+    if (v.startsWith('tt')) id = v;
+  } catch { return null; } // not kept: asked again next time
+  IMDB.set(String(tvId), id);
+  return id;
+}
+/** Tests. */
+export function _resetImdb() { IMDB.clear(); }
+
 /**
  * "EN - Breaking Bad (2008) [4K]" → ["Breaking Bad", "2008", …]. Only a provider's tag is taken
  * off the front ("EN - ", "UK: ", "NF | "), never part of a real title ("CSI: Miami",

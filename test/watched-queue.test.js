@@ -253,10 +253,32 @@ describe('Intros (TheIntroDB)', () => {
     tmdb.setFetch(f);
     const s = await intros.get('225385', 1, 2, 3207000);
     expect(s).toMatchObject({ introStart: 70000, introEnd: 120000, creditsStart: 3000000 }); // this cut's credits kept
-    expect(s.status).toBe('TMDB 225385 S1E2: intro 1:10–2:00  credits 50:00  (intro from another cut)');
+    expect(s.status).toBe('TMDB 225385 S1E2: intro 1:10–2:00  credits 50:00  (TheIntroDB, another cut)');
     expect(f).toHaveBeenCalledTimes(2);
-    tmdb.setFetch(() => json({ intro: [], credits: [{ start_ms: 3000000, end_ms: null }] }));
-    expect((await intros.get('225385', 1, 3, 3207000)).status).toBe('TMDB 225385 S1E3: credits 50:00  ·  no intro or recap times in TheIntroDB yet');
+  });
+
+  it('get: nothing in TheIntroDB: SkipDB, then IntroDB, by the IMDb id; says when there is nowhere yet', async () => {
+    tmdb._resetImdb();
+    const seen = [];
+    tmdb.setFetch((url) => {
+      seen.push(url.replace(/api_key=[^&]+&?/, ''));
+      if (url.includes('theintrodb')) return json({ tvdb_id: 441315, credits: [{ start_ms: 3000412, end_ms: null }] });
+      if (url.includes('/external_ids')) return json({ imdb_id: 'tt13250218' });
+      if (url.includes('skipdb')) return json({ segments: { intro: null, recap: null, outro: null, preview: null } });
+      if (url.includes('introdb.app')) return json({ intro: { start_sec: 62.5, end_sec: 118 } });
+      return json({}, false);
+    });
+    const s = await intros.get('225385', 1, 2, 3207000);
+    expect(s).toMatchObject({ introStart: 62500, introEnd: 118000, creditsStart: 3000412 });
+    expect(s.status).toBe('TMDB 225385 S1E2: intro 1:02–1:58  credits 50:00  (IntroDB)');
+    expect(seen.some((u) => u.startsWith('https://api.skipdb.tv/api/segments?imdb_id=tt13250218&season=1&episode=2&duration=3207'))).toBe(true);
+    expect(seen.some((u) => u.startsWith('https://api.introdb.app/segments?imdb_id=tt13250218&season=1&episode=2'))).toBe(true);
+    tmdb.setFetch((url) => (url.includes('skipdb')
+      ? json({ segments: { intro: { start_ms: 40000, end_ms: 95000 }, recap: null, outro: { start_ms: 2950000, end_ms: 3000000 } } })
+      : url.includes('/external_ids') ? json({ imdb_id: 'tt0903747' }) : json({}, false)));
+    expect((await intros.get('1396', 1, 1)).status).toBe('TMDB 1396 S1E1: intro 0:40–1:35  credits 49:10  (SkipDB)');
+    tmdb.setFetch((url) => (url.includes('theintrodb') ? json({ credits: [{ start_ms: 3000000, end_ms: null }] }) : json({}, false)));
+    expect((await intros.get('225385', 1, 3, 3207000)).status).toBe('TMDB 225385 S1E3: credits 50:00  ·  no intro or recap times in TheIntroDB, SkipDB or IntroDB yet');
   });
 
   it('get: asks by tmdb id, season, episode (and length), once per episode; says what happened', async () => {
@@ -264,7 +286,7 @@ describe('Intros (TheIntroDB)', () => {
     tmdb.setFetch(f);
     const s = await intros.get('70523', 1, 3, 2700000);
     expect(s).toMatchObject({ introStart: 61000, introEnd: 92000, recapEnd: 30000 });
-    expect(s.status).toBe('TMDB 70523 S1E3: recap 0:00–0:30  intro 1:01–1:32  credits 41:40');
+    expect(s.status).toBe('TMDB 70523 S1E3: recap 0:00–0:30  intro 1:01–1:32  credits 41:40  (TheIntroDB)');
     expect(await intros.get('70523', 1, 3)).toBe(s);
     expect(f).toHaveBeenCalledTimes(1);
     expect(f.mock.calls[0][0]).toBe('https://api.theintrodb.org/v4/media?tmdb_id=70523&season=1&episode=3&duration_ms=2700000');
@@ -273,7 +295,7 @@ describe('Intros (TheIntroDB)', () => {
     tmdb.setFetch(() => json({}, false));
     const missing = await intros.get('1', 2, 1);
     expect(intros.hasIntro(missing)).toBe(false);
-    expect(missing.status).toMatch(/^(Not in TheIntroDB|Couldn't reach TheIntroDB)/);
+    expect(missing.status).toMatch(/(not in TheIntroDB, SkipDB or IntroDB|Couldn't reach TheIntroDB)/);
   });
 });
 
