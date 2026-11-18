@@ -31,14 +31,14 @@ body.video-on #backdrop { display: none; }
   color: var(--text2);
   white-space: nowrap;
 }
-.tb-tab.current { font-weight: 600; color: var(--text); background: var(--surface-hi); }
+.tb-tab.current { font-weight: 600; color: var(--text); background: transparent; } /* just the moving highlight; the current section is in bold */
 .tb-tab:focus { color: var(--on-focus); background: transparent; }
 .tb-pill { position: absolute; left: 0; top: calc(6 * var(--u)); width: 0; height: 0; pointer-events: none; }
 .tb-pill-face {
   width: 100%; height: 100%;
   border-radius: var(--r-tab);
   background: var(--focus-bg);
-  box-shadow: 0 calc(3 * var(--u)) calc(6 * var(--u)) rgba(0, 0, 0, 0.28); /* elevation 6u */
+  box-shadow: none; /* a plain highlight, no shadow */
   opacity: 0;
 }
 
@@ -175,6 +175,7 @@ body.video-on #backdrop { display: none; }
 .row-cell .rc-sub { font-size: calc(14 * var(--u)); color: var(--text2); padding-top: calc(4 * var(--u)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row-cell .rc-trail { flex: none; font-size: calc(16 * var(--u)); font-weight: 500; color: var(--text2); padding-left: calc(10 * var(--u)); }
 .row-cell.active { background: var(--surface-hi); }
+.b-catlist .row-cell.active { background: transparent; } /* categories: just the highlight while you move; the open one is in bold */
 .row-cell.active .rc-title { font-weight: 600; }
 .row-cell:focus, .row-cell.keep-focus { background: var(--focus-bg); }
 .row-cell:focus .rc-title, .row-cell.keep-focus .rc-title { color: var(--on-focus); font-weight: 600; }

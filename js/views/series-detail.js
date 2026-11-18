@@ -30,6 +30,7 @@ import { bringIntoView } from '../ui/scroll.js';
 import { detailFrame } from './movie-detail.js';
 
 const KEY_UP = 38;
+const KEY_DOWN = 40;
 const KEY_ENTER = 13;
 const KEY_MENU = 10133;
 
@@ -67,12 +68,17 @@ export function seriesDetailView() {
     if (preview && !rowsShown() && hero.target) preview.schedule(hero.target, store.position(hero.target));
   }
 
-  /** Episodes & More: the seasons come up, on the episode you'd play. */
-  function showRows() {
+  /** Episodes & More: the seasons come up, on the episode you'd play (or, coming down from the buttons, on the first season). */
+  function showRows(firstSeason = false) {
     if (!loaded) return;
     params.rows = true;
     if (preview) preview.stop();
     page.el.classList.remove('sp-hero');
+    if (firstSeason) {
+      const p = pillsEl.firstElementChild;
+      if (p) { p.focus({ preventScroll: true }); pillsEl.parentElement.scrollLeft = 0; }
+      return;
+    }
     const t = hero && hero.target;
     const s = t ? seasons.find((x) => x.episodes.includes(t)) : null;
     if (s && s.season !== active) showSeason(s.season);
@@ -316,6 +322,12 @@ export function seriesDetailView() {
         return true;
       }
       const a = document.activeElement;
+      // ▼ off the bottom of the buttons: the seasons come up, on the first one
+      if (e.keyCode === KEY_DOWN && loaded && !rowsShown() && a && buttonsEl.contains(a)) {
+        const row = buttonsEl.querySelector('.hero-row');
+        const last = row ? row.contains(a) : a === [...buttonsEl.querySelectorAll('.hero-btn')].at(-1);
+        if (last) { e.preventDefault(); showRows(true); return true; }
+      }
       if (e.keyCode === KEY_UP && a && shelfEl.contains(a) && loaded) { // card.setNextFocusUpId(pill)
         e.preventDefault();
         const p = activePill();

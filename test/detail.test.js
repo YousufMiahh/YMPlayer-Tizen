@@ -340,6 +340,15 @@ describe('series page', () => {
     expect(router.current().view.onBack()).toBe(false); // then Back leaves the page as usual
   });
 
+  it('▼ off the bottom of the buttons brings up the seasons on the first one; the buttons make way', async () => {
+    router.go('series-detail', { item: SERIES });
+    await tick();
+    root.querySelector('[data-action="fav"]').focus();
+    expect(keyDown(40)).toBe(true);
+    expect(root.querySelector('.series-page').classList.contains('sp-hero')).toBe(false);
+    expect(document.activeElement).toBe(pills()[0]);
+  });
+
   it('watching it: Resume S2: Ep. 2 with progress, Play From Beginning starts it again; a finished one moves on', async () => {
     store.addHistory(epItem('2002'));
     store.setDuration(epItem('2002'), 3000000); store.setPosition(epItem('2002'), 1500000);

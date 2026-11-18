@@ -222,3 +222,19 @@
 .pl-episodes .ep-opt .ep-sub { font-size: calc(14 * var(--u)); color: var(--text2); padding-top: calc(3 * var(--u)); }
 .pl-episodes .ep-opt:focus .ep-sub { color: rgba(11, 11, 15, 0.7); }
 .pl-episodes .ep-opt.playing:not(:focus) { background: var(--surface); }
+
+/* ▼ while playing: the settings button under the bar */
+.pl-controls { display: flex; align-items: center; padding-top: calc(14 * var(--u)); }
+.pl-set-btn {
+  width: calc(52 * var(--u)); height: calc(52 * var(--u));
+  border-radius: 50%; color: #FFFFFF; display: flex; align-items: center; justify-content: center;
+  transition: transform 150ms var(--ease-std), background-color 150ms var(--ease-std);
+}
+.pl-set-btn svg { width: calc(30 * var(--u)); height: calc(30 * var(--u)); display: block; }
+.pl-set-btn.on { background: #FFFFFF; color: #0B0B0F; transform: scale(1.1); }
+.pl-set-label {
+  padding-left: calc(14 * var(--u)); font-size: calc(15 * var(--u)); font-weight: 600; letter-spacing: 0.04em;
+  color: #fff; visibility: hidden;
+}
+.pl-set-label.on { visibility: visible; }
+.pl-vod-sub[hidden], .pl-vod-title[hidden] { display: none; }

@@ -30,7 +30,8 @@ import { fmt, joinNonEmpty, favToast } from '../home-rows.js';
 
 export const BACK_MS = 5000;
 export const FORWARD_MS = 10000;
-export const VOD_HINT = `◀  5 sec      ▶  10 sec      OK  Play / Pause      ▼  Scrub      ${HOLD_OK}  Subtitles, Audio & Picture`;
+export const VOD_HINT = `◀  5 sec      ▶  10 sec      OK  Play / Pause      ▲  More      ▼  Settings      ${HOLD_OK}  Subtitles, Audio & Picture`;
+export const SETTINGS_HINT = 'OK  Subtitles, Audio & Picture      ▲  Scrub along the bar      Back  Hide';
 export const SCRUB_HINT = '◀ ▶  Move (hold to go faster)      OK  Play from here      Back  Cancel';
 export const LIVE_HINT = `▲▼  Change channel      OK  Channel list      ${HOLD_OK}  Favourite, subtitles, audio & picture`;
 export const CHANNELS_HINT = `${HOLD_OK}  Add or remove favourite`;
@@ -62,7 +63,7 @@ export const FADE_OUT = 250;
 export const COACH_LIVE = { title: 'Watching Live TV', body: `▲ ▼  Change channel\nOK  Channel list\n◀ ▶  Channel info\n${HOLD_OK}  Favourite, subtitles & audio\nBack  Leave` };
 export const COACH_VOD = {
   title: 'Watching films & series',
-  body: `OK  Pause / play\n◀  Back 5 seconds     ▶  Forward 10 seconds (press again to go further)\n▼  Scrub: move the knob with ◀ ▶, OK to jump there\n${HOLD_OK}  Subtitles, audio, picture & favourite\nBack  Leave — your place is saved`,
+  body: `OK  Pause / play\n◀  Back 5 seconds     ▶  Forward 10 seconds (press again to go further)\n▲  Back, Play From Beginning, Next Episode, Episodes\n▼  Settings; ▲ from there to scrub along the bar (◀ ▶, OK to jump there)\n${HOLD_OK}  Subtitles, audio, picture & favourite\nBack  Leave — your place is saved`,
 };
 
 export const KEY = {
@@ -119,6 +120,7 @@ export function playerView() {
   let root; let host; let queue = []; let index = 0;
   let alive = false;
   // overlays
+  let setBtn; let setLabel; let setOn = false; let setOk = false;
   let vod; let vodSub; let vodTitle; let bubble; let scrubRow; let scrubCard; let scrubTime; let vodBar; let timeLeft; let timeRight; let vodHint;
   let center; let banner; let liveLogo; let liveNum; let liveName; let liveNow; let liveTime; let liveBar; let liveNext;
   let spinner; let errorEl; let statusEl; let nextCard; let subs; let skipBtn;
@@ -197,7 +199,15 @@ export function playerView() {
     timeLeft = el('div', 'pl-time-left'); timeRight = el('div', 'pl-time-right');
     times.append(timeLeft, timeRight);
     vodHint = el('div', 'pl-hint pl-vod-hint', VOD_HINT);
-    vod.append(vodSub, vodTitle, bubble, scrubRow, vodBar.el, times, vodHint);
+    // ▼ while playing: a settings button under the bar (Netflix-style)
+    const controls = el('div', 'pl-controls');
+    setBtn = el('div', 'pl-set-btn');
+    setBtn.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${TOP_ICONS[TOP_SETTINGS]}</svg>`;
+    setLabel = el('div', 'pl-set-label', 'SUBTITLES, AUDIO & PICTURE');
+    controls.append(setBtn, setLabel);
+    // The title shows at the top right while paused, not above the bar as well
+    vodSub.hidden = true; vodTitle.hidden = true;
+    vod.append(vodSub, vodTitle, bubble, scrubRow, vodBar.el, times, controls, vodHint);
     p.appendChild(vod);
 
     // Top row (Netflix): Back, Play From Beginning, Next Episode, Episodes, Settings; title at the right when paused
@@ -451,7 +461,7 @@ export function playerView() {
     updateProgress(true);
     fade(vod, true);
     cancel('hideOverlay');
-    if (autoHide && player.isPlaying()) later('hideOverlay', () => { if (topFocus < 0) fade(vod, false); }, OVERLAY_MS);
+    if (autoHide && player.isPlaying()) later('hideOverlay', () => { if (topFocus < 0) { setSettings(false); fade(vod, false); } }, OVERLAY_MS);
   }
 
   function updateProgress(force = false) {
@@ -554,7 +564,7 @@ export function playerView() {
     topShown = [TOP_BACK, TOP_RESTART];
     if (nx) topShown.push(TOP_NEXT);
     if (ep) topShown.push(TOP_EPISODES);
-    topShown.push(TOP_SETTINGS);
+    // Settings is under the bar now (▼), as on Netflix
     nextName = nx && ep && nx.type === EPISODE && cur.parentId != null && String(cur.parentId) === String(nx.parentId) ? 'Next Episode' : 'Next in Queue';
     topRow.innerHTML = '';
     for (const w of topShown) {
@@ -585,6 +595,23 @@ export function playerView() {
     else if (w === TOP_NEXT) { if (upNext()) playNext(); }
     else if (w === TOP_EPISODES) openEpisodes();
     else if (w === TOP_SETTINGS) openTracks();
+  }
+
+  /** The settings button under the bar: white with its name beside it while chosen. */
+  function setSettings(on) {
+    if (!setBtn || on === setOn) return;
+    setOn = on;
+    if (!on) setOk = false;
+    setBtn.classList.toggle('on', on);
+    setLabel.classList.toggle('on', on);
+    if (!scrubbing) vodHint.textContent = on ? SETTINGS_HINT : VOD_HINT;
+  }
+
+  /** ▼ while playing: the controls come up with the settings button chosen. */
+  function focusSettings() {
+    leaveTop();
+    setSettings(true);
+    showOverlay(true);
   }
 
   /** The series' episodes, every season, opened on the one playing; OK plays one. */
@@ -1073,6 +1100,16 @@ export function playerView() {
       return done();
     }
 
+    // The settings button under the bar: OK opens Subtitles, Audio & Picture, ▲ goes up onto the
+    // bar (scrubbing), Back puts the controls away
+    if (!isLive() && setOn && !panelOpen() && !scrubbing) {
+      if (okKey) { if (!repeat) setOk = true; return done(); }
+      if (k === KEY.UP) { if (!repeat) { setSettings(false); enterScrub(); } return done(); }
+      if (k === KEY.BACK || k === KEY.ESC) { setSettings(false); cancel('hideOverlay'); fade(vod, false); return done(); }
+      if (k === KEY.DOWN || k === KEY.LEFT || k === KEY.RIGHT) { showOverlay(true); return done(); }
+      setSettings(false); // any other key: carry on as usual
+    }
+
     // OK: tap on release, hold (450 ms) opens the menu
     if (okKey && !panelOpen() && !errorVisible()) {
       if (!repeat) {
@@ -1141,7 +1178,7 @@ export function playerView() {
         case KEY.LEFT: case KEY.REWIND: moveScrub(-1, repeatCount); return done();
         case KEY.RIGHT: case KEY.FAST_FORWARD: moveScrub(1, repeatCount); return done();
         case KEY.UP: cancelScrub(); return done();
-        case KEY.DOWN: return done();
+        case KEY.DOWN: if (!repeat) { cancelScrub(); focusSettings(); } return done(); // down off the bar: settings
         case KEY.MENU: cancelScrub(); openTracks(); return done();
         case KEY.PLAY_PAUSE: commitScrub(); return done();
         default: return false;
@@ -1157,7 +1194,7 @@ export function playerView() {
       case KEY.UP:
         if (shown(vod) && !repeat) { focusTop(); showOverlay(false); } else showOverlay(true); // ▲ again: onto the top row
         return done();
-      case KEY.DOWN: if (!repeat) enterScrub(); return done();
+      case KEY.DOWN: if (!repeat) focusSettings(); return done();
       case KEY.MENU: openTracks(); return done();
       default: return false;
     }
@@ -1166,6 +1203,7 @@ export function playerView() {
   function onKeyUp(e) {
     const k = e.keyCode;
     if (topOk && k === KEY.ENTER) { topOk = false; okDown = okHeld = false; e.preventDefault(); activateTop(); return; }
+    if (setOk && k === KEY.ENTER) { setOk = false; okDown = okHeld = false; e.preventDefault(); setSettings(false); openTracks(); return; }
     if (heldKey === k) { heldKey = null; repeatCount = 0; }
     if (!alive || coach.showing() || k !== KEY.ENTER) return;
     if (nextShown && !panelOpen() && !scrubbing) {

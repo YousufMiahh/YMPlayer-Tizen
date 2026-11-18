@@ -451,7 +451,8 @@ describe('films and episodes', () => {
   it('▼ scrub: knob, time card and hint; ◀ ▶ step; it plays from the knob 1 s after the last move', () => {
     vod([MOVIE]);
     shim.tick(600000);
-    press(KEY.DOWN);
+    press(KEY.DOWN); // the settings button under the bar…
+    press(KEY.UP); // …and up onto the bar: scrubbing
     expect(view()._state().scrubbing).toBe(true);
     expect(txt('.pl-vod-hint')).toBe(SCRUB_HINT);
     expect($('.pl-scrub-row').hidden).toBe(false);
@@ -471,7 +472,7 @@ describe('films and episodes', () => {
   it('scrub: holding ◀ ▶ goes faster (1x, 2x from the 3rd repeat, 4x from the 8th, 8x from the 16th)', () => {
     vod([MOVIE]); // 1 h: base step 30 s
     shim.tick(1800000);
-    press(KEY.DOWN);
+    press(KEY.DOWN); press(KEY.UP);
     down(KEY.LEFT);
     for (let i = 1; i <= 16; i++) down(KEY.LEFT, { repeat: true });
     up(KEY.LEFT);
@@ -484,13 +485,13 @@ describe('films and episodes', () => {
     vod([MOVIE]);
     shim.tick(600000);
     press(KEY.ENTER); // pause
-    press(KEY.DOWN);
+    press(KEY.DOWN); press(KEY.UP);
     press(KEY.LEFT);
     press(KEY.ENTER);
     expect(shim.calls.filter((c) => c.name === 'seekTo').map((c) => c.args[0])).toEqual([570000]);
     expect(shim.getState()).toBe('PLAYING');
-    press(KEY.DOWN); press(KEY.RIGHT); press(KEY.UP);
-    press(KEY.DOWN); press(KEY.RIGHT); press(KEY.BACK);
+    press(KEY.DOWN); press(KEY.UP); press(KEY.RIGHT); press(KEY.UP);
+    press(KEY.DOWN); press(KEY.UP); press(KEY.RIGHT); press(KEY.BACK);
     later(2000);
     expect(shim.calls.filter((c) => c.name === 'seekTo')).toHaveLength(1);
     expect(router.current().name).toBe('player-vod');
@@ -949,7 +950,7 @@ describe('Netflix-style top row', () => {
     vod(EPS, 0, D);
     shim.tick(600000);
     expect(visible('.pl-top')).toBe(true); // comes up with the bottom controls
-    expect(btns().length).toBe(5); // Back, Start, Next, Episodes, Settings
+    expect(btns().length).toBe(4); // Back, Start, Next, Episodes (Settings is under the bar)
     press(KEY.UP);
     expect(document.querySelector('.pl-top-btn.on')).toBe(btns()[1]);
     expect(txt('.pl-top-label')).toBe('PLAY FROM BEGINNING');
@@ -959,6 +960,26 @@ describe('Netflix-style top row', () => {
     press(KEY.ENTER);
     expect(shim.calls.filter((c) => c.name === 'seekTo').at(-1)).toEqual({ name: 'seekTo', args: [0] });
     expect(document.querySelector('.pl-top-btn.on')).toBe(null);
+  });
+
+  it('▼: the settings button under the bar; OK opens Subtitles & Audio, ▲ scrubs, Back hides', () => {
+    vod(EPS, 0, D);
+    shim.tick(600000);
+    press(KEY.DOWN);
+    expect($('.pl-set-btn').classList.contains('on')).toBe(true);
+    expect(visible('.pl-vod')).toBe(true);
+    press(KEY.ENTER); up(KEY.ENTER);
+    expect(visible('.pl-tracks')).toBe(true);
+    press(KEY.BACK);
+    press(KEY.DOWN); press(KEY.UP);
+    expect(view()._state().scrubbing).toBe(true);
+    press(KEY.DOWN); // down off the bar: settings again
+    expect(view()._state().scrubbing).toBe(false);
+    expect($('.pl-set-btn').classList.contains('on')).toBe(true);
+    press(KEY.BACK);
+    expect($('.pl-set-btn').classList.contains('on')).toBe(false);
+    expect(router.current().name).toBe('player-vod');
+    expect($('.pl-vod-title').hidden).toBe(true); // the title is only at the top right, while paused
   });
 
   it('the title and episode show at the top right only while paused', () => {
@@ -974,7 +995,7 @@ describe('Netflix-style top row', () => {
   it('a film: no Next or Episodes; ▼ leaves the row', () => {
     vod([MOVIE], 0, D);
     shim.tick(60000);
-    expect(btns().length).toBe(3);
+    expect(btns().length).toBe(2); // Back, Play From Beginning
     press(KEY.UP);
     expect(document.querySelector('.pl-top-btn.on')).not.toBe(null);
     press(KEY.DOWN);

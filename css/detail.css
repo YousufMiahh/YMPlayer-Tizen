@@ -139,3 +139,6 @@ html.light .hero-btn { background: rgba(0, 0, 0, 0.06); }
 
 /* The preview playing behind the page: the page lets the video plane through */
 html.preview-on .detail-page.pv-on { background: transparent; }
+
+/* With the seasons up, the big buttons and the plot make way for them */
+.series-page:not(.sp-hero) .dp-buttons, .series-page:not(.sp-hero) .dp-plot { display: none; }
