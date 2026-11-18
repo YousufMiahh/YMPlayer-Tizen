@@ -30,7 +30,12 @@
 }
 .b-search { flex: none; width: 100%; margin-bottom: calc(14 * var(--u)); }
 .b-search[hidden] { display: none; }
-.b-frame { position: relative; flex: 1; min-height: 0; }
+/* The search keyboard sits over the category list while you type */
+.browse-vod .b-cats { position: relative; }
+.b-keys { position: absolute; left: 0; right: 0; top: calc(10 * var(--u)); }
+.b-keys[hidden] { display: none; }
+.b-cats.typing .b-catlist, .b-cats.typing .b-cathint { visibility: hidden; }
+.b-frame { position: relative; flex: 1; min-height: 0; min-width: 0; }
 .b-channels, .b-grid { position: absolute; inset: 0; overflow: hidden; }
 .b-channels { overflow: visible; clip-path: inset(0 calc(-60 * var(--u))); }
 .b-grid { overflow: visible; clip-path: inset(0 calc(-12 * var(--u))); }

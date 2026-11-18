@@ -9,9 +9,10 @@
 //     each section fills as soon as its list is ready and stale results are dropped.
 //   - OK on a card opens it through Open.item (js/open.js) with the hits as the zap list;
 //     Hold OK / Menu toggles the favourite with a toast.
-//   - IME Done / Enter searches now and leaves the box (first result, else the Search tab);
-//     Back (or the IME's Cancel) in the box does the same; Back elsewhere is TopBar.back.
-//   - OK on the Search tab jumps back into the box.
+//   - Netflix-style, the box and its own keyboard (js/ui/keypad.js) sit on the left and the
+//     results on the right: the TV's keyboard never comes up. Back from the results or the chips
+//     goes to the keyboard; Back on the keyboard is TopBar.back.
+//   - OK on the Search tab (or ▼ from the bar) goes to the keyboard.
 import * as repo from '../repo.js';
 import * as nav from '../nav.js';
 import * as match from '../match.js';
@@ -23,11 +24,12 @@ import { mountSection, tabFocused } from '../ui/topbar.js';
 import { card as cardEl, pillInput, shelfTitle } from '../ui/widgets.js';
 import { bringIntoView } from '../ui/scroll.js';
 import { u, LONG_PRESS_MS } from '../ui/theme.js';
+import { createKeypad } from '../ui/keypad.js';
 
 export const TYPES = [LIVE, MOVIE, SERIES];
 export const TITLES = ['Channels', 'Movies', 'Series'];
 export const CHIPS = ['All', 'Live TV', 'Movies', 'Series'];
-export const HINT = 'Channels, movies and series';
+export const HINT = 'Search';
 export const MAX = 40;
 export const GRID_MAX = 120;
 export const DEBOUNCE_MS = 300;
@@ -35,8 +37,10 @@ export const IDLE = 'Type to search everything';
 export const LOADING = 'Getting your library ready…';
 export const SEARCHING = 'Searching…';
 export const noResults = (q) => `No results for "${q}"`;
+/** The keyboard and box on the left of the screen. */
+export const LEFT_W = 360;
 export const COACH_STEPS = [
-  ['Search everything', "Type a channel, film or series. Spaces, dashes and accents don't matter, and the best matches come first."],
+  ['Search everything', "Type a channel, film or series with the keyboard. Spaces, dashes and accents don't matter, and the best matches come first. Hold OK on Delete to clear."],
   ['Narrow it down', 'Choose Live TV, Movies or Series to see only those, laid out across the whole screen.'],
 ];
 
@@ -76,7 +80,7 @@ export async function rankSection(type, q, max, all = repo.cached(type, null), c
 }
 
 export function searchView() {
-  let root; let st; let screen; let bar; let box; let chipRow; let statusEl; let slots;
+  let root; let st; let screen; let bar; let box; let chipRow; let statusEl; let slots; let keys;
   let filter = 0; let token = 0; let timer = null; let cancelTour = () => {};
   let ready = [false, false, false]; let found = [0, 0, 0]; let hits = [[], [], []];
   let doneMask = 0; let hitMask = 0;
@@ -132,7 +136,7 @@ export function searchView() {
       return c;
     });
     if (asGrid) {
-      const cols = gridColumns(shape, (screen && screen.clientWidth) || 1920);
+      const cols = gridColumns(shape, ((screen && screen.clientWidth) || 1920) - u(LEFT_W));
       for (let i = 0; i < cards.length; i += cols) {
         const row = document.createElement('div');
         row.className = 'grid-row';
@@ -162,7 +166,7 @@ export function searchView() {
     hits[slot] = list;
     found[slot] = list.length;
     slots[slot].replaceChildren(...(list.length ? [renderSection(slot, list, asGrid, max)] : []));
-    if (focusInside) box.focus({ preventScroll: true });
+    if (focusInside) keys.focusFirst();
     updateStatus();
     if (filter === 0 && !forceGrid) {
       doneMask |= 1 << slot;
@@ -193,14 +197,6 @@ export function searchView() {
   function firstCard() {
     for (const s of slots) { const c = s.querySelector('.card'); if (c) return c; }
     return null;
-  }
-
-  /** SearchActivity.closeKeyboard: leave the box for the first result, else the Search tab. */
-  function closeKeyboard() {
-    box.blur();
-    const first = firstCard();
-    if (first) focusCard(first);
-    else bar.focusCurrent();
   }
 
   function focusCard(c) {
@@ -250,7 +246,7 @@ export function searchView() {
         return;
       }
     }
-    box.focus({ preventScroll: true });
+    keys.focusFirst();
   }
 
   return {
@@ -258,8 +254,8 @@ export function searchView() {
       root = rootEl;
       st = params && typeof params === 'object' ? params : {};
       const sec = mountSection(root, 'search', {
-        onReselect: () => box.focus(), // OK on the Search tab: into the box (keyboard up)
-        onDown: () => box.focus(),
+        onReselect: () => keys.focusFirst(), // OK on the Search tab: onto the keyboard
+        onDown: () => keys.focusFirst(),
       });
       bar = sec.bar; screen = sec.el;
       screen.dataset.ownScroll = '';
@@ -279,7 +275,14 @@ export function searchView() {
       statusEl = document.createElement('p');
       statusEl.className = 's-status';
       slots = [0, 1, 2].map((i) => { const s = document.createElement('div'); s.className = 's-slot'; s.dataset.slot = String(i); return s; });
-      page.append(box, chipRow, statusEl, ...slots);
+      keys = createKeypad(box);
+      const left = document.createElement('div');
+      left.className = 's-left';
+      left.append(box, keys.el);
+      const right = document.createElement('div');
+      right.className = 's-right';
+      right.append(chipRow, statusEl, ...slots);
+      page.append(left, right);
       sec.page.appendChild(page);
 
       if (typeof st.filter === 'number') filter = st.filter;
@@ -307,27 +310,16 @@ export function searchView() {
 
       loadLibrary();
       if (st.query !== undefined) search().then(() => { if (root && !tabFocused()) restore(); });
-      else if (!tabFocused()) box.focus({ preventScroll: true });
+      else if (!tabFocused()) keys.focusFirst();
       cancelTour = coach.show('search', [
-        { target: box, title: COACH_STEPS[0][0], body: COACH_STEPS[0][1] },
+        { target: keys.el, title: COACH_STEPS[0][0], body: COACH_STEPS[0][1] },
         { target: chipRow, title: COACH_STEPS[1][0], body: COACH_STEPS[1][1] },
       ], alive);
     },
     onKey(e) {
       const k = e.keyCode; const f = active();
       if (!root || !f || !root.contains(f)) return false;
-      if (f === box) {
-        if (k === K.ENTER || k === K.IME_DONE) {
-          // Search now, then leave the box (Android closes the keyboard straight away and its
-          // results land a moment later; here focus waits for them so it can go to the first one).
-          e.preventDefault(); clearTimeout(timer);
-          const t = token + 1;
-          search().then(() => { if (root && t === token && active() === box) closeKeyboard(); });
-          return true;
-        }
-        if (k === K.BACK || k === K.ESC || k === K.IME_CANCEL) { e.preventDefault(); closeKeyboard(); return true; }
-        return false;
-      }
+      if (keys.handleKey(e)) return true;
       if (!f.classList.contains('card')) return false;
       if (k === K.MENU) { e.preventDefault(); menu(f); return true; }
       if (k === K.ENTER) {
@@ -340,7 +332,15 @@ export function searchView() {
       }
       return false;
     },
+    /** Back from the results or the chips: to the keyboard. On the keyboard: TopBar.back. */
+    onBack() {
+      const f = active();
+      if (!root || !f || !root.contains(f) || keys.has(f) || bar.el.contains(f)) return false;
+      keys.focusFirst();
+      return true;
+    },
     unmount() {
+      if (keys) keys.destroy();
       if (root && screen) remember();
       token++;
       cancelTour(); coach.dismiss();

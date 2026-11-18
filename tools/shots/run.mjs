@@ -212,10 +212,17 @@ const openSearch = async (page, q) => {
   await toHome(page);
   await press(page, 'ArrowUp'); await press(page, 'ArrowRight', 4, 60); await press(page, 'Enter');
   await page.waitForSelector('.search .s-box', { timeout: 8000 });
-  await wait(700); // OK on the tab opens Search with focus in the box (box.requestFocus())
-  await page.waitForSelector('.search .s-box:focus', { timeout: 8000 });
-  if (q) { await page.keyboard.type(q, { delay: 40 }); await wait(900); }
+  await wait(700); // OK on the tab opens Search with focus on the built-in keyboard
+  await page.waitForSelector('.search .keypad .kp-key:focus', { timeout: 8000 });
+  if (q) { await typeKeys(page, '.search .keypad', q); await wait(900); }
   else await wait(300);
+};
+/** Types with the on-screen keyboard (a click on each key, as OK would). */
+const typeKeys = async (page, pad, q) => {
+  for (const ch of q) {
+    await page.evaluate(([p, c]) => document.querySelector(`${p} [data-key="${c}"]`).click(), [pad, ch]);
+    await wait(40);
+  }
 };
 /** From the search box: ▼ to the chips (the nearest one, Movies), along to chip n, OK. */
 const pickChip = async (page, n) => {
@@ -569,7 +576,7 @@ const SCREENS = {
     steps: async (page) => {
       await toHome(page); await hoverTab(page, 1);
       await press(page, 'ArrowDown'); await press(page, 'Enter'); await wait(300);
-      await page.keyboard.type('sky ne', { delay: 60 }); await wait(900);
+      await typeKeys(page, '.b-keys', 'sky ne'); await wait(900);
     },
   },
   'live-long': { // 3000 channels in one category, far down the list

@@ -4,17 +4,22 @@
 .section-screen.section-search { display: block; overflow-x: hidden; overflow-y: auto; position: relative; scrollbar-width: none; }
 .section-search::-webkit-scrollbar, .search .strip::-webkit-scrollbar { display: none; }
 .section-search .section-page { flex: none; min-height: 0; }
-.search { display: flex; flex-direction: column; padding-bottom: calc(48 * var(--u)); }
-
-/* Ui.input, 820u wide, centred, text 24u centred, top margin 28u */
+.search { display: flex; align-items: flex-start; padding-bottom: calc(48 * var(--u)); }
+/* Netflix-style: the box and its keyboard on the left (they stay put while results scroll) */
+.search .s-left {
+  flex: none; box-sizing: border-box; width: calc(360 * var(--u));
+  padding: calc(18 * var(--u)) 0 calc(24 * var(--u)) calc(56 * var(--u));
+  position: sticky; top: calc(8 * var(--u));
+}
+.search .s-right { flex: 1; min-width: 0; }
 .search .s-box {
-  align-self: center; width: calc(820 * var(--u)); margin-top: calc(28 * var(--u));
-  font-size: calc(24 * var(--u)); text-align: center;
+  display: block; box-sizing: border-box; width: 100%; margin-bottom: calc(14 * var(--u));
+  font-size: calc(22 * var(--u)); text-align: left; caret-color: transparent;
 }
 .search .s-box::-webkit-search-cancel-button { display: none; }
 
 /* All | Live TV | Movies | Series: Medium 18u, padding 24/11u, 6u either side, row padding 20/4u */
-.search .s-chips { display: flex; justify-content: center; padding: calc(20 * var(--u)) 0 calc(4 * var(--u)); }
+.search .s-chips { display: flex; justify-content: flex-start; padding: calc(18 * var(--u)) 0 calc(4 * var(--u)) calc(58 * var(--u)); }
 .search .s-chip {
   margin: 0 calc(6 * var(--u)); padding: calc(11 * var(--u)) calc(24 * var(--u));
   border-radius: calc(22 * var(--u)); background: transparent;
@@ -27,7 +32,7 @@
 /* status: Regular 17u TEXT2, centred, padding-top 18u (an empty TextView keeps one line) */
 .search .s-status {
   margin: 0; padding-top: calc(18 * var(--u)); min-height: calc(17 * var(--u) * 1.15);
-  font-size: calc(17 * var(--u)); line-height: var(--lh); color: var(--text2); text-align: center; white-space: pre;
+  font-size: calc(17 * var(--u)); line-height: var(--lh); color: var(--text2); text-align: left; padding-left: calc(64 * var(--u)); white-space: pre;
 }
 
 .search .shelf-title { white-space: pre; }

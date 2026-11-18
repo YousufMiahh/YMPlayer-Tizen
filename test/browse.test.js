@@ -464,13 +464,15 @@ describe('Browse screen: content keys', () => {
 });
 
 describe('Browse screen: search', () => {
-  it('OK on Search opens the box; typing searches the whole section after 300 ms; Enter goes to the first result', async () => {
+  it('OK on Search opens the box and its keyboard; typing searches the whole section after 300 ms; ▶ goes to the results', async () => {
     await open('live');
     await ok();
     const box = root.querySelector('.b-search');
+    const keyEl = (k) => root.querySelector(`.b-keys [data-key="${k}"]`);
     expect(box.hidden).toBe(false);
+    expect(box.readOnly).toBe(true); // the TV's own keyboard never comes up
     expect(box.placeholder).toBe('Search all channels');
-    expect(document.activeElement).toBe(box);
+    expect(document.activeElement).toBe(keyEl('a'));
     expect(emptyText()).toBe('Type the name of a channel');
     box.value = 'channel 2';
     box.dispatchEvent(new Event('input'));
@@ -478,11 +480,23 @@ describe('Browse screen: search', () => {
     expect(contentIds()).toEqual([]);
     await wait(2); await wait(0);
     expect(contentIds()[0]).toBe('20');
-    box.value = 'zzz';
-    press(K.ENTER); await wait(0); await wait(0);
-    expect(emptyText()).toBe('No results for "zzz"');
-    box.value = 'channel 1';
-    press(K.ENTER); await wait(0); await wait(0);
+    // the keyboard moves with the arrows and types with OK
+    keyEl('del').focus();
+    press(K.ENTER); document.dispatchEvent(new KeyboardEvent('keyup', { keyCode: K.ENTER }));
+    expect(box.value).toBe('channel ');
+    keyEl('a').focus();
+    press(K.RIGHT);
+    expect(document.activeElement).toBe(keyEl('b'));
+    press(K.UP);
+    expect(document.activeElement.dataset.key).toBe(' ');
+    press(K.DOWN);
+    expect(document.activeElement).toBe(keyEl('a'));
+    keyEl('1').focus();
+    press(K.ENTER);
+    await wait(310); await wait(0);
+    expect(box.value).toBe('channel 1');
+    keyEl('f').focus();
+    press(K.RIGHT); // off the right edge: the results
     expect(focusedItem()).toBe('10');
   });
 

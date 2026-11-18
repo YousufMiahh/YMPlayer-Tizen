@@ -31,6 +31,7 @@ import { createVList } from '../ui/vlist.js';
 import { showDialog } from '../ui/dialog.js';
 import { toast } from '../ui/toast.js';
 import { rowCell, pillInput, watchedBadge } from '../ui/widgets.js';
+import { createKeypad } from '../ui/keypad.js';
 import { u, LONG_PRESS_MS } from '../ui/theme.js';
 import { createPreview } from '../live-preview.js';
 import { createEpgGrid, nowSec } from '../ui/epg-grid.js';
@@ -94,7 +95,7 @@ export function browseView(type) {
 
   return function create() {
     let root = null; let params; let st; let bar; let screen;
-    let catsBox; let catScroller; let catHint; let mid; let searchBox; let frame; let contentScroller;
+    let catsBox; let catScroller; let catHint; let mid; let searchBox; let keys; let frame; let contentScroller;
     let emptyEl; let spinner; let info = null; let preview = null;
     let catList; let content; let catGlider; let contentGlider = null;
     let cats = []; let items = []; let favSet = new Set(); let watchedSet = new Set();
@@ -114,7 +115,7 @@ export function browseView(type) {
     function zoneOf(el) {
       if (!el || !screen || !screen.contains(el)) return null;
       if (catScroller.contains(el)) return 'cats';
-      if (el === searchBox) return 'search';
+      if (keys && keys.has(el)) return 'keys';
       if (contentScroller.contains(el)) return 'content';
       if (guideEl && guideEl.contains(el)) return 'guide';
       if (el.closest('[data-topbar]') || el.closest('.topbar')) return 'bar';
@@ -200,6 +201,12 @@ export function browseView(type) {
       searchBox.className += ' b-search';
       searchBox.enterKeyHint = 'search';
       searchBox.hidden = true;
+      // The search keyboard: over the category list while you type (Netflix keeps it at the left),
+      // so the results keep their full width. The TV's own keyboard never comes up.
+      keys = createKeypad(searchBox);
+      keys.el.classList.add('b-keys');
+      keys.el.hidden = true;
+      catsBox.appendChild(keys.el);
       frame = document.createElement('div'); frame.className = 'b-frame';
       contentScroller = document.createElement('div'); contentScroller.className = live ? 'b-channels' : 'b-grid';
       emptyEl = document.createElement('div'); emptyEl.className = 'b-empty';
@@ -316,6 +323,7 @@ export function browseView(type) {
 
     /** ◀ / Back from the content: the open category, exactly where it sits on screen. */
     function backToCategories() {
+      showKeys(false);
       const a = activeIdx;
       if (a >= 0 && a < cats.length) {
         const scroll = catList.isVisible(a) ? catList.offsetOf(a) : u(8);
@@ -416,7 +424,7 @@ export function browseView(type) {
       const token = ++loadToken;
       const searching = cat.id === B.SEARCH;
       searchBox.hidden = !searching;
-      if (!searching && document.activeElement === searchBox) searchBox.blur();
+      if (!searching) showKeys(false);
       content.relayout();
       if (searching) {
         show(searchResults, false, o);
@@ -799,9 +807,17 @@ export function browseView(type) {
 
     // ------------------------------------------------------------ search
 
+    /** The keyboard over the categories (on), or the categories again (off). */
+    function showKeys(on) {
+      if (keys.has(document.activeElement) && !on) document.activeElement.blur();
+      keys.el.hidden = !on;
+      catsBox.classList.toggle('typing', on);
+    }
+
     function openKeyboard() {
       searchBox.hidden = false;
-      searchBox.focus();
+      showKeys(true);
+      keys.focusFirst();
     }
 
     function runSearch() {
@@ -816,14 +832,6 @@ export function browseView(type) {
         searchResults = r;
         if (currentCat && currentCat.id === B.SEARCH) show(r, false);
         return r;
-      });
-    }
-
-    function submitSearch() {
-      runSearch().then((r) => {
-        if (!alive() || !r) return;
-        // results: the keyboard goes and focus moves to the first one; none: stay in the box
-        if (content.count) content.select(0, { focus: true, scroll: 'top', silent: true });
       });
     }
 
@@ -896,12 +904,15 @@ export function browseView(type) {
       if (z === null || z === 'bar') return false;
       const consume = () => { e.preventDefault(); return true; };
 
-      if (z === 'search') {
-        if (k === K.ENTER || k === K.IME_DONE) { submitSearch(); return consume(); }
-        if (k === K.BACK || k === K.ESC || k === K.IME_CANCEL) { searchBox.blur(); backToCategories(); return consume(); }
-        if (k === K.DOWN) { if (content.count) content.select(content.selected, { focus: true }); return consume(); }
-        if (k === K.UP) { bar.focusCurrent(); return consume(); }
-        return false; // ◀ ▶ move the caret
+      if (z === 'keys') {
+        if (keys.handleKey(e)) return true;
+        if (k === K.BACK || k === K.ESC) { backToCategories(); return consume(); }
+        const d = DIRS[k];
+        if (!d) return false;
+        if (keys.move(d)) return consume();
+        if (d === 'left') backToCategories();
+        else if (d === 'right') { if (content.count) content.select(content.selected, { focus: true }); } else if (d === 'up') bar.focusCurrent();
+        return consume();
       }
 
       if (z === 'guide') {
@@ -933,8 +944,7 @@ export function browseView(type) {
       // content
       if (dir === 'right' && live) { if (!e.repeat) enterGuide(); return consume(); }
       if (content.move(dir)) return consume();
-      if (dir === 'left') backToCategories();
-      else if (dir === 'up') { if (!searchBox.hidden) searchBox.focus(); else bar.focusCurrent(); }
+      if (dir === 'left') { if (!searchBox.hidden) openKeyboard(); else backToCategories(); } else if (dir === 'up') bar.focusCurrent();
       return consume();
     }
 
@@ -1018,11 +1028,11 @@ export function browseView(type) {
       }
       if (tabFocused()) return;
       if (st.zone === 'content' && content.count) content.focus();
-      else if (st.zone === 'search' && !searchBox.hidden) catList.focus();
       else catList.focus();
     }
 
     function unmount() {
+      if (keys) keys.destroy();
       if (root) saveState();
       for (const t of [pendingCat, pendingEpg, pendingSearch, tourTimer, layoutTimer]) clearTimeout(t);
       if (followRaf && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(followRaf);

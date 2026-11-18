@@ -22,6 +22,7 @@ let LIVE; let MOVIES; let SERIES;
 let root; let go;
 const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 const box = () => root.querySelector('.s-box');
+const keyEl = (k) => root.querySelector(`.keypad [data-key="${k}"]`);
 const status = () => root.querySelector('.s-status').textContent;
 const chip = (i) => root.querySelectorAll('.s-chip')[i];
 const sections = () => [...root.querySelectorAll('.s-slot > section')].map((s) => ({
@@ -57,7 +58,8 @@ afterEach(() => { router.reset(); go.mockRestore(); toast.hide(); });
 describe('Search screen', () => {
   it('has the box, the four chips with All picked, and Android\'s status texts', async () => {
     expect(box().placeholder).toBe(HINT);
-    expect(document.activeElement).toBe(box());
+    expect(document.activeElement).toBe(keyEl('a')); // the built-in keyboard, not the TV's
+    expect(box().readOnly).toBe(true);
     expect([...root.querySelectorAll('.s-chip')].map((c) => c.textContent)).toEqual(CHIPS);
     expect(chip(0).classList.contains('on')).toBe(true);
     expect(status()).toBe(IDLE);
@@ -191,28 +193,39 @@ describe('Search screen', () => {
     } finally { vi.useRealTimers(); }
   });
 
-  it('IME Done / Enter searches at once and moves to the first result', async () => {
-    box().value = 'spider';
-    key(65376);
-    await tick(); await tick(); await tick();
-    expect(document.activeElement.textContent).toBe('Spider-Man');
+  it('the built-in keyboard types into the box: OK on a letter, Space, Delete; hold OK on Delete clears', async () => {
+    const press = async (k) => { keyEl(k).focus(); key(13); keyup(13); };
+    for (const k of ['h', 'e', 'a', 't']) await press(k);
+    expect(box().value).toBe('heat');
+    await tick(330); await tick();
+    expect(sections().map((x) => x.names)).toEqual([['Heat']]);
+    await press(' ');
+    await press(' '); // never two spaces
+    expect(box().value).toBe('heat ');
+    await press('del');
+    expect(box().value).toBe('heat');
+    vi.useFakeTimers();
+    try {
+      keyEl('del').focus();
+      key(13);
+      await vi.advanceTimersByTimeAsync(700);
+      keyup(13);
+      expect(box().value).toBe('');
+    } finally { vi.useRealTimers(); }
   });
 
-  it('Back in the box goes to the first result, or the Search tab with none', async () => {
+  it('Back from the results goes to the keyboard; Back on the keyboard leaves Search', async () => {
     await type('heat');
-    box().focus();
-    expect(key(10009)).toBe(true);
-    expect(document.activeElement.classList.contains('card')).toBe(true);
-    await type('zzzz');
-    box().focus();
-    key(65385);
-    expect(document.activeElement.dataset.tab).toBe('search');
+    root.querySelector('.card').focus();
+    expect(router.current().view.onBack()).toBe(true);
+    expect(document.activeElement).toBe(keyEl('a'));
+    expect(router.current().view.onBack()).toBe(false);
   });
 
-  it('OK on the Search tab jumps back into the box', async () => {
+  it('OK on the Search tab goes to the keyboard', async () => {
     root.querySelector('[data-tab="search"]').focus();
     root.querySelector('[data-tab="search"]').click();
-    expect(document.activeElement).toBe(box());
+    expect(document.activeElement).toBe(keyEl('a'));
   });
 
   it('reads the saved library, never the provider', async () => {

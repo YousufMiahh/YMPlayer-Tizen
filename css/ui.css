@@ -340,3 +340,17 @@ html.light .coach-card { background: #FFFFFF; }
 }
 .card.poster.peek .art, .card.poster.peek .title, .card.poster.peek .sub { width: calc(427 * var(--u)); }
 html.preview-on .card.peek-playing .art { background: transparent; }
+
+/* ---------------------------------------------------------------- the search keyboard (KeyPad) */
+.keypad { display: flex; flex-direction: column; gap: calc(6 * var(--u)); }
+.kp-row { display: flex; gap: calc(6 * var(--u)); }
+.kp-key {
+  flex: 1 1 0; min-width: 0;
+  height: calc(44 * var(--u));
+  border-radius: calc(8 * var(--u));
+  background: var(--surface-hi); color: var(--text);
+  font-size: calc(22 * var(--u)); font-weight: 600; line-height: 1;
+  display: flex; align-items: center; justify-content: center; padding: 0; text-align: center;
+}
+.kp-wide { font-size: calc(17 * var(--u)); }
+.kp-key:focus { background: var(--focus-bg); color: var(--on-focus); }
