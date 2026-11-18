@@ -66,11 +66,25 @@ export async function get(tmdbId, season, episode, durationMs = 0) {
   let s;
   try {
     s = parse(await getJson(`${URL}?tmdb_id=${encodeURIComponent(tmdbId)}&season=${season}&episode=${episode}${durationMs > 60000 ? `&duration_ms=${Math.floor(durationMs)}` : ''}`));
+    // Nothing for the intro or recap in this cut (the episode's length picks one): the intro is
+    // usually at the same place in every cut, so take it from the episode as a whole
+    let otherCut = false;
+    if (!hasIntro(s) && !hasRecap(s) && durationMs > 60000) {
+      try {
+        const any = parse(await getJson(`${URL}?tmdb_id=${encodeURIComponent(tmdbId)}&season=${season}&episode=${episode}`));
+        if (hasIntro(any) || hasRecap(any)) {
+          Object.assign(s, { introStart: any.introStart, introEnd: any.introEnd, recapStart: any.recapStart, recapEnd: any.recapEnd });
+          if (!(s.creditsStart > 0)) s.creditsStart = any.creditsStart;
+          otherCut = true;
+        }
+      } catch { /* keep what this cut had */ }
+    }
     const parts = [];
     if (hasRecap(s)) parts.push(`recap ${clock(s.recapStart)}–${clock(s.recapEnd)}`);
     if (hasIntro(s)) parts.push(`intro ${clock(s.introStart)}–${clock(s.introEnd)}`);
     if (s.creditsStart > 0) parts.push(`credits ${clock(s.creditsStart)}`);
-    s.status = `${what}: ${parts.length ? parts.join('  ') : 'no times yet'}`;
+    if (parts.length && !hasIntro(s) && !hasRecap(s)) parts.push('·  no intro or recap times in TheIntroDB yet');
+    s.status = `${what}: ${parts.length ? parts.join('  ') : 'no times yet'}${otherCut ? '  (intro from another cut)' : ''}`;
   } catch (e) {
     const m = String((e && e.message) || e);
     if (/404/.test(m)) s = none(`Not in TheIntroDB (${what})`);

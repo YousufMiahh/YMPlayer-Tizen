@@ -246,6 +246,19 @@ describe('Intros (TheIntroDB)', () => {
     expect(intros.hasIntro(null)).toBe(false);
   });
 
+  it('get: no intro for this cut (only credits): the intro comes from the episode as a whole', async () => {
+    const f = vi.fn((url) => json(url.includes('duration_ms')
+      ? { intro: [], recap: [], credits: [{ start_ms: 3000000, end_ms: null }] }
+      : { intro: [{ start_ms: 70000, end_ms: 120000 }], credits: [{ start_ms: 2900000, end_ms: null }] }));
+    tmdb.setFetch(f);
+    const s = await intros.get('225385', 1, 2, 3207000);
+    expect(s).toMatchObject({ introStart: 70000, introEnd: 120000, creditsStart: 3000000 }); // this cut's credits kept
+    expect(s.status).toBe('TMDB 225385 S1E2: intro 1:10–2:00  credits 50:00  (intro from another cut)');
+    expect(f).toHaveBeenCalledTimes(2);
+    tmdb.setFetch(() => json({ intro: [], credits: [{ start_ms: 3000000, end_ms: null }] }));
+    expect((await intros.get('225385', 1, 3, 3207000)).status).toBe('TMDB 225385 S1E3: credits 50:00  ·  no intro or recap times in TheIntroDB yet');
+  });
+
   it('get: asks by tmdb id, season, episode (and length), once per episode; says what happened', async () => {
     const f = vi.fn(() => json({ recap: [{ start_ms: null, end_ms: 30000 }], intro: [{ start_ms: 61000, end_ms: 92000 }], credits: [{ start_ms: 2500000, end_ms: null }] }));
     tmdb.setFetch(f);
