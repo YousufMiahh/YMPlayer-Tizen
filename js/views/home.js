@@ -9,6 +9,8 @@ import * as top10 from '../top10.js';
 import * as recs from '../recs.js';
 import * as whatsNew from '../whats-new.js';
 import { showItemMenu } from '../item-menu.js';
+import { showDialog } from '../ui/dialog.js';
+import { createHomePeek } from '../home-peek.js';
 import { router } from '../router.js';
 import { LIVE, MOVIE, SERIES, key } from '../item.js';
 import {
@@ -155,7 +157,7 @@ function renderShelf(row) {
   strip.className = 'strip';
   const watched = store.watchedKeys(); // read once per shelf, not once per card
   row.items.forEach((it, i) => strip.appendChild(renderCard(row, it, i, watched)));
-  sec.append(shelfTitle(row.title, row.key === 'continue' || row.key === 'queue' ? CW_HINT : ''), strip);
+  sec.append(shelfTitle(row.title, row.key === 'continue' || row.key === 'queue' || row.sourceKey ? CW_HINT : ''), strip);
   sec._row = row;
   return sec;
 }
@@ -167,6 +169,7 @@ export function homeView() {
   let firstRun = false; let timers = []; let tick = null; let cancelTour = () => {};
   let holdTimer = null; let held = false; let holdCard = null;
   let onKeyUp; let onClick; let onFocusIn; let onVisibility;
+  let peek = null; // the highlighted film / series card widening into a preview
 
   const active = () => document.activeElement;
   const noFocus = () => !active() || active() === document.body || !active().isConnected;
@@ -265,7 +268,9 @@ export function homeView() {
       return;
     }
     card.classList.add('keep-focus'); // the dialog has focus; the card still looks focused beneath it
-    showItemMenu(it).then((changed) => {
+    if (peek) peek.leave();
+    const ask = x.row.sourceKey ? recMenu(x.row, it) : showItemMenu(it);
+    ask.then((changed) => {
       card.classList.remove('keep-focus');
       if (!changed || !root) return;
       const inRemote = remoteEl.contains(card);
@@ -278,6 +283,21 @@ export function homeView() {
         if (list.length) focusCard(list[Math.min(idx, list.length - 1)]); else focusFirstCard();
       }
     });
+  }
+
+  /**
+   * Hold OK on a "Because you watched X" card: this title's own options, or stop basing rows on X.
+   * Resolves true when something changed.
+   */
+  async function recMenu(row, it) {
+    const which = await showDialog({ title: row.title, items: [`Options for ${it.name || ''}…`, `Don't recommend based on ${row.sourceName}`] }).result;
+    if (which === 0) return showItemMenu(it);
+    if (which !== 1) return false;
+    store.blockRec(row.sourceKey);
+    toast(`You won't see recommendations based on ${row.sourceName}`);
+    memo.recSig = null;
+    loadRecs(); // the next thing you watched takes its place
+    return true;
   }
 
   /** HomeActivity.homeTour (Settings → Show Tutorial runs it again). */
@@ -359,7 +379,8 @@ export function homeView() {
       body.append(localEl, remoteEl, emptyEl);
       sec.page.appendChild(body);
 
-      onFocusIn = (e) => reveal(e.target, true);
+      peek = createHomePeek({ itemOf: (card) => { const x = itemOf(card); return x ? x.it : null; }, reveal: (c) => reveal(c, true) });
+      onFocusIn = (e) => { reveal(e.target, true); peek.focus(e.target); };
       screen.addEventListener('focusin', onFocusIn);
       onClick = (e) => {
         const card = e.target.closest && e.target.closest('.card');
@@ -374,6 +395,7 @@ export function homeView() {
       };
       document.addEventListener('keyup', onKeyUp);
       onVisibility = () => {
+        if (document.hidden && peek) peek.leave();
         if (document.hidden) { clearInterval(tick); tick = null; } else if (root && !tick) startTop10();
       };
       document.addEventListener('visibilitychange', onVisibility);
@@ -416,6 +438,7 @@ export function homeView() {
       return false;
     },
     unmount() {
+      if (peek) { peek.release(); peek = null; }
       if (screen) { rememberFocus(); memo.scrollTop = screen.scrollTop; }
       mounted = null;
       cancelTour(); coach.dismiss();

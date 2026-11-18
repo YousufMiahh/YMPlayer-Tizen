@@ -14,6 +14,8 @@ export const RETRY_MS = 5 * 60000;
 export const MAX_SOURCES = 3;
 export const MAX_ITEMS = 20;
 export const MIN_ITEMS = 3;
+/** Only what you actually watched: finished, or at least this far in. */
+export const MIN_WATCHED_MS = 5 * 60000;
 
 let cached = null; let cachedFor = ''; let cachedAt = 0;
 /** Tests. */
@@ -24,6 +26,10 @@ export function sources() {
   const m = new Map();
   for (const h of store.history(false)) {
     if (m.size >= MAX_SOURCES) break;
+    // Not something only opened, started by accident or played on its own for a moment
+    if (!store.isWatched(h) && store.position(h) < MIN_WATCHED_MS) continue;
+    // "Don't recommend based on this"
+    if (store.recBlocked(h.type === EPISODE && h.parentId != null ? `${SERIES}:${h.parentId}` : key(h))) continue;
     if (h.type === MOVIE) m.set(key(h), h);
     else if (h.type === EPISODE && h.parentId != null) {
       const s = { type: SERIES, id: String(h.parentId), name: h.parentName || '' };
@@ -96,7 +102,10 @@ export async function rows(now = () => Date.now()) {
       if (keep.length >= MAX_ITEMS) break;
     }
     const name = tmdb.cleanName(s.name)[0];
-    if (keep.length >= MIN_ITEMS) out.push({ title: `Because you watched ${name === '' ? s.name : name}`, items: keep });
+    if (keep.length >= MIN_ITEMS) {
+      const shownName = name === '' ? s.name : name;
+      out.push({ title: `Because you watched ${shownName}`, items: keep, sourceKey: key(s), sourceName: shownName });
+    }
   }
   if (!out.length) {
     const g = byGenre(series, src);

@@ -1,12 +1,14 @@
 // Movie page (MovieActivity.java). Params: { item }.
 // Full-bleed backdrop (the poster first, then backdrop_path[0] / movie_image) under Android's
 // left and bottom page scrims; a 900u column anchored bottom-left with the title, the
-// "year · duration · genre · ★ rating" line, the plot, "Director: … · Cast: …" and the buttons
-//   ▶  Resume  H:MM:SS | ↺  Start Over (both only with a saved point; else ▶  Play)
-//   ▶  Trailer (once get_vod_info names one) | ♡  Favourite / ♥  In Favourites
-//   ＋  Queue / ✓  In Queue | ○  Mark Watched / ✓  Watched
+// "year · duration · genre · ★ rating" line, the plot, "Director: … · Cast: …" and, Netflix-style,
+// the big stacked buttons
+//   ▶  Resume (with its progress bar) | ↻  Play From Beginning     (with a saved point)
+//   ▶  Play | Audio & Subtitles                                    (otherwise)
+// then on a line: ▶  Trailer (once get_vod_info names one) | ♡  Favourite | ＋  Queue | ○  Mark Watched.
 // Focus starts on Play. Coming back from the player or a trailer rebuilds the buttons (onResume),
-// so the Resume time is current and focus is on Play again.
+// so the progress is current and focus is on Play again. Something part way through plays muted
+// behind the page after a moment, from where you were (Settings → Film & Series Previews).
 import * as api from '../api.js';
 import * as store from '../store.js';
 import * as nav from '../nav.js';
@@ -14,6 +16,7 @@ import { play } from '../open.js';
 import { openTrailer } from '../trailer.js';
 import { movieInfo, movieButtons, favLabel, queueLabel } from '../detail.js';
 import { pillButton } from '../ui/widgets.js';
+import { renderButtons, askAudioSubtitles, pagePreview } from '../ui/hero.js';
 
 export const FADE_MS = 500; // loadBackdrop: alpha 0 -> 1 over 500 ms
 
@@ -51,12 +54,15 @@ export function detailFrame(className) {
 
 export function movieDetailView() {
   let root; let item; let params; let page; let buttonsEl; let metaEl; let plotEl; let creditsEl;
-  let trailer = null; let seq = 0; let onActivate; let onClick;
+  let trailer = null; let seq = 0; let onActivate; let onClick; let preview = null;
+
+  const all = () => [...buttonsEl.querySelectorAll('button')];
 
   function buildButtons() {
-    buttonsEl.replaceChildren(...movieButtons(item, trailer).map((b) => pillButton(b.label, { action: b.action })));
+    renderButtons(buttonsEl, movieButtons(item, trailer), (b) => pillButton(b.label, { action: b.action }));
     // `if (!buttons.hasFocus()) playBtn.requestFocus()`: the old buttons are gone, so Play.
-    buttonsEl.firstChild.focus();
+    all()[0].focus();
+    if (preview) preview.schedule(item, store.position(item));
   }
 
   function act(action, btn) {
@@ -69,9 +75,11 @@ export function movieDetailView() {
     if (action === 'watched') { // watched also clears the resume point, so the row is rebuilt
       store.setWatched(item, !store.isWatched(item));
       buildButtons();
-      buttonsEl.lastChild.focus();
+      all().at(-1).focus();
       return;
     }
+    if (action === 'audio') { askAudioSubtitles(); return; }
+    if (preview) preview.stop();
     if (action === 'trailer') { openTrailer(trailer); return; }
     if (action === 'over') store.setPosition(item, 0); // Start Over forgets the saved point first
     play([item], 0);
@@ -88,9 +96,9 @@ export function movieDetailView() {
     if (m.trailer && trailer === null) {
       trailer = m.trailer;
       const f = document.activeElement;
-      const idx = f && f.parentElement === buttonsEl ? [...buttonsEl.children].indexOf(f) : 0;
+      const idx = f && buttonsEl.contains(f) ? all().indexOf(f) : 0;
       buildButtons();
-      const b = buttonsEl.children[idx];
+      const b = all()[idx];
       if (b) b.focus();
     }
     if (m.ext && !item.ext) item.ext = m.ext;
@@ -113,6 +121,7 @@ export function movieDetailView() {
       col.append(title, metaEl, plotEl, creditsEl, buttonsEl);
       page.el.appendChild(col);
       root.appendChild(page.el);
+      preview = pagePreview(page);
 
       onClick = (e) => {
         const b = e.target.closest && e.target.closest('[data-action]');
@@ -140,6 +149,7 @@ export function movieDetailView() {
     },
     unmount() {
       seq++;
+      if (preview) { preview.stop(); preview = null; }
       if (root) {
         root.removeEventListener('click', onClick);
         root.removeEventListener('activate', onActivate);

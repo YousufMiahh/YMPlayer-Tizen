@@ -102,7 +102,9 @@ export function remoteRows(data = {}) {
     if (store.homeShows(r.key) && items && items.length) out.push({ ...r, items });
     if (r.key === 'top_series' && store.homeShows('recommended')) { // "Because you watched …" sit under the Top 10
       (data.recRows || []).forEach((rec, n) => {
-        if (rec.items && rec.items.length) out.push({ key: `rec_${n}`, title: rec.title, shape: POSTER, items: rec.items });
+        if (!rec.items || !rec.items.length) return;
+        if (rec.sourceKey && store.recBlocked(rec.sourceKey)) return; // "Don't recommend based on this"
+        out.push({ key: `rec_${n}`, title: rec.title, shape: POSTER, items: rec.items, sourceKey: rec.sourceKey || null, sourceName: rec.sourceName || null });
       });
     }
   });

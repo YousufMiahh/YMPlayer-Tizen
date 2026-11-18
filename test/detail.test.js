@@ -103,18 +103,19 @@ describe('meta, credits and labels (pure)', () => {
     expect(D.movieInfo({ info: [] }, MOVIE)).toBeNull();
   });
 
-  it('movie buttons by state: Play | Resume + Start Over | Trailer | Favourite | Queue | Watched', () => {
+  it('movie buttons by state, Netflix-style: Play + Audio & Subtitles | Resume + Play From Beginning, then the small ones', () => {
     const lab = (t) => D.movieButtons(MOVIE, t).map((b) => b.label);
-    expect(lab(null)).toEqual(['▶  Play', '♡  Favourite', '＋  Queue', '○  Mark Watched']);
-    expect(lab('2GfZl4kuVNI')).toEqual(['▶  Play', '▶  Trailer', '♡  Favourite', '＋  Queue', '○  Mark Watched']);
+    expect(lab(null)).toEqual(['▶  Play', 'Audio & Subtitles', '♡  Favourite', '＋  Queue', '○  Mark Watched']);
+    expect(lab('2GfZl4kuVNI')).toEqual(['▶  Play', 'Audio & Subtitles', '▶  Trailer', '♡  Favourite', '＋  Queue', '○  Mark Watched']);
+    expect(D.movieButtons(MOVIE, null).filter((b) => b.hero).map((b) => b.action)).toEqual(['play', 'audio']);
     store.setPosition(MOVIE, 4521000);
+    store.setDuration(MOVIE, 9042000);
     store.toggleFav(MOVIE);
     store.queueAdd(MOVIE);
-    expect(lab('2GfZl4kuVNI')).toEqual(['▶  Resume  1:15:21', '↺  Start Over', '▶  Trailer', '♥  In Favourites', '✓  In Queue', '○  Mark Watched']);
-    store.setPosition(MOVIE, 754000);
-    expect(lab(null)).toEqual(['▶  Resume  12:34', '↺  Start Over', '♥  In Favourites', '✓  In Queue', '○  Mark Watched']);
+    expect(lab('2GfZl4kuVNI')).toEqual(['▶  Resume', '↻  Play From Beginning', '▶  Trailer', '♥  In Favourites', '✓  In Queue', '○  Mark Watched']);
+    expect(D.movieButtons(MOVIE, null)[0].progress).toBeCloseTo(0.5, 5);
     store.setWatched(MOVIE, true); // watched: no resume point, and out of the queue
-    expect(lab(null)).toEqual(['▶  Play', '♥  In Favourites', '＋  Queue', '✓  Watched']);
+    expect(lab(null)).toEqual(['▶  Play', 'Audio & Subtitles', '♥  In Favourites', '＋  Queue', '✓  Watched']);
   });
 
   it('series meta is "year  ·  genre  ·  ★ rating"; without info the list line stays', () => {
@@ -207,14 +208,14 @@ describe('movie page', () => {
     router.go('movie-detail', { item: MOVIE });
     expect(root.querySelector('.dp-title').textContent).toBe('Heat (1995)');
     expect(root.querySelector('.dp-meta').textContent).toBe('Crime  ·  ★ 8.2');
-    expect(labels()).toEqual(['▶  Play', '♡  Favourite', '＋  Queue', '○  Mark Watched']);
+    expect(labels()).toEqual(['▶  Play', 'Audio & Subtitles', '♡  Favourite', '＋  Queue', '○  Mark Watched']);
     expect(document.activeElement.textContent).toBe('▶  Play');
     await tick();
     expect(api.vodInfo).toHaveBeenCalledWith('100');
     expect(root.querySelector('.dp-meta').textContent).toBe('1995  ·  2 hr 50 min  ·  Crime  ·  ★ 8.3');
     expect(root.querySelector('.dp-plot').textContent).toBe('Cops and robbers.');
     expect(root.querySelector('.dp-credits').textContent).toBe('Director: Michael Mann  ·  Cast: Al Pacino, Robert De Niro');
-    expect(labels()).toEqual(['▶  Play', '▶  Trailer', '♡  Favourite', '＋  Queue', '○  Mark Watched']);
+    expect(labels()).toEqual(['▶  Play', 'Audio & Subtitles', '▶  Trailer', '♡  Favourite', '＋  Queue', '○  Mark Watched']);
     expect(document.activeElement.textContent).toBe('▶  Play');
   });
 
@@ -223,10 +224,10 @@ describe('movie page', () => {
     api.vodInfo.mockReturnValue(new Promise((r) => { resolve = r; }));
     store.setPosition(MOVIE, 754000);
     router.go('movie-detail', { item: MOVIE });
-    root.querySelectorAll('.dp-buttons button')[1].focus(); // Start Over
+    root.querySelectorAll('.dp-buttons button')[1].focus(); // Play From Beginning
     resolve(VOD_INFO); await tick();
-    expect(labels()).toEqual(['▶  Resume  12:34', '↺  Start Over', '▶  Trailer', '♡  Favourite', '＋  Queue', '○  Mark Watched']);
-    expect(document.activeElement.textContent).toBe('↺  Start Over');
+    expect(labels()).toEqual(['▶  Resume', '↻  Play From Beginning', '▶  Trailer', '♡  Favourite', '＋  Queue', '○  Mark Watched']);
+    expect(document.activeElement.textContent).toBe('↻  Play From Beginning');
   });
 
   it('a failed or empty get_vod_info leaves the list data as it is', async () => {
@@ -234,7 +235,7 @@ describe('movie page', () => {
     router.go('movie-detail', { item: MOVIE });
     await tick();
     expect(root.querySelector('.dp-meta').textContent).toBe('Crime  ·  ★ 8.2');
-    expect(labels()).toEqual(['▶  Play', '♡  Favourite', '＋  Queue', '○  Mark Watched']);
+    expect(labels()).toEqual(['▶  Play', 'Audio & Subtitles', '♡  Favourite', '＋  Queue', '○  Mark Watched']);
   });
 
   it('Resume plays with the saved point kept; Start Over clears it first; both are Open.play([movie], 0)', async () => {
@@ -257,10 +258,22 @@ describe('movie page', () => {
     root.querySelector('[data-action="play"]').click();
     store.setPosition(MOVIE, 61000); // the player saved a point
     router.back();
-    expect(labels()).toEqual(['▶  Resume  1:01', '↺  Start Over', '▶  Trailer', '♡  Favourite', '＋  Queue', '○  Mark Watched']);
-    expect(document.activeElement.textContent).toBe('▶  Resume  1:01');
+    expect(labels()).toEqual(['▶  Resume', '↻  Play From Beginning', '▶  Trailer', '♡  Favourite', '＋  Queue', '○  Mark Watched']);
+    expect(document.activeElement.textContent).toBe('▶  Resume');
     expect(root.querySelector('.dp-meta').textContent).toBe('1995  ·  2 hr 50 min  ·  Crime  ·  ★ 8.3');
     expect(api.vodInfo).toHaveBeenCalledTimes(1);
+  });
+
+  it('Audio & Subtitles sets the languages the player picks from the next thing you play', async () => {
+    router.go('movie-detail', { item: MOVIE });
+    await tick();
+    root.querySelector('[data-action="audio"]').click();
+    const items = [...document.querySelectorAll('.dialog-item')];
+    expect(items.map((b) => b.textContent.trim())).toEqual(['Subtitles: Off', 'Subtitles: English', '✓  Subtitles: as the stream sets them', 'Audio: English', '✓  Audio: Original (as the stream sets it)']);
+    items[0].click(); await tick();
+    expect(store.subtitleLanguage()).toBe('off');
+    expect(toastText()).toBe('Used from the next thing you play');
+    document.querySelectorAll('.dialog-scrim').forEach((d) => d.remove());
   });
 
   it('Favourite toggles in place; Trailer opens the trailer screen', async () => {
@@ -296,7 +309,7 @@ describe('series page', () => {
   const cards = () => [...root.querySelectorAll('.sp-shelf .card')];
   const activeSeason = () => root.querySelector('.season-pill.on')?.textContent;
 
-  it('shows "Loading episodes…", then meta, Specials/Season pills, the first season and focus on Play', async () => {
+  it('shows "Loading episodes…", then meta, Play S1: E… / Episodes & More / Audio & Subtitles, focus on Play', async () => {
     router.go('series-detail', { item: SERIES });
     expect(root.querySelector('.dp-meta').textContent).toBe(LOADING);
     expect(document.activeElement.textContent).toBe('▶  Play');
@@ -304,9 +317,44 @@ describe('series page', () => {
     expect(root.querySelector('.dp-meta').textContent).toBe('2017  ·  Sci-Fi  ·  ★ 8.7');
     expect(pills().map((p) => p.textContent)).toEqual(['Specials', 'Season 1', 'Season 2']);
     expect(activeSeason()).toBe('Specials');
-    expect(labels()).toEqual(['▶  Play', '▶  Trailer', '♡  Favourite']);
-    expect(document.activeElement.textContent).toBe('▶  Play');
-    expect(root.querySelector('.sp-eplabel').hidden).toBe(true);
+    // a new series: the first episode of Season 1 (in the provider's order), not a Special
+    expect(labels()).toEqual(['▶  Play S1: E2', 'Episodes & More', 'Audio & Subtitles', '▶  Trailer', '♡  Favourite']);
+    expect(document.activeElement.textContent).toBe('▶  Play S1: E2');
+    expect(root.querySelector('.sp-eplabel').textContent).toBe('S1: E2   Ep 1002');
+    expect(root.querySelector('.series-page').classList.contains('sp-hero')).toBe(true); // the seasons wait for Episodes & More
+  });
+
+  it('Episodes & More brings up the seasons on the episode you\'d play; Back puts them away', async () => {
+    store.addHistory(epItem('2002'));
+    store.setDuration(epItem('2002'), 3000000); store.setPosition(epItem('2002'), 600000);
+    router.go('series-detail', { item: SERIES });
+    await tick();
+    const page = root.querySelector('.series-page');
+    root.querySelector('[data-action="more"]').click();
+    expect(page.classList.contains('sp-hero')).toBe(false);
+    expect(activeSeason()).toBe('Season 2');
+    expect(document.activeElement).toBe(cards()[1]);
+    expect(router.current().view.onBack()).toBe(true);
+    expect(page.classList.contains('sp-hero')).toBe(true);
+    expect(document.activeElement.textContent).toBe('▶  Resume S2: Ep. 2');
+    expect(router.current().view.onBack()).toBe(false); // then Back leaves the page as usual
+  });
+
+  it('watching it: Resume S2: Ep. 2 with progress, Play From Beginning starts it again; a finished one moves on', async () => {
+    store.addHistory(epItem('2002'));
+    store.setDuration(epItem('2002'), 3000000); store.setPosition(epItem('2002'), 1500000);
+    router.go('series-detail', { item: SERIES });
+    await tick();
+    expect(labels()).toEqual(['▶  Resume S2: Ep. 2', '↻  Play From Beginning', 'Episodes & More', '▶  Trailer', '♡  Favourite']);
+    expect(root.querySelector('[data-action="play"] .hero-progress > span').style.width).toBe('50%');
+    root.querySelector('[data-action="over"]').click();
+    expect(store.position(epItem('2002'))).toBe(0);
+    expect(router.current().params.queue[router.current().params.index].id).toBe('2002');
+    router.back(); await tick();
+    store.setWatched(epItem('2002'), true);
+    router.back();
+    router.go('series-detail', { item: SERIES }); await tick();
+    expect(labels()[0]).toBe('▶  Resume S2: Ep. 3');
   });
 
   it('opens on the last-watched episode\'s season with "▶  Resume S2 · E3"; the card shows time left and progress', async () => {
@@ -315,14 +363,14 @@ describe('series page', () => {
     router.go('series-detail', { item: SERIES });
     await tick();
     expect(activeSeason()).toBe('Season 2');
-    expect(labels()[0]).toBe('▶  Resume S2 · E3');
+    expect(labels()[0]).toBe('▶  Resume S2: Ep. 3');
     const c = cards()[2];
     expect(c.querySelector('.title').textContent).toBe('3.  Ep 2003');
     expect(c.querySelector('.sub').textContent).toBe('33:20 left');
     expect(parseFloat(c.querySelector('.progress > i').style.width)).toBeCloseTo(100 / 3, 5);
     expect(cards()[0].querySelector('.sub').textContent).toBe('52 min');
     expect(cards()[0].querySelector('.progress')).toBeNull();
-    expect(document.activeElement.textContent).toBe('▶  Resume S2 · E3'); // not an episode
+    expect(document.activeElement.textContent).toBe('▶  Resume S2: Ep. 3'); // not an episode
   });
 
   it('focusing a season pill switches the season at once (no OK); ▲ from a card goes to that pill', async () => {
@@ -361,15 +409,16 @@ describe('series page', () => {
     expect(queue[index]).toMatchObject({ type: 'episode', parentId: '7', parentName: 'Dark', ext: 'mp4' });
   });
 
-  it('Play plays the last-watched episode in its season, or the very first episode', async () => {
+  it('Play plays the last-watched episode in its season, or the first episode of Season 1', async () => {
     router.go('series-detail', { item: SERIES });
     await tick();
     root.querySelector('[data-action="play"]').click();
-    expect(router.current().params.queue.map((e) => e.id)).toEqual(['9001']);
+    expect(router.current().params.queue.map((e) => e.id)).toEqual(['1002', '1001', '1003']);
+    expect(router.current().params.index).toBe(0);
     router.back(); await tick();
     store.addHistory(epItem('1001'));
     router.go('series-detail', { item: SERIES }); await tick();
-    expect(labels()[0]).toBe('▶  Play S1 · E1');
+    expect(labels()[0]).toBe('▶  Resume S1: Ep. 1');
     root.querySelector('[data-action="play"]').click();
     expect(router.current().params).toEqual({ queue: expect.any(Array), index: 1 });
     expect(router.current().params.queue.map((e) => e.id)).toEqual(['1002', '1001', '1003']);
@@ -378,6 +427,7 @@ describe('series page', () => {
   it('coming back keeps the season and the focused episode, and refreshes the cards and label', async () => {
     router.go('series-detail', { item: SERIES });
     await tick();
+    root.querySelector('[data-action="more"]').click();
     pills()[2].focus();
     cards()[1].focus();
     cards()[1].click();
@@ -387,7 +437,7 @@ describe('series page', () => {
     expect(activeSeason()).toBe('Season 2');
     expect(document.activeElement).toBe(cards()[1]);
     expect(cards()[1].querySelector('.sub').textContent).toBe('10:00 left');
-    expect(labels()[0]).toBe('▶  Resume S2 · E2');
+    expect(labels()[0]).toBe('▶  Resume S2: Ep. 2');
     expect(root.querySelector('.sp-eplabel').textContent).toBe('Episode 2  ·  Ep 2002');
     expect(api.seriesInfo).toHaveBeenCalledTimes(1);
   });
@@ -415,7 +465,7 @@ describe('series page', () => {
     router.go('series-detail', { item: SERIES });
     await tick();
     expect(root.querySelector('.dp-meta').textContent).toBe(NO_EPISODES);
-    expect(labels()).toEqual(['▶  Play', '♡  Favourite']); // parse stops before the buttons are rebuilt
+    expect(labels()).toEqual(['▶  Play', 'Episodes & More', 'Audio & Subtitles', '♡  Favourite']); // parse stops before the buttons are rebuilt
   });
 });
 

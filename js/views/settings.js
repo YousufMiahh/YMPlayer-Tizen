@@ -4,7 +4,7 @@
 //
 //   ACCOUNTS                  {account} ✓ In use / Switch · Subscription · Add Account ·
 //                             Edit This Account · Remove This Account (confirm)
-//   APPEARANCE                Theme (Dark / Light, restarts Home) · Live TV Preview
+//   APPEARANCE                Theme (Dark / Light, restarts Home) · Live TV Preview · Film & Series Previews
 //   HIDE WHAT YOU DON'T WATCH Countries & Languages · Rename Categories · Hidden Categories
 //   CUSTOMISE HOME SCREEN     the ten Home rows, On / Off
 //   SUBTITLES                 Size · Colour · Background · Background Opacity · sample frame
@@ -166,6 +166,10 @@ export function settingsView() {
       store.setPreviewMode((store.previewMode() + 1) % PREVIEW.length);
       v.textContent = PREVIEW[store.previewMode()];
     });
+    row('home_previews', 'Film & Series Previews', onOff(store.homePreviews() === 1), (v) => {
+      store.setHomePreviews(store.homePreviews() === 1 ? 0 : 1);
+      v.textContent = onOff(store.homePreviews() === 1);
+    });
 
     section(filterSettings.SECTION);
     row('countries', filterSettings.COUNTRIES, filterSettings.countriesLabel(), (v, r) => {
@@ -183,6 +187,12 @@ export function settingsView() {
       row(`home_${k}`, store.HOME_NAMES[k], onOff(store.homeShows(k)), (v) => {
         store.setHomeShows(k, !store.homeShows(k));
         v.textContent = onOff(store.homeShows(k));
+      });
+    }
+    if (store.recBlockedCount() > 0) {
+      row('rec_blocks', 'Because You Watched', `${store.recBlockedCount()} turned off  ·  Bring back`, (v) => {
+        store.clearRecBlocks();
+        v.textContent = 'All back on';
       });
     }
 

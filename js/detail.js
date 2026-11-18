@@ -65,11 +65,26 @@ export function movieInfo(r, item) {
   return { plot, meta, credits: credits || '', backdrop, trailer, ext, tmdb };
 }
 
-/** MovieActivity.buildButtons: [{action, label}] in order. */
+/** The Netflix-style labels on both pages. */
+export const RESTART_LABEL = '↻  Play From Beginning';
+export const AUDIO_SUBS_LABEL = 'Audio & Subtitles';
+export const MORE_LABEL = 'Episodes & More';
+
+/**
+ * MovieActivity.buildButtons: [{action, label, hero?, progress?}] in order. Netflix-style: the big
+ * stacked ones first (Resume with its progress + Play From Beginning, or Play + Audio & Subtitles),
+ * then Trailer, Favourite, Queue, Watched on a line.
+ */
 export function movieButtons(item, trailer) {
-  const pos = store.position(item);
-  const out = [{ action: 'play', label: pos > 0 ? `▶  Resume  ${fmt(pos)}` : '▶  Play' }];
-  if (pos > 0) out.push({ action: 'over', label: '↺  Start Over' });
+  const pos = store.position(item); const dur = store.duration(item);
+  const out = [];
+  if (pos > 0) {
+    out.push({ action: 'play', label: '▶  Resume', hero: true, progress: dur > 0 ? pos / dur : -1 });
+    out.push({ action: 'over', label: RESTART_LABEL, hero: true });
+  } else {
+    out.push({ action: 'play', label: '▶  Play', hero: true });
+    out.push({ action: 'audio', label: AUDIO_SUBS_LABEL, hero: true });
+  }
   if (trailer) out.push({ action: 'trailer', label: '▶  Trailer' });
   out.push({ action: 'fav', label: favLabel(item) });
   out.push({ action: 'queue', label: queueLabel(item) });
@@ -211,6 +226,54 @@ export function seriesPlayLabel(seasons, last) {
   if (!last) return '▶  Play';
   const match = findEpisode(seasons, last.id);
   return `▶  ${store.position(last) > 0 ? 'Resume ' : 'Play '}${match ? shortName(seasons, match) : ''}`.trim();
+}
+
+/** The episode after this one (into the next season, not Specials), or null. */
+export function episodeAfter(seasons, ep) {
+  let next = false;
+  for (const s of seasons) {
+    if (s.season === 0) continue;
+    for (const x of s.episodes) {
+      if (next) return x;
+      if (x === ep) next = true;
+    }
+  }
+  return null;
+}
+
+/**
+ * The top of the Netflix-style series page: which episode Resume / Play starts (the one you were
+ * on, or the next once it's finished), and the buttons:
+ *   watching:  ▶  Resume S1: Ep. 3 (progress) | ↻  Play From Beginning | Episodes & More
+ *   new:       ▶  Play S1: E1 | Episodes & More | Audio & Subtitles
+ */
+export function seriesHero(seasons, last) {
+  const match = last ? findEpisode(seasons, last.id) : null;
+  const main = seasons.find((s) => s.season > 0 && s.episodes.length) || seasons.find((s) => s.episodes.length);
+  const first = main ? main.episodes[0] : null;
+  let target = match || first;
+  if (match && store.isWatched(match)) target = episodeAfter(seasons, match) || match;
+  const pos = target ? store.position(target) : 0; const dur = target ? store.duration(target) : 0;
+  const resume = !!target && (pos > 0 || store.isUpNext(target) || (!!match && target !== first));
+  let name = target ? shortName(seasons, target).replace(' · E', resume ? ': Ep. ' : ': E') : '';
+  const buttons = [{ action: 'play', label: `▶  ${resume || (!target && last) ? 'Resume' : 'Play'} ${name}`.trim(), hero: true, progress: resume && pos > 0 && dur > 0 ? pos / dur : -1 }];
+  if (resume) buttons.push({ action: 'over', label: RESTART_LABEL, hero: true });
+  buttons.push({ action: 'more', label: MORE_LABEL, hero: true });
+  if (!resume) buttons.push({ action: 'audio', label: AUDIO_SUBS_LABEL, hero: true });
+  return { target, resume, name, buttons };
+}
+
+/** Audio & Subtitles before you start: the choices, and what each sets. */
+export function audioSubtitleChoices() {
+  const sl = store.subtitleLanguage(); const al = store.audioLanguage();
+  const rows = [
+    ['Subtitles: Off', sl === 'off', () => store.setSubtitleLanguage('off')],
+    ['Subtitles: English', sl === 'en', () => store.setSubtitleLanguage('en')],
+    ['Subtitles: as the stream sets them', sl === '', () => store.setSubtitleLanguage('')],
+    ['Audio: English', al === 'en', () => store.setAudioLanguage('en')],
+    ['Audio: Original (as the stream sets it)', al === '', () => store.setAudioLanguage('')],
+  ];
+  return rows.map(([label, on, run]) => ({ label: `${on ? '✓  ' : '     '}${label}`, run }));
 }
 
 /** What Play plays: the last-watched episode, else the first episode of the first season. */

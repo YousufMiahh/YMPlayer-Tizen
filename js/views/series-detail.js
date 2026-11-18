@@ -1,9 +1,13 @@
 // Series page (SeriesActivity.java). Params: { item }.
 // Backdrop and scrims as on the movie page. A 960u info block filling the space above, anchored
-// to its bottom: title, meta ("Loading episodes…" → "year · genre · ★ rating"), the focused
-// episode's "Episode N  ·  name", the plot (the focused episode's), and the buttons
-//   ▶  Play / ▶  Resume S1 · E3 / ▶  Play S1 · E4 | ▶  Trailer | ♡  Favourite
-// Under it a row of season pills (focusing one switches the season, no OK needed) and a shelf of
+// to its bottom: title, meta ("Loading episodes…" → "year · genre · ★ rating"), the episode's
+// "S1: Ep. 3   name", its plot, and, Netflix-style, the big stacked buttons
+//   ▶  Resume S1: Ep. 3 (progress) | ↻  Play From Beginning | Episodes & More   (watching it)
+//   ▶  Play S1: E1 | Episodes & More | Audio & Subtitles                          (new to you)
+// then ▶  Trailer | ♡  Favourite on a line. The page opens on just that; Episodes & More brings up
+// the seasons and episodes on the one you'd play, and Back puts them away again. Something part
+// way through plays muted behind the page after a moment (Settings → Film & Series Previews).
+// Once shown, a row of season pills (focusing one switches the season, no OK needed) and a shelf of
 // 300×169 episode cards ("N.  title", "M:SS left" or the duration, progress bar). ▲ from a card
 // goes to the active season's pill. Menu (☰) toggles the favourite with a toast; on an episode
 // card ☰ or Hold OK opens its options (Add to Queue, Mark as Watched, Mark Season as Watched…).
@@ -15,9 +19,10 @@ import * as nav from '../nav.js';
 import { play, toggleFav } from '../open.js';
 import { openTrailer } from '../trailer.js';
 import {
-  seriesInfo, parseSeasons, seasonPillLabel, lastWatched, seriesPlayLabel, playTargetEpisode,
+  seriesInfo, parseSeasons, seasonPillLabel, lastWatched, seriesHero,
   startSeason, episodeCard, favLabel,
 } from '../detail.js';
+import { renderButtons, askAudioSubtitles, pagePreview } from '../ui/hero.js';
 import { showItemMenu } from '../item-menu.js';
 import { LONG_PRESS_MS } from '../ui/theme.js';
 import { pillButton, card } from '../ui/widgets.js';
@@ -38,6 +43,9 @@ export function seriesDetailView() {
   let seasons = []; let active = null; let trailer = null; let loaded = false; let seq = 0;
   let onActivate; let onClick; let onFocusIn; let onKeyUp;
   let hold = null; // OK held on an episode card: { card, timer, held }
+  let hero = null; let preview = null;
+  const rowsShown = () => !!(params && params.rows);
+  const allButtons = () => [...buttonsEl.querySelectorAll('button')];
 
   const eps = () => (seasons.find((s) => s.season === active) || { episodes: [] }).episodes;
   const activePill = () => pillsEl.querySelector(`[data-season="${active}"]`);
@@ -45,16 +53,45 @@ export function seriesDetailView() {
   function buildButtons() {
     // Android: `if (hadFocus || getCurrentFocus() == null) playBtn.requestFocus()`. Removing a
     // focused button drops focus to <body>, which is the null case.
-    const list = [pillButton(seriesPlayLabel(seasons, lastWatched(series)), { action: 'play' })];
-    if (trailer) list.push(pillButton('▶  Trailer', { action: 'trailer' }));
-    list.push(pillButton(favLabel(series), { action: 'fav' }));
-    buttonsEl.replaceChildren(...list);
+    const a0 = document.activeElement;
+    const at = a0 && buttonsEl.contains(a0) ? allButtons().indexOf(a0) : -1;
+    hero = seriesHero(seasons, lastWatched(series));
+    const spec = [...hero.buttons];
+    if (trailer) spec.push({ action: 'trailer', label: '▶  Trailer' });
+    spec.push({ action: 'fav', label: favLabel(series) });
+    const list = renderButtons(buttonsEl, spec, (b) => pillButton(b.label, { action: b.action }));
+    if (hero.target && !rowsShown()) showEpisode(hero.target, hero.name);
     const a = document.activeElement;
-    if (!a || a === document.body || !root.contains(a)) list[0].focus();
+    if (at >= 0 && list[at]) list[at].focus();
+    else if (!a || a === document.body || !root.contains(a)) list[0].focus();
+    if (preview && !rowsShown() && hero.target) preview.schedule(hero.target, store.position(hero.target));
   }
 
-  function showEpisode(ep) {
-    epLabelEl.textContent = `Episode ${ep.num}  ·  ${ep.name}`;
+  /** Episodes & More: the seasons come up, on the episode you'd play. */
+  function showRows() {
+    if (!loaded) return;
+    params.rows = true;
+    if (preview) preview.stop();
+    page.el.classList.remove('sp-hero');
+    const t = hero && hero.target;
+    const s = t ? seasons.find((x) => x.episodes.includes(t)) : null;
+    if (s && s.season !== active) showSeason(s.season);
+    const i = t ? eps().indexOf(t) : 0;
+    const c = shelfEl.children[Math.max(0, i)];
+    if (c) { c.focus({ preventScroll: true }); bringIntoView(c, shelfEl.parentElement, false, true); }
+  }
+
+  /** Back from the seasons: the big picture and the buttons again. */
+  function hideRows() {
+    params.rows = false;
+    page.el.classList.add('sp-hero');
+    buttonsEl.querySelector('button').focus();
+    buildButtons();
+    allButtons()[0].focus();
+  }
+
+  function showEpisode(ep, heroName) {
+    epLabelEl.textContent = heroName ? `${heroName}   ${ep.name}` : `Episode ${ep.num}  ·  ${ep.name}`;
     epLabelEl.hidden = false;
     plotEl.textContent = ep.plot != null ? ep.plot : (series.plot || '');
     params.shownEpisode = ep.id;
@@ -114,9 +151,14 @@ export function seriesDetailView() {
 
   function act(action, btn) {
     if (action === 'fav') { store.toggleFav(series); btn.textContent = favLabel(series); return; }
+    if (action === 'more') { showRows(); return; }
+    if (action === 'audio') { askAudioSubtitles(); return; }
+    if (preview) preview.stop();
     if (action === 'trailer') { openTrailer(trailer); return; }
-    const t = playTargetEpisode(seasons, lastWatched(series));
-    if (t) playEpisode(t);
+    const t = hero && hero.target;
+    if (!t) return;
+    if (action === 'over') store.setPosition(t, 0); // Play From Beginning forgets the saved point first
+    playEpisode(t);
   }
 
   /** SeriesActivity.parse. */
@@ -154,7 +196,7 @@ export function seriesDetailView() {
       const p = pillsEl.querySelector(`[data-season="${f.pill}"]`);
       if (p) { p.focus({ preventScroll: true }); pillsEl.parentElement.scrollLeft = params.pillScroll || 0; return; }
     }
-    buttonsEl.firstChild.focus();
+    allButtons()[0].focus();
   }
 
   function rememberFocus() {
@@ -172,6 +214,8 @@ export function seriesDetailView() {
       series = params.series || (params.series = { ...params.item });
       seasons = []; active = null; trailer = null; loaded = false;
       page = detailFrame('series-page');
+      if (!params.rows) page.el.classList.add('sp-hero');
+      preview = pagePreview(page);
       const body = document.createElement('div');
       body.className = 'sp-page';
       body.innerHTML = `
@@ -199,7 +243,7 @@ export function seriesDetailView() {
           if (hold && hold.held) return; // the release of a Hold OK
           const list = eps();
           const ep = list[Number(c.dataset.ep)];
-          if (ep) { rememberFocus(); play(list, list.indexOf(ep)); }
+          if (ep) { rememberFocus(); if (preview) preview.stop(); play(list, list.indexOf(ep)); }
         }
       };
       onActivate = (e) => { const b = e.target.closest && e.target.closest('button'); if (b) b.click(); };
@@ -234,7 +278,7 @@ export function seriesDetailView() {
       if (params.seriesInfo) { // back from the player: the Activity still has everything
         parse(params.seriesInfo);
         const shown = params.shownEpisode && seasons.flatMap((s) => s.episodes).find((x) => x.id === params.shownEpisode);
-        if (shown) showEpisode(shown);
+        if (shown && params.rows) showEpisode(shown);
         restoreFocus();
         return;
       }
@@ -280,8 +324,13 @@ export function seriesDetailView() {
       }
       return false;
     },
+    onBack() {
+      if (root && rowsShown()) { hideRows(); return true; }
+      return false;
+    },
     unmount() {
       seq++;
+      if (preview) { preview.stop(); preview = null; }
       if (hold) { clearTimeout(hold.timer); hold = null; }
       document.removeEventListener('keyup', onKeyUp);
       if (root) {

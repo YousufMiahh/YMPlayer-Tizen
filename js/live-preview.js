@@ -66,9 +66,15 @@ export function restoreTvMute() {
  * @param o.holes     elements whose background must let the video through: () => Element[]
  * @param o.radius    the box's corner radius in px
  * @param o.realVideo true when a real AVPlay draws the picture (default: webapis.avplay exists)
+ * @param o.enabled   () => whether previews are on (default: Settings → Live TV Preview isn't Off)
+ * @param o.muted     () => whether it plays muted (default: Live TV Preview is "On (muted)")
+ * Films and episodes (the film / series page, Home's cards) pass their own enabled and muted, and a
+ * start point: start(item, startMs).
  */
 export function createPreview(o) {
   let timer = null; let item = null; let opened = false; let seq = 0;
+  const enabled = () => (o.enabled ? o.enabled() : store.previewMode() !== 0);
+  const muted = () => (o.muted ? o.muted() : store.previewMode() === 1);
   const realVideo = () => (o.realVideo !== undefined ? o.realVideo : !!globalThis.webapis?.avplay);
   const avEl = () => document.getElementById('av');
 
@@ -123,12 +129,12 @@ export function createPreview(o) {
     /** schedulePreview: once you pause on a channel (not while scrolling past). */
     schedule(getItem, delay) {
       clearTimeout(timer); timer = null;
-      if (store.previewMode() === 0) return;
+      if (!enabled()) return;
       timer = setTimeout(() => { timer = null; const it = getItem(); if (it) api$.start(it); }, delay);
     },
-    start(it) {
+    start(it, startMs = 0) {
       if (it === item && opened) return;
-      if (store.previewMode() === 0) return;
+      if (!enabled()) return;
       closePlayer();
       punch(false);
       item = it;
@@ -148,11 +154,17 @@ export function createPreview(o) {
         // PlayerFactory.create(preview): show the picture after a short buffer (Android 0.3 s;
         // AVPlay counts in whole seconds, so 1 s)
         try { if (typeof av.setBufferingParam === 'function') av.setBufferingParam('PLAYER_BUFFER_FOR_PLAY', 'PLAYER_BUFFER_SIZE_IN_SECOND', 1); } catch { /* unsupported */ }
-        setMute(store.previewMode() === 1);
+        setMute(muted());
         av.prepareAsync(() => {
           if (my !== seq) return;
-          try { av.play(); } catch { api$.stop(); return; }
-          ready(my);
+          const go = () => {
+            if (my !== seq) return;
+            try { av.play(); } catch { api$.stop(); return; }
+            ready(my);
+          };
+          if (startMs > 0) {
+            try { av.seekTo(Math.floor(startMs), go, go); } catch { go(); }
+          } else go();
         }, () => { if (my === seq) api$.stop(); }); // an error stops the preview silently
       } catch {
         api$.stop();

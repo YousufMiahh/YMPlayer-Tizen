@@ -145,6 +145,18 @@ export const setDark = (b) => setStr('dark', !!b);
 /** 0 off, 1 on (muted), 2 on with sound. */
 export const previewMode = () => getInt('preview', 2);
 export const setPreviewMode = (m) => setStr('preview', m);
+/** Film / series previews (Home cards and the page behind Resume): 1 on, 0 off. */
+export const homePreviews = () => getInt('home_previews', 1);
+export const setHomePreviews = (m) => setStr('home_previews', m);
+/** "Don't recommend based on this": films / series kept out of Because you watched (per account). */
+export const recBlocked = (k) => getArr(`${ns()}rec_block`).map(String).includes(String(k));
+export function blockRec(k) {
+  const l = getArr(`${ns()}rec_block`).map(String);
+  if (!l.includes(String(k))) l.push(String(k));
+  setJson(`${ns()}rec_block`, l);
+}
+export const recBlockedCount = () => getArr(`${ns()}rec_block`).length;
+export const clearRecBlocks = () => setJson(`${ns()}rec_block`, []);
 /** Hours between library refreshes: 0 = every launch, -1 = manual only. */
 export const refreshHours = () => getInt('refresh_hours', 12);
 export const setRefreshHours = (h) => setStr('refresh_hours', h);

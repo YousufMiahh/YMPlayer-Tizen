@@ -68,6 +68,7 @@ describe('Settings: the list', () => {
       '# APPEARANCE',
       'Theme | Dark',
       'Live TV Preview | On with sound',
+      'Film & Series Previews | On',
       "# HIDE WHAT YOU DON'T WATCH",
       'Countries & Languages | Showing everything',
       'Rename Categories | Give categories your own names',

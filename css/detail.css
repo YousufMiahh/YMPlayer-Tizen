@@ -108,3 +108,34 @@ html.light .detail-page { --bg-rgb: 242, 242, 247; }
 /* ---------------------------------------------------------------- trailer */
 .trailer { position: absolute; inset: 0; background: #000; }
 .trailer-frame { display: block; border: 0; width: 100%; height: 100%; background: #000; }
+
+/* ---------------------------------------------------------------- Netflix-style buttons */
+.dp-buttons { flex-direction: column; flex-wrap: nowrap; align-items: flex-start; }
+.hero-stack { display: flex; flex-direction: column; align-items: stretch; width: calc(460 * var(--u)); }
+.hero-btn {
+  display: flex; align-items: center; justify-content: space-between;
+  margin: 0 0 calc(10 * var(--u)) 0 !important;
+  padding: calc(13 * var(--u)) calc(22 * var(--u));
+  border-radius: calc(12 * var(--u));
+  background: rgba(255, 255, 255, 0.08);
+  font-size: calc(19 * var(--u)); font-weight: 600; text-align: left;
+}
+html.light .hero-btn { background: rgba(0, 0, 0, 0.06); }
+.hero-btn:focus { transform: scale(1.03); }
+.hero-label { white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.hero-progress {
+  flex: none; width: calc(110 * var(--u)); height: calc(5 * var(--u)); margin-left: calc(20 * var(--u));
+  border-radius: calc(2 * var(--u)); background: rgba(128, 128, 128, 0.35); overflow: hidden;
+}
+.hero-progress > span { display: block; height: 100%; background: #E50914; }
+.hero-row { display: flex; padding-top: calc(8 * var(--u)); }
+.hero-row .pill-btn { flex: none; margin-right: calc(14 * var(--u)); white-space: pre; }
+.series-page .dp-buttons { padding-top: calc(22 * var(--u)); }
+
+/* Episodes & More: the page opens on the picture and the buttons; the seasons come up on request */
+.series-page.sp-hero .sp-scroll { display: none; }
+.series-page:not(.sp-hero) .sp-scroll { animation: sp-rise var(--dur-page, 320ms) var(--ease-std) both; }
+@keyframes sp-rise { from { opacity: 0; transform: translateY(calc(40 * var(--u))); } to { opacity: 1; transform: none; } }
+
+/* The preview playing behind the page: the page lets the video plane through */
+html.preview-on .detail-page.pv-on { background: transparent; }

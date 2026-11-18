@@ -13,10 +13,10 @@ export const TABS = [
 ];
 export const SECTIONS = TABS.map((t) => t[0]);
 export const DWELL_MS = 450;     // TopBar.java:126
-export const GLIDE_MS = 280;     // TopBar.java:271
-export const APPEAR_MS = 180;    // TopBar.java:265
+export const GLIDE_MS = 360;     // TopBar.java:271
+export const APPEAR_MS = 230;    // TopBar.java:265
 export const VANISH_MS = 160;    // TopBar.java:153
-export const PAGE_MS = 420;      // TopBar.java:344
+export const PAGE_MS = 500;      // TopBar.java:344
 export const PAGE_DELAY_MS = 60;
 export const PAGE_SHIFT = u(64); // 89.6 px
 const CLOCK_MS = 15000;

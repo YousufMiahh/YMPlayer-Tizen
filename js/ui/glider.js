@@ -1,8 +1,8 @@
 // Port of Glider.java: one white pill behind a vertical list that glides (240 ms, Decelerate(2))
 // to the focused row instead of each row lighting up on its own. Fades in/out in 140 ms when the
 // list gains/loses focus. Rows show the "hot" text colours via :focus (see .glider-host in ui.css).
-export const GLIDE_MS = 240;
-export const FADE_MS = 140;
+export const GLIDE_MS = 320;
+export const FADE_MS = 180;
 
 /**
  * @param list   scrolling container holding the rows (made position:relative)

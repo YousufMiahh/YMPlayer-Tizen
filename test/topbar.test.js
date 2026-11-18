@@ -180,7 +180,7 @@ describe('mountSection', () => {
     setNavigator(() => {});
     topbar.go('home', 'settings');
     const { page } = mountSection(host, 'settings');
-    expect(page.style.transition).toContain('420ms');
+    expect(page.style.transition).toContain(`${topbar.PAGE_MS}ms`);
     expect(page.style.transition).toContain('60ms');
     expect(_state().enterDirection).toBe(0);
     const again = mountSection(document.body, 'settings');

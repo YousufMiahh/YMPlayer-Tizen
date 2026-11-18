@@ -269,20 +269,37 @@ describe('Intros (TheIntroDB)', () => {
 describe('Recs', () => {
   const LIB = [M(1, { name: 'Heat' }), M(2, { name: 'Ronin (1998)' }), M(3, { name: 'The Town' }), M(4, { name: 'Collateral' }), M(5, { name: 'Thief' })];
 
+  // Watched for real: more than five minutes in
+  const seen = (it) => { store.addHistory(it); store.setPosition(it, 6 * 60000); };
+
   it('sources: the three newest films / series in the history, one per series', () => {
-    store.addHistory(M(1)); store.addHistory(E(10)); store.addHistory(E(11)); store.addHistory(M(2)); store.addHistory(M(3));
+    seen(M(1)); seen(E(10)); seen(E(11)); seen(M(2)); seen(M(3));
     expect(recs.sources().map((s) => `${s.type}:${s.id}`)).toEqual(['movie:3', 'movie:2', 'series:7']);
+  });
+
+  it('sources: only what was finished or watched 5+ minutes; not ones turned off with Don\'t recommend', () => {
+    store.addHistory(M(1)); store.setPosition(M(1), 4 * 60000); // only a few minutes: left out
+    store.addHistory(M(2)); store.setWatched(M(2), true);        // finished
+    seen(E(10)); seen(M(3));
+    expect(recs.sources().map((s) => `${s.type}:${s.id}`)).toEqual(['movie:3', 'series:7', 'movie:2']);
+    store.blockRec('series:7');
+    store.blockRec('movie:3');
+    expect(recs.sources().map((s) => `${s.type}:${s.id}`)).toEqual(['movie:2']);
+    expect(store.recBlockedCount()).toBe(2);
+    store.clearRecBlocks();
+    expect(recs.sources()).toHaveLength(3);
   });
 
   it('a "Because you watched X" row: TMDB\'s picks that are in the library, minus the film itself and watched ones', async () => {
     seedLibrary({ movie: LIB });
-    store.addHistory(LIB[0]);
+    seen(LIB[0]);
     store.setWatched(LIB[4], true);
     tmdb.setFetch((url) => json(url.includes('/search/') ? { results: [{ id: 949 }] }
       : { results: url.includes('page=1') ? ['Heat', 'Ronin', 'The Town', 'Collateral', 'Thief', 'Not In Library'].map((t) => ({ title: t })) : [] }));
     const rows = await recs.rows();
     expect(rows).toHaveLength(1);
     expect(rows[0].title).toBe('Because you watched Heat');
+    expect(rows[0]).toMatchObject({ sourceKey: 'movie:1', sourceName: 'Heat' });
     expect(rows[0].items.map((i) => i.id)).toEqual(['2', '3', '4']);
     tmdb.setFetch(() => Promise.reject(new Error('should be cached')));
     expect(await recs.rows()).toBe(rows); // kept for six hours
@@ -297,7 +314,7 @@ describe('Recs', () => {
 
   it('when TMDB can\'t be reached the answer is only kept for five minutes', async () => {
     seedLibrary({ movie: LIB });
-    store.addHistory(LIB[0]);
+    seen(LIB[0]);
     let t = 1000000;
     tmdb.setFetch(() => Promise.reject(new Error('offline')));
     expect(await recs.rows(() => t)).toEqual([]);
@@ -444,7 +461,7 @@ describe('movie page: Queue and Watched buttons', () => {
     expect(btn('queue').textContent).toBe('✓  In Queue');
     expect(store.inQueue(m)).toBe(true);
     btn('watched').click();
-    expect(labels()).toEqual(['▶  Play', '♡  Favourite', '＋  Queue', '✓  Watched']);
+    expect(labels()).toEqual(['▶  Play', 'Audio & Subtitles', '♡  Favourite', '＋  Queue', '✓  Watched']);
     expect(document.activeElement.textContent).toBe('✓  Watched');
     expect(store.isWatched(m)).toBe(true);
     btn('watched').click();

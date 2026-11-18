@@ -333,3 +333,10 @@ html.light .coach-card { background: #FFFFFF; }
   font-size: calc(15 * var(--u)); font-weight: 600; line-height: 1;
 }
 .card .watched-badge { top: calc(10 * var(--u)); right: calc(10 * var(--u)); width: calc(28 * var(--u)); height: calc(28 * var(--u)); }
+
+/* Home, Netflix-style: the highlighted film / series card widens into a 16:9 picture, then plays */
+.card.poster .art, .card.poster .title, .card.poster .sub {
+  transition: width 380ms var(--ease-focus);
+}
+.card.poster.peek .art, .card.poster.peek .title, .card.poster.peek .sub { width: calc(427 * var(--u)); }
+html.preview-on .card.peek-playing .art { background: transparent; }

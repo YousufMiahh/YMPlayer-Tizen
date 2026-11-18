@@ -259,6 +259,32 @@ describe('hold OK / ☰ on Home cards', () => {
     expect(document.activeElement).toBe(card('new_movies')); // a remote row keeps its place
   });
 
+  it('Hold OK on a "Because you watched" card: Don\'t recommend based on it hides the row and remembers it', async () => {
+    router.go('home'); await settle();
+    _memo().recRows = [{ title: 'Because you watched Heat', items: [M('1'), M('2'), M('3')], sourceKey: 'movie:9', sourceName: 'Heat' }];
+    router.go('settings'); router.back(); await settle();
+    expect(titles()).toContain('Because you watched Heat');
+    expect(root.querySelector('.home-row[data-row="rec_0"] .shelf-title').textContent).toContain('Hold OK for options');
+    card('rec_0', 1).focus();
+    press(MENU);
+    expect(document.querySelector('.dialog-title').textContent).toBe('Because you watched Heat');
+    expect(menuItems()).toEqual(['Options for M2…', "Don't recommend based on Heat"]);
+    await choose("Don't recommend based on Heat");
+    expect(store.recBlocked('movie:9')).toBe(true);
+    expect(toast.current()).toBe("You won't see recommendations based on Heat");
+    expect(titles()).not.toContain('Because you watched Heat');
+  });
+
+  it('"Options for …" on a Because you watched card is the usual menu', async () => {
+    router.go('home'); await settle();
+    _memo().recRows = [{ title: 'Because you watched Heat', items: [M('1'), M('2'), M('3')], sourceKey: 'movie:9', sourceName: 'Heat' }];
+    router.go('settings'); router.back(); await settle();
+    card('rec_0').focus();
+    press(MENU);
+    await choose('Options for M1…');
+    expect(menuItems()).toEqual(['♡  Add to Favourites', '＋  Add to Queue', '✓  Mark as Watched']);
+  });
+
   it('Add to Queue: a "Your Queue" row under Continue Watching, with the hint; Remove takes it out', async () => {
     router.go('home'); await settle();
     card('new_movies').focus();

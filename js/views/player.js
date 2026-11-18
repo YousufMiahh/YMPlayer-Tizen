@@ -626,7 +626,7 @@ export function playerView() {
         if (playing) focusMe = r;
       });
       const f = focusMe || epSheet.body.querySelector('.tp-opt');
-      if (f) { f.focus(); f.scrollIntoView({ block: 'center' }); }
+      if (f) { f.focus(); if (typeof f.scrollIntoView === 'function') f.scrollIntoView({ block: 'center' }); }
     });
   }
 
