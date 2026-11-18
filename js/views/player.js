@@ -46,6 +46,16 @@ export const RETRY_MS = 1500;
 export const END_RETRIES = 3;       // a stream that ends early is reconnected this many times
 export const GIVE_UP_MS = 2500;     // "The stream stopped": then back
 export const SKIP_LABEL = 'OK   Skip Intro';
+/** Netflix-style top row: Back, Play From Beginning, Next Episode, Episodes, Settings. */
+export const TOP_BACK = 0; export const TOP_RESTART = 1; export const TOP_NEXT = 2; export const TOP_EPISODES = 3; export const TOP_SETTINGS = 4;
+const TOP_NAMES = ['Back', 'Play From Beginning', 'Next Episode', 'Episodes', 'Settings'];
+const TOP_ICONS = [
+  '<path d="M20 12H5M11 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>',
+  '<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4v4.5H9" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 9.2v5.6l4.6-2.8z" fill="currentColor"/>',
+  '<path d="M6 5.5v13l9.5-6.5z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M18.5 5.5v13" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>',
+  '<rect x="3" y="7" width="14" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M7 4h12a2 2 0 0 1 2 2v9" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>',
+  '<path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>',
+];
 export const SKIP_RECAP_LABEL = 'OK   Skip Recap';
 export const FADE_IN = 200;
 export const FADE_OUT = 250;
@@ -112,6 +122,8 @@ export function playerView() {
   let vod; let vodSub; let vodTitle; let bubble; let scrubRow; let scrubCard; let scrubTime; let vodBar; let timeLeft; let timeRight; let vodHint;
   let center; let banner; let liveLogo; let liveNum; let liveName; let liveNow; let liveTime; let liveBar; let liveNext;
   let spinner; let errorEl; let statusEl; let nextCard; let subs; let skipBtn;
+  let topEl; let topRow; let topLabel; let topInfo; let topTitle; let topSub; let epSheet;
+  let topShown = []; let topFocus = -1; let topOk = false; let nextName = 'Next Episode';
   let chSheet; let chList; let chGlider; let playingId = null; let trSheet; let trList;
   let favIds = new Set(); // the favourite channels, read once per paint of the Channels list
   // state
@@ -136,7 +148,7 @@ export function playerView() {
   const isLive = () => current() && current().type === LIVE;
   const shown = (e) => !!e && !e.hidden && !e.classList.contains('out');
   const errorVisible = () => !errorEl.hidden;
-  const panelOpen = () => chSheet.isOpen() || trSheet.isOpen();
+  const panelOpen = () => chSheet.isOpen() || trSheet.isOpen() || (epSheet && epSheet.isOpen());
   const later = (name, fn, ms) => { clearTimeout(timers[name]); timers[name] = setTimeout(() => { timers[name] = null; if (alive) fn(); }, ms); };
   const cancel = (name) => { clearTimeout(timers[name]); timers[name] = null; };
 
@@ -146,6 +158,10 @@ export function playerView() {
   const fadeTimers = new Map();
   function fade(e, show) {
     if (!e) return;
+    if (e === vod && topEl) { // the top row comes and goes with the bottom controls
+      if (!show) leaveTop();
+      fade(topEl, show);
+    }
     clearTimeout(fadeTimers.get(e));
     if (show) {
       if (e.hidden) { e.classList.add('out'); e.hidden = false; void e.offsetWidth; }
@@ -183,6 +199,18 @@ export function playerView() {
     vodHint = el('div', 'pl-hint pl-vod-hint', VOD_HINT);
     vod.append(vodSub, vodTitle, bubble, scrubRow, vodBar.el, times, vodHint);
     p.appendChild(vod);
+
+    // Top row (Netflix): Back, Play From Beginning, Next Episode, Episodes, Settings; title at the right when paused
+    topEl = el('div', 'pl-top pl-fade'); topEl.hidden = true;
+    const topLeft = el('div', 'pl-top-left');
+    topRow = el('div', 'pl-top-row');
+    topLabel = el('div', 'pl-top-label');
+    topLeft.append(topRow, topLabel);
+    topInfo = el('div', 'pl-top-info'); topInfo.hidden = true;
+    topTitle = el('div', 'pl-top-title'); topSub = el('div', 'pl-top-sub');
+    topInfo.append(topTitle, topSub);
+    topEl.append(topLeft, topInfo);
+    p.appendChild(topEl);
 
     nextCard = createNextUpCard(p);
     nextCard.el.classList.add('pl-fade');
@@ -235,6 +263,8 @@ export function playerView() {
     trSheet = createSheet({ side: 'right', width: 520, parent: p, onBack: back });
     trSheet.el.classList.add('pl-tracks');
     trList = trSheet.body;
+    epSheet = createSheet({ side: 'right', width: 640, title: 'Episodes', parent: p, onBack: back });
+    epSheet.el.classList.add('pl-episodes');
   }
 
   function channelCell(i, cell) {
@@ -292,6 +322,11 @@ export function playerView() {
       const ep = it.type === EPISODE;
       vodSub.textContent = ep ? joinNonEmpty(it.parentName, `Episode ${it.num}`) : '';
       vodSub.hidden = !ep;
+      topTitle.textContent = ep ? (it.parentName || it.name || '') : (it.name || '');
+      topSub.textContent = ep ? `${it.season >= 0 ? `S${it.season}: ` : ''}E${it.num} “${it.name || ''}”` : '';
+      topSub.hidden = !ep;
+      topInfo.hidden = true;
+      refreshTop();
       showOverlay(true);
     }
   }
@@ -374,12 +409,13 @@ export function playerView() {
   function onPlayingChanged(playing) {
     center.classList.toggle('paused', !playing);
     if (isLive()) return;
+    if (topInfo) topInfo.hidden = !(!playing && player.isReady()); // the title shows at the top right while paused
     if (!playing && player.isReady()) {
       center.hidden = false;
       showOverlay(false);
     } else {
       center.hidden = true;
-      if (playing && shown(vod)) later('hideOverlay', () => fade(vod, false), OVERLAY_MS);
+      if (playing && shown(vod)) later('hideOverlay', () => { if (topFocus < 0) fade(vod, false); }, OVERLAY_MS);
     }
   }
 
@@ -415,7 +451,7 @@ export function playerView() {
     updateProgress(true);
     fade(vod, true);
     cancel('hideOverlay');
-    if (autoHide && player.isPlaying()) later('hideOverlay', () => fade(vod, false), OVERLAY_MS);
+    if (autoHide && player.isPlaying()) later('hideOverlay', () => { if (topFocus < 0) fade(vod, false); }, OVERLAY_MS);
   }
 
   function updateProgress(force = false) {
@@ -472,6 +508,7 @@ export function playerView() {
   function hidePanels() {
     chSheet.close();
     trSheet.close();
+    epSheet.close();
     clearTimeout(rebuildTimer);
     host.focus({ preventScroll: true });
   }
@@ -504,6 +541,93 @@ export function playerView() {
     favIds = store.favIds(LIVE);
     chList.refresh();
     chGlider.refresh();
+  }
+
+  // ------------------------------------------------------------ top row & episodes
+
+  /** Which buttons this film / episode gets: Next only when there is something next. */
+  function refreshTop() {
+    if (!topRow || isLive()) return;
+    const cur = current();
+    const nx = upNext();
+    const ep = cur.type === EPISODE;
+    topShown = [TOP_BACK, TOP_RESTART];
+    if (nx) topShown.push(TOP_NEXT);
+    if (ep) topShown.push(TOP_EPISODES);
+    topShown.push(TOP_SETTINGS);
+    nextName = nx && ep && nx.type === EPISODE && cur.parentId != null && String(cur.parentId) === String(nx.parentId) ? 'Next Episode' : 'Next in Queue';
+    topRow.innerHTML = '';
+    for (const w of topShown) {
+      const b = el('div', 'pl-top-btn');
+      b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${TOP_ICONS[w]}</svg>`;
+      topRow.appendChild(b);
+    }
+    if (topFocus >= topShown.length) topFocus = topShown.length - 1;
+    paintTop();
+  }
+
+  function paintTop() {
+    [...topRow.children].forEach((b, i) => b.classList.toggle('on', i === topFocus));
+    const w = topShown[topFocus];
+    topLabel.textContent = topFocus < 0 ? '' : (w === TOP_NEXT ? nextName : TOP_NAMES[w]).toUpperCase();
+  }
+
+  /** ▲ from the progress bar: onto Play From Beginning (Netflix's default). */
+  function focusTop() { topFocus = Math.min(1, topShown.length - 1); paintTop(); }
+  function leaveTop() { if (topFocus < 0) return; topFocus = -1; topOk = false; paintTop(); }
+  function moveTop(d) { topFocus = Math.max(0, Math.min(topShown.length - 1, topFocus + d)); paintTop(); }
+
+  function activateTop() {
+    const w = topShown[topFocus];
+    leaveTop();
+    if (w === TOP_BACK) router.back();
+    else if (w === TOP_RESTART) { player.seek(0); player.play(); status('Playing from the beginning'); showOverlay(true); }
+    else if (w === TOP_NEXT) { if (upNext()) playNext(); }
+    else if (w === TOP_EPISODES) openEpisodes();
+    else if (w === TOP_SETTINGS) openTracks();
+  }
+
+  /** The series' episodes, every season, opened on the one playing; OK plays one. */
+  function openEpisodes() {
+    const cur = current();
+    if (cur.type !== EPISODE) return;
+    fade(vod, false);
+    epSheet.body.innerHTML = '';
+    epSheet.body.appendChild(el('div', 'tp-note', 'Loading episodes…'));
+    epSheet.open();
+    Promise.resolve().then(() => api.seriesInfo(cur.parentId)).then((r) => followingEpisodes(r, cur)).catch(() => null).then((got) => {
+      if (!alive || !epSheet.isOpen() || current() !== cur) return;
+      const all = got && got.length ? got : queue.slice();
+      epSheet.body.innerHTML = '';
+      let season = null; let focusMe = null;
+      all.forEach((ep, i) => {
+        if (ep.season !== season) {
+          season = ep.season;
+          epSheet.body.appendChild(el('div', 'tp-header', season === 0 ? 'SPECIALS' : season == null || season < 0 ? 'EPISODES' : `SEASON ${season}`));
+        }
+        const playing = key(ep) === key(cur);
+        const r = el('button', 'tp-opt ep-opt');
+        r.type = 'button';
+        r.tabIndex = -1;
+        const pos = store.position(ep); const dur = store.duration(ep);
+        const sub = playing ? 'Now playing' : store.isWatched(ep) ? '✓ Watched' : pos > 0 && dur > 0 ? `${fmt(Math.max(0, dur - pos))} left` : (ep.duration || '');
+        r.append(el('span', 'tp-label', `${ep.num != null ? `${ep.num}.  ` : ''}${ep.name || ''}`), el('span', 'ep-sub', sub));
+        if (playing) r.classList.add('playing');
+        r.addEventListener('click', () => {
+          hidePanels();
+          if (key(all[i]) === key(current())) return;
+          savePosition();
+          queue = all.slice();
+          index = i;
+          retries = 0;
+          play(true); // carries on where you left that episode, like Netflix
+        });
+        epSheet.body.appendChild(r);
+        if (playing) focusMe = r;
+      });
+      const f = focusMe || epSheet.body.querySelector('.tp-opt');
+      if (f) { f.focus(); f.scrollIntoView({ block: 'center' }); }
+    });
   }
 
   // ------------------------------------------------------------ subtitles & audio
@@ -619,7 +743,7 @@ export function playerView() {
   }
 
   function moveTrackFocus(dir) {
-    const opts = [...trList.querySelectorAll('.tp-opt')];
+    const opts = [...(epSheet.isOpen() ? epSheet.body : trList).querySelectorAll('.tp-opt')];
     const i = opts.indexOf(document.activeElement);
     const to = i < 0 ? 0 : i + dir;
     if (to >= 0 && to < opts.length) opts[to].focus();
@@ -742,6 +866,7 @@ export function playerView() {
       q[at] = cur;
       queue = q;
       index = at;
+      refreshTop(); // a Next Episode button now
     });
   }
 
@@ -913,6 +1038,7 @@ export function playerView() {
   /** Layered Back (onBackPressed). @returns true if the player handled it. */
   function back() {
     if (coach.back()) return true;
+    if (topFocus >= 0) { leaveTop(); showOverlay(true); return true; }
     if (scrubbing) { cancelScrub(); return true; }
     if (nextShown) { watchCredits(); return true; }
     if (panelOpen()) { hidePanels(); return true; }
@@ -936,6 +1062,15 @@ export function playerView() {
     if (nextShown && !panelOpen() && !scrubbing) {
       if (k === KEY.LEFT || k === KEY.RIGHT) { (k === KEY.LEFT ? nextCard.credits : nextCard.next).focus(); return done(); }
       if (okKey) return done();
+    }
+
+    // The top row: ◀ ▶ move, OK chooses (on release), ▼ / Back leave it
+    if (!isLive() && topFocus >= 0 && !panelOpen() && !scrubbing) {
+      if (k === KEY.LEFT) moveTop(-1);
+      else if (k === KEY.RIGHT) moveTop(1);
+      else if (k === KEY.DOWN || k === KEY.BACK || k === KEY.ESC) { leaveTop(); showOverlay(true); }
+      else if (okKey) { if (!repeat) topOk = true; }
+      return done();
     }
 
     // OK: tap on release, hold (450 ms) opens the menu
@@ -1019,7 +1154,9 @@ export function playerView() {
       case KEY.PAUSE: player.pause(); return done();
       case KEY.LEFT: case KEY.REWIND: seekBy(-BACK_MS); return done();
       case KEY.RIGHT: case KEY.FAST_FORWARD: seekBy(FORWARD_MS); return done();
-      case KEY.UP: showOverlay(true); return done();
+      case KEY.UP:
+        if (shown(vod) && !repeat) { focusTop(); showOverlay(false); } else showOverlay(true); // ▲ again: onto the top row
+        return done();
       case KEY.DOWN: if (!repeat) enterScrub(); return done();
       case KEY.MENU: openTracks(); return done();
       default: return false;
@@ -1028,6 +1165,7 @@ export function playerView() {
 
   function onKeyUp(e) {
     const k = e.keyCode;
+    if (topOk && k === KEY.ENTER) { topOk = false; okDown = okHeld = false; e.preventDefault(); activateTop(); return; }
     if (heldKey === k) { heldKey = null; repeatCount = 0; }
     if (!alive || coach.showing() || k !== KEY.ENTER) return;
     if (nextShown && !panelOpen() && !scrubbing) {

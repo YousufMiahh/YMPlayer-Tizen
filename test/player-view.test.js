@@ -939,6 +939,70 @@ describe('finishing, the queue and what plays next', () => {
   });
 });
 
+describe('Netflix-style top row', () => {
+  const D = 45 * 60000;
+  const SEASON = (n) => [1, 2, 3].map((e) => ({ id: String(n * 100 + e), episode_num: e, title: `S${n} Chapter ${e}`, container_extension: 'mp4', season: n }));
+  const INFO = { info: { tmdb: '70523' }, episodes: { 1: SEASON(1), 2: SEASON(2) } };
+  const btns = () => [...document.querySelectorAll('.pl-top-btn')];
+
+  it('▲ twice: onto Play From Beginning; ◀ ▶ move; OK on it plays from the start', async () => {
+    vod(EPS, 0, D);
+    shim.tick(600000);
+    expect(visible('.pl-top')).toBe(true); // comes up with the bottom controls
+    expect(btns().length).toBe(5); // Back, Start, Next, Episodes, Settings
+    press(KEY.UP);
+    expect(document.querySelector('.pl-top-btn.on')).toBe(btns()[1]);
+    expect(txt('.pl-top-label')).toBe('PLAY FROM BEGINNING');
+    press(KEY.RIGHT);
+    expect(txt('.pl-top-label')).toBe('NEXT EPISODE');
+    press(KEY.LEFT);
+    press(KEY.ENTER);
+    expect(shim.calls.filter((c) => c.name === 'seekTo').at(-1)).toEqual({ name: 'seekTo', args: [0] });
+    expect(document.querySelector('.pl-top-btn.on')).toBe(null);
+  });
+
+  it('the title and episode show at the top right only while paused', () => {
+    vod(EPS, 1, D);
+    shim.tick(60000);
+    expect(visible('.pl-top-info')).toBe(false);
+    press(KEY.ENTER); // pause
+    expect(visible('.pl-top-info')).toBe(true);
+    expect(txt('.pl-top-title')).toBe('Dark');
+    expect(txt('.pl-top-sub')).toBe('E2 “Chapter 2”');
+  });
+
+  it('a film: no Next or Episodes; ▼ leaves the row', () => {
+    vod([MOVIE], 0, D);
+    shim.tick(60000);
+    expect(btns().length).toBe(3);
+    press(KEY.UP);
+    expect(document.querySelector('.pl-top-btn.on')).not.toBe(null);
+    press(KEY.DOWN);
+    expect(document.querySelector('.pl-top-btn.on')).toBe(null);
+  });
+
+  it('Episodes: every season, focus on the one playing; OK plays another', async () => {
+    api.seriesInfo.mockResolvedValue(INFO);
+    const ep = { type: 'episode', id: '102', name: 'S1 Chapter 2', num: '2', ext: 'mp4', parentId: '55', parentName: 'Dark', season: 1 };
+    vod([ep], 0, D);
+    await flush(); await flush();
+    shim.tick(60000);
+    press(KEY.UP);
+    press(KEY.RIGHT, 2); // Start → Next → Episodes
+    expect(txt('.pl-top-label')).toBe('EPISODES');
+    press(KEY.ENTER);
+    await flush(); await flush();
+    expect(visible('.pl-episodes')).toBe(true);
+    const rows = [...document.querySelectorAll('.pl-episodes .ep-opt')];
+    expect(rows.length).toBe(6);
+    expect(document.activeElement).toBe(rows[1]);
+    expect(txt('.pl-episodes .ep-opt.playing .ep-sub')).toBe('Now playing');
+    press(KEY.DOWN, 3); // → S2 E2
+    press(KEY.ENTER);
+    expect(opens().at(-1)).toBe('http://h.com:80/series/u/p/202.mp4');
+  });
+});
+
 describe('Skip Intro', () => {
   const D = 45 * 60000;
   const ep = () => ({ type: 'episode', id: '901', name: 'Chapter 1', num: '1', ext: 'mp4', parentId: '55', parentName: 'Dark', season: 1, tmdb: '70523' });

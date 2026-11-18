@@ -192,3 +192,33 @@
   background: rgba(255, 255, 255, 0.949); color: #000000;
   font-size: calc(20 * var(--u)); font-weight: 600; white-space: pre;
 }
+
+/* ---------------------------------------------------------------- top row (Netflix-style) */
+.pl-top {
+  position: absolute; left: 0; right: 0; top: 0; display: flex; justify-content: space-between; align-items: flex-start;
+  padding: calc(44 * var(--u)) calc(72 * var(--u)) calc(70 * var(--u));
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.5) 50%, rgba(0, 0, 0, 0) 100%);
+}
+.pl-top-row { display: flex; align-items: center; }
+.pl-top-btn {
+  width: calc(58 * var(--u)); height: calc(58 * var(--u)); margin-right: calc(18 * var(--u));
+  border-radius: 50%; color: #FFFFFF; display: flex; align-items: center; justify-content: center;
+  transition: transform 150ms var(--ease-std), background-color 150ms var(--ease-std);
+}
+.pl-top-btn svg { width: calc(32 * var(--u)); height: calc(32 * var(--u)); display: block; }
+.pl-top-btn.on { background: #FFFFFF; color: #0B0B0F; transform: scale(1.1); }
+.pl-top-label {
+  min-height: calc(15 * 1.2 * var(--u)); padding: calc(10 * var(--u)) 0 0 calc(2 * var(--u));
+  font-size: calc(15 * var(--u)); font-weight: 600; letter-spacing: 0.04em; color: #FFFFFF; white-space: pre;
+}
+.pl-top-info { max-width: calc(760 * var(--u)); text-align: right; margin-top: calc(6 * var(--u)); }
+.pl-top-info[hidden] { display: none; }
+.pl-top-title { font-size: calc(24 * var(--u)); font-weight: 700; color: #FFFFFF; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.pl-top-sub { padding-top: calc(4 * var(--u)); font-size: calc(17 * var(--u)); font-weight: 500; color: #FFFFFF; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.pl-top-sub[hidden] { display: none; }
+
+/* Episodes panel */
+.pl-episodes .ep-opt { flex-direction: column; align-items: flex-start; }
+.pl-episodes .ep-opt .ep-sub { font-size: calc(14 * var(--u)); color: var(--text2); padding-top: calc(3 * var(--u)); }
+.pl-episodes .ep-opt:focus .ep-sub { color: rgba(11, 11, 15, 0.7); }
+.pl-episodes .ep-opt.playing:not(:focus) { background: var(--surface); }
