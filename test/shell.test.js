@@ -38,13 +38,14 @@ describe('splash', () => {
   it('shows the logo, name and credit', () => {
     dispose = boot(document.getElementById('root'));
     const root = document.getElementById('root');
-    expect(root.querySelector('.splash-logo').getAttribute('src')).toBe('assets/logo.png');
+    expect(root.querySelector('.splash-logo .sl-y').textContent).toBe('Y');
+    expect(root.querySelector('.splash-logo .sl-m').textContent).toBe('M');
     expect(root.querySelector('.splash-name').textContent).toBe('YM Player');
     expect(root.querySelector('.splash-by').textContent).toBe('Developed by Yousuf Miah');
     expect(root.querySelector('.splash').classList.contains('go')).toBe(true);
   });
 
-  it('stays at least 1400 ms, then replaces itself (not on the back stack)', async () => {
+  it('stays for the whole intro, then replaces itself (not on the back stack)', async () => {
     account();
     dispose = boot(document.getElementById('root'));
     await vi.advanceTimersByTimeAsync(SHOW_MS - 1);

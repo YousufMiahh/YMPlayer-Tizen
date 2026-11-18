@@ -1,4 +1,6 @@
-// Port of SplashActivity.java: logo, "YM Player", "Developed by Yousuf Miah" with staged animations.
+// Port of SplashActivity.java: the logo builds itself (the Y flies in from the left, the M from the
+// right, they lock together with a flash, the play button pops in and light sweeps across), then
+// "YM Player" and "Developed by Yousuf Miah".
 // Leaves after the later of 1400 ms and the library warm-up, but never later than 6000 ms, and
 // replaces itself (it is not on the back stack). Back is ignored while it shows.
 import * as store from '../store.js';
@@ -6,7 +8,7 @@ import * as repo from '../repo.js';
 import { router } from '../router.js';
 import * as backdrop from '../ui/backdrop.js';
 
-export const SHOW_MS = 1400;
+export const SHOW_MS = 2300; // the whole intro, then on
 export const MAX_WAIT_MS = 6000;
 
 /**
@@ -35,7 +37,9 @@ export function splashView(opts = {}) {
         backdrop.setSection('home');
         const el = document.createElement('div');
         el.className = 'splash';
-        el.innerHTML = '<div class="splash-col"><img class="splash-logo" src="assets/logo.png" alt="">'
+        el.innerHTML = '<div class="splash-col"><div class="splash-logo" role="img" aria-label="YM Player">'
+          + '<span class="sl-tile"><span class="sl-shine"></span></span><span class="sl-ring"></span>'
+          + '<span class="sl-word"><span class="sl-y">Y</span><span class="sl-m">M</span></span><span class="sl-play"></span></div>'
           + '<div class="splash-name">YM Player</div><div class="splash-by">Developed by Yousuf Miah</div></div>';
         root.appendChild(el);
         void el.offsetWidth;
