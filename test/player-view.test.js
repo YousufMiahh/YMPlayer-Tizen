@@ -746,6 +746,17 @@ describe('Subtitles & Audio', () => {
     ]);
     expect(document.activeElement.textContent).toBe('English✓');
   });
+  it('Hold OK opens the menu while OK is still held (no key repeats needed); letting go then does nothing', () => {
+    withTracks(() => vod([MOVIE]));
+    down(KEY.ENTER);
+    later(300);
+    expect(visible('.pl-tracks')).toBe(false);
+    later(200); // 450 ms in, OK still down
+    expect(visible('.pl-tracks')).toBe(true);
+    up(KEY.ENTER);
+    expect(shim.getState()).toBe('PLAYING'); // letting go didn't pause
+    expect(visible('.pl-tracks')).toBe(true);
+  });
   it('picking tracks switches them on the device and remembers the language; Off silences', () => {
     withTracks(() => vod([MOVIE]));
     hold(KEY.ENTER);

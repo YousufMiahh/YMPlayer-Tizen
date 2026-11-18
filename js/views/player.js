@@ -125,7 +125,7 @@ export function playerView() {
   let endRetries = 0;     // stream ended early: reconnect attempts for this item
   let segments = null; let skipShown = false; // the intro database's answer for this episode
   let picture = 0;        // this channel / film / series' picture shape
-  let okDown = false; let okHeld = false; let okAt = 0;
+  let okDown = false; let okHeld = false; let okAt = 0; let okTimer = null;
   let panelOk = null; // OK pressed inside a panel: { at, held }
   let heldKey = null; let repeatCount = 0;
   const timers = {};
@@ -940,7 +940,17 @@ export function playerView() {
 
     // OK: tap on release, hold (450 ms) opens the menu
     if (okKey && !panelOpen() && !errorVisible()) {
-      if (!repeat) { okDown = true; okHeld = false; okAt = Date.now(); } else if (okDown && !okHeld && (isLive() || !scrubbing) && Date.now() - okAt >= LONG_PRESS_MS) {
+      if (!repeat) {
+        okDown = true; okHeld = false; okAt = Date.now();
+        // Samsung remotes often send no key repeats: open the menu once the hold is long enough,
+        // while OK is still down, not when it's let go
+        clearTimeout(okTimer);
+        okTimer = setTimeout(() => {
+          okTimer = null;
+          if (alive && okDown && !okHeld && !panelOpen() && !errorVisible() && (isLive() || !scrubbing)) { okHeld = true; openTracks(); }
+        }, LONG_PRESS_MS);
+      } else if (okDown && !okHeld && (isLive() || !scrubbing) && Date.now() - okAt >= LONG_PRESS_MS) {
+        clearTimeout(okTimer); okTimer = null;
         okHeld = true;
         openTracks();
       }
@@ -952,8 +962,15 @@ export function playerView() {
       if (chSheet.isOpen()) {
         if (k === KEY.UP || k === KEY.DOWN) { chList.move(k === KEY.UP ? 'up' : 'down'); return done(); }
         if (okKey) {
-          if (!repeat) panelOk = { at: Date.now(), held: false };
-          else if (panelOk && !panelOk.held && Date.now() - panelOk.at >= LONG_PRESS_MS) { panelOk.held = true; favChannel(chList.selected); }
+          if (!repeat) {
+            const p = { at: Date.now(), held: false };
+            panelOk = p;
+            clearTimeout(okTimer);
+            okTimer = setTimeout(() => { // the favourite toggles while OK is still held
+              okTimer = null;
+              if (alive && panelOk === p && !p.held && chSheet.isOpen()) { p.held = true; favChannel(chList.selected); }
+            }, LONG_PRESS_MS);
+          } else if (panelOk && !panelOk.held && Date.now() - panelOk.at >= LONG_PRESS_MS) { clearTimeout(okTimer); okTimer = null; panelOk.held = true; favChannel(chList.selected); }
           return done();
         }
         if (k === KEY.MENU) { favChannel(chList.selected); return done(); }
@@ -1019,6 +1036,7 @@ export function playerView() {
       if (document.activeElement === nextCard.credits) watchCredits(); else playNext();
       return;
     }
+    clearTimeout(okTimer); okTimer = null;
     if (panelOpen()) {
       const p = panelOk;
       panelOk = null;
