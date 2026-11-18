@@ -355,7 +355,7 @@ describe("What's New", () => {
     whatsNew.init();
     expect(whatsNew.maybeShow()).toBe(true);
     expect(document.querySelector('.dialog-title').textContent).toMatch(/^What's New in YM Player \d+\.\d+\.\d+$/);
-    expect(document.querySelector('.dialog-message').textContent.startsWith('•  Watched: films and episodes')).toBe(true);
+    expect(document.querySelector('.dialog-message').textContent.startsWith('•  Skip Intro and Skip Recap')).toBe(true);
     expect(whatsNew.NOTES.trim().split('\n').length).toBeLessThanOrEqual(7); // more would not fit the pop-up
     expect(document.querySelector('.dialog-button').textContent).toBe('Got it');
     expect(whatsNew.maybeShow()).toBe(false);
