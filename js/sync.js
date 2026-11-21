@@ -251,7 +251,8 @@ export function start() {
   if (globalThis.document) {
     document.addEventListener('visibilitychange', () => { if (!document.hidden) soon(500); else if (timer) { clearTimeout(timer); timer = null; syncNow(); } });
   }
-  setInterval(() => { if (!globalThis.document || !document.hidden) syncNow(); }, 5 * 60000);
+  // another device's changes show within half a minute while YM Player is on screen
+  setInterval(() => { if (!globalThis.document || !document.hidden) syncNow(); }, 30000);
 }
 
 /** Forgets what was last synced for this account (after signing out or a new login). */

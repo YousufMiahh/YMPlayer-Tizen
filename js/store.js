@@ -23,18 +23,19 @@ const getBool = (k, d) => { const v = ls().getItem(k); return v === null ? d : v
 const getJson = (k, d) => { try { const v = JSON.parse(ls().getItem(k)); return v ?? d; } catch { return d; } };
 const getArr = (k) => { const v = getJson(k, []); return Array.isArray(v) ? v : []; };
 const setJson = (k, v) => { ls().setItem(k, JSON.stringify(v)); touched(k); };
-const del = (k) => { ls().removeItem(k); touched(k); };
+const del = (k) => { ls().removeItem(k); touched(k, true); };
 
 // ---- changes to account data (cross-device sync listens: 'pos' for resume points, 'data' for the rest)
 let writeHook = null;
 export function onAccountWrite(fn) { writeHook = fn; }
-function touched(k) {
+function touched(k, removed = false) {
   if (!writeHook) return;
   const n = ns();
   let rest = k;
   if (n !== '') { if (!k.startsWith(n)) return; rest = k.slice(n.length); } else if (/^a\d+_/.test(k)) return;
   if (!isAccountData(rest) || rest.startsWith('sync_') || rest.startsWith('lib_time')) return;
-  writeHook(rest.startsWith('pos_') || rest.startsWith('dur_') ? 'pos' : 'data');
+  // a resume point removed (off Continue Watching) goes soon; ones saved while playing can wait
+  writeHook((rest.startsWith('pos_') && !removed) || rest.startsWith('dur_') ? 'pos' : 'data');
 }
 
 // ================================================================ accounts
