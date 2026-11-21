@@ -4,16 +4,16 @@ import * as store from './store.js';
 import { toggleFav } from './open.js';
 import { showDialog } from './ui/dialog.js';
 import { toast } from './ui/toast.js';
-import { EPISODE, SERIES } from './item.js';
+import { EPISODE, SERIES, LIVE } from './item.js';
 
 /** The rows for this item, in order: [{label, run}]. `season` is the episode's season list, or null. */
 export function menuItems(it, season = null) {
-  const episode = it.type === EPISODE; const series = it.type === SERIES;
+  const episode = it.type === EPISODE; const series = it.type === SERIES; const live = it.type === LIVE;
   const out = [];
   if (!episode) {
     out.push({ label: store.isFav(it) ? '♥  Remove from Favourites' : '♡  Add to Favourites', run: () => { toggleFav(it); } });
   }
-  if (!series) {
+  if (!series && !live) {
     const queued = store.inQueue(it);
     out.push({
       label: queued ? '−  Remove from Queue' : '＋  Add to Queue',
@@ -29,7 +29,10 @@ export function menuItems(it, season = null) {
     const all = store.watchedCount(season) === season.length;
     out.push({ label: all ? '○  Mark Season as Unwatched' : '✓  Mark Season as Watched', run: () => store.setWatched(season, !all) });
   }
-  if (!series && (store.position(it) > 0 || store.isUpNext(it))) {
+  if (live && store.inHistory(it)) {
+    out.push({ label: '✕  Remove from Recent Channels', run: () => store.removeHistory(it) });
+  }
+  if (!series && !live && (store.position(it) > 0 || store.isUpNext(it))) {
     out.push({ label: '✕  Remove from Continue Watching', run: () => store.setPosition(it, 0) });
   }
   return out;

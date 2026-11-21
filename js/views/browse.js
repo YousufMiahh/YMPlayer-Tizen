@@ -498,7 +498,7 @@ export function browseView(type) {
     function toggleFav(pos) {
       const it = items[pos];
       if (!it) return;
-      if (!live) { itemMenu(pos); return; }
+      if (!live || (currentCat && currentCat.id === B.RECENT)) { itemMenu(pos); return; } // Recent: favourite, or take it off
       const now = store.toggleFav(it);
       toast(favToast(now, it));
       favChanged();
@@ -508,7 +508,7 @@ export function browseView(type) {
     function favChanged() {
       favSet = store.favIds(type);
       watchedSet = store.watchedKeys();
-      if (currentCat && (currentCat.id === B.FAV || currentCat.id === B.CONTINUE)) {
+      if (currentCat && (currentCat.id === B.FAV || currentCat.id === B.CONTINUE || currentCat.id === B.RECENT)) {
         const l = B.specialList(currentCat.id, type); // Favourites, or Continue Watching after a "Remove" / "Watched"
         items = l;
         content.setCount(l.length, true); // the selection stays where it was (or the new last one)

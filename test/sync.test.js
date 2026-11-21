@@ -89,6 +89,25 @@ describe('stamping and merging', () => {
     expect(Object.keys(st2.hist).sort((a, b) => st2.hist[a].o - st2.hist[b].o)).toEqual(['movie:1', 'movie:3', 'movie:2']);
   });
 
+  it('taking one channel off Recent spreads, but one pushed off the end of a short list does not', () => {
+    const ch = (n) => ({ [`live:${n}`]: { o: 0, i: { type: 'live', id: String(n) } } });
+    const list = (ids) => { const h = {}; ids.forEach((id, o) => { h[`live:${id}`] = { o, i: { type: 'live', id: String(id) } }; }); return h; };
+    const base = core.stamp(stateWith({ hist: list([1, 2, 3]) }), null, 1000);
+    const removed = core.stamp(stateWith({ hist: list([1, 3]) }), base, 2000);
+    expect(removed.hist['live:2']).toEqual({ x: 1, t: 2000 });
+    const other = core.merge(removed, base, 2000).doc;
+    expect(Object.keys(core.toState(other).hist).sort()).toEqual(['live:1', 'live:3']);
+    // watched again later: back on the list everywhere
+    const again = core.stamp(stateWith({ hist: list([2, 1, 3]) }), other, 3000);
+    expect(Object.keys(core.toState(core.merge(again, other, 3000).doc).hist)).toContain('live:2');
+    // a device that keeps 30: the 31st pushed off by new plays isn't a removal
+    const many = Array.from({ length: 30 }, (_, i) => i + 1);
+    const b30 = core.stamp(stateWith({ hist: list(many) }), null, 1000);
+    const after = core.stamp(stateWith({ hist: list([100, ...many.slice(0, 29)]) }), b30, 5000);
+    expect(after.hist['live:30'].x).toBeUndefined();
+    void ch;
+  });
+
   it('clearing history spreads', () => {
     const one = core.stamp(stateWith({ hist: { 'live:5': { o: 0, i: { type: 'live', id: '5' } } } }), null, 1000);
     const cleared = core.stamp(stateWith(), one, 2000);

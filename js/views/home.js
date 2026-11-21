@@ -263,7 +263,7 @@ export function homeView() {
     const x = itemOf(card);
     if (!x || !x.it) return;
     const { it } = x;
-    if (it.type === LIVE) {
+    if (it.type === LIVE && x.row.key !== 'recent') {
       const now = store.toggleFav(it);
       toast(favToast(now, it));
       refreshKeepingPlace(card);

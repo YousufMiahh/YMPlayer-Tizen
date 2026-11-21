@@ -360,6 +360,15 @@ export function addHistory(item) {
   setJson(`${ns()}hist_${live ? 'live' : 'vod'}`, list.slice(0, HISTORY_MAX).map(toJson));
 }
 
+/** True if it's in Recent Channels (or recently played films / episodes). */
+export const inHistory = (item) => !!item && history(item.type === 'live').some((h) => key(h) === key(item));
+
+/** Takes one channel (or film / episode) off the recently watched list (synced to your other devices). */
+export function removeHistory(item) {
+  const live = item.type === 'live';
+  setJson(`${ns()}hist_${live ? 'live' : 'vod'}`, history(live).filter((h) => key(h) !== key(item)).map(toJson));
+}
+
 /**
  * Prefs.clearHistory: the current account's resume points, durations and watch history
  * (pos_ / dur_ / hist_). The first account's keys have no prefix, so another account's

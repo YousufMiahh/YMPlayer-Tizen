@@ -26,7 +26,9 @@
 //   settings name → {v}   subtitle style and languages, Home rows (sub_size, sub_color, sub_bg,
 //            sub_bg_opacity, sub_lang, audio_lang, home_<row>): an app only reads and writes the
 //            ones it has; the others are left alone (never removed)
-//   hist     item key → {i, t}            watch history (newest t first; live: keys are channels)
+//   hist     item key → {i, t}            watch history (newest t first; live: keys are channels);
+//            {x:1, t} = taken off by hand. Gone from a device's list but not taken off = pushed past
+//            its end (every app keeps at least HIST_SURE entries), which isn't a removal
 //   histclear {live: t, vod: t}           history cleared at
 //
 // Items use the Android field names: type id name icon ext num plot info cat added pid pname
@@ -50,6 +52,8 @@ const DAY = 86400000;
 export const TOMBSTONE_MS = 60 * DAY;
 export const HIST_KEEP = 60;
 export const HIST_SHOW = 40;
+/** Every app keeps at least this many of each history (the Mac keeps 30 channels). */
+export const HIST_SURE = 30;
 export const ROUNDS = 10000;
 
 const enc = new TextEncoder();
@@ -186,6 +190,14 @@ export function stamp(state, shadowIn, now, maps = MAPS) {
       hist[k] = e;
       prev = e.t;
     }
+    // gone from this list while plenty newer stayed? Pushed off its end. Otherwise: taken off by hand
+    const kept = mine.map((k) => hist[k].t);
+    for (const k of Object.keys(shadow.hist)) {
+      const s = shadow.hist[k];
+      if (histKind(k) !== kind || s.x || k in state.hist || s.t <= shadow.histclear[kind]) continue;
+      const newer = kept.filter((t) => t > s.t).length;
+      if (newer < HIST_SURE && mine.length > 0) hist[k] = { x: 1, t: now };
+    }
     if (mine.length === 0) {
       const had = Object.keys(shadow.hist).some((k) => histKind(k) === kind && !shadow.hist[k].x && shadow.hist[k].t > shadow.histclear[kind]);
       if (had) out.histclear[kind] = now;
@@ -231,12 +243,16 @@ export function merge(localIn, remoteIn, now) {
     }
   }
   for (const kind of ['live', 'vod']) {
-    const keys = Object.keys(out.hist).filter((k) => histKind(k) === kind);
+    const keys = Object.keys(out.hist).filter((k) => histKind(k) === kind && !out.hist[k].x);
     keys.sort((x, y) => out.hist[y].t - out.hist[x].t);
     keys.forEach((k, idx) => {
       const e = out.hist[k];
-      if (e.x || e.t <= out.histclear[kind] || idx >= HIST_KEEP) { delete out.hist[k]; if (remote.hist[k]) dirty = true; }
+      if (e.t <= out.histclear[kind] || idx >= HIST_KEEP) { delete out.hist[k]; if (remote.hist[k]) dirty = true; }
     });
+    for (const k of Object.keys(out.hist)) { // removals: kept a while so they spread, then dropped
+      const e = out.hist[k];
+      if (histKind(k) === kind && e.x && (e.t < now - TOMBSTONE_MS || e.t <= out.histclear[kind])) { delete out.hist[k]; if (remote.hist[k]) dirty = true; }
+    }
   }
   return { doc: out, dirty };
 }
