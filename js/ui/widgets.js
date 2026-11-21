@@ -111,22 +111,14 @@ export function card({ shape = 'landscape', image = null, title = '', sub = '', 
   if (image) b.dataset.art = image;
   const art = document.createElement('span');
   art.className = 'art';
-  // a channel's initials, or a film's / series' name: shown until the picture arrives, and kept
-  // if it can't be had (the provider's picture server is down)
-  const placeholder = () => {
-    const ph = document.createElement('span');
-    ph.className = shape === 'poster' ? 'initials poster-name' : 'initials';
-    ph.textContent = shape === 'poster' ? (title || '') : initials(title);
-    return ph;
-  };
   if (image) {
     const img = document.createElement('img');
-    img.alt = ''; img.decoding = 'async';
-    img.onerror = () => { img.remove(); if (!art.querySelector('.initials')) art.prepend(placeholder()); };
-    img.src = image;
+    img.src = image; img.alt = ''; img.decoding = 'async';
     art.appendChild(img);
   } else if (shape !== 'poster') {
-    art.appendChild(placeholder());
+    const ph = document.createElement('span');
+    ph.className = 'initials'; ph.textContent = initials(title);
+    art.appendChild(ph);
   }
   if (progress > 0) {
     const bar = document.createElement('span');

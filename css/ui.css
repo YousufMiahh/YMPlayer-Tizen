@@ -410,8 +410,19 @@ html.preview-on .card.peek-playing .art { background: transparent; }
 .kp-wide { font-size: calc(17 * var(--u)); }
 .kp-key:focus { background: var(--focus-bg); color: var(--on-focus); }
 
-/* a film's or series' name in place of a poster that couldn't be loaded */
-.card .art .initials.poster-name {
-  font-size: calc(18 * var(--u)); line-height: 1.2; padding: calc(14 * var(--u)); text-align: center;
-  display: flex; align-items: center; justify-content: center; white-space: normal; overflow: hidden;
+/* Home: the widened card's TMDB backdrop and the title's logo over it (see-through where it
+   plays, so the preview shows behind the logo) */
+.card .art .peek-back {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+  opacity: 0; transition: opacity 240ms ease;
 }
+.card .art .peek-back.shown { opacity: 1; }
+.card.peek-playing .art .peek-back { opacity: 0; }
+.card .art .peek-logo {
+  position: absolute; inset: 0; display: flex; align-items: flex-end; justify-content: flex-start;
+  padding: calc(14 * var(--u)); box-sizing: border-box; pointer-events: none;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0) 60%);
+  opacity: 0; transition: opacity 260ms ease;
+}
+.card .art .peek-logo.shown { opacity: 1; }
+.card .art .peek-logo img { max-width: 55%; max-height: 38%; object-fit: contain; object-position: left bottom; }

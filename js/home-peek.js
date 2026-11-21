@@ -1,14 +1,16 @@
-// Home, Netflix-style: rest on a film or series card and it widens into a 16:9 picture, then a
-// moment later plays (muted) inside the card: from where you were, or a few minutes in. Moving off
-// puts it back. Settings → Film & Series Previews turns it off.
+// Home, Netflix-style: the film or series card you're on widens straight away into a 16:9 picture
+// (its TMDB backdrop with the title's logo over it, when there is one), then plays (muted) inside
+// the card as soon as you stop on it: from where you were, or a few minutes in. Moving on puts it
+// back and widens the next at once. Settings → Film & Series Previews turns it off.
 import * as store from './store.js';
 import * as api from './api.js';
 import { MOVIE, SERIES, EPISODE } from './item.js';
 import { followingEpisodes } from './detail.js';
 import { createPreview } from './live-preview.js';
+import * as tmdb from './tmdb.js';
 
-export const WIDEN_AFTER_MS = 1200;
-export const PLAY_AFTER_MS = 900;
+export const WIDEN_AFTER_MS = 0;
+export const PLAY_AFTER_MS = 450;
 export const FILM_START_MS = 5 * 60000;
 export const EPISODE_START_MS = 3 * 60000;
 
@@ -49,7 +51,11 @@ export function createHomePeek(o) {
     clearTimeout(widenTimer); widenTimer = null;
     clearTimeout(playTimer); playTimer = null;
     stopPlaying();
-    if (card) { card.classList.remove('peek', 'peek-playing'); card = null; }
+    if (card) {
+      card.classList.remove('peek', 'peek-playing');
+      for (const el of card.querySelectorAll('.peek-back, .peek-logo')) el.remove();
+      card = null;
+    }
   }
 
   function focus(el) {
@@ -64,6 +70,7 @@ export function createHomePeek(o) {
       widenTimer = null;
       if (my !== seq || card !== document.activeElement) return;
       card.classList.add('peek');
+      dress(card, it, my);
       if (o.reveal) setTimeout(() => { if (my === seq && card) o.reveal(card); }, 380); // once it has widened
       playTimer = setTimeout(async () => {
         playTimer = null;
@@ -82,6 +89,34 @@ export function createHomePeek(o) {
         preview.start(w.item, w.from);
       }, PLAY_AFTER_MS);
     }, WIDEN_AFTER_MS);
+  }
+
+  /** The widened card's picture: TMDB's wide backdrop and the title's logo, faded in when they're here. */
+  async function dress(c, it, my) {
+    const art = c.querySelector('.art');
+    if (!art) return;
+    const back = document.createElement('img'); back.className = 'peek-back'; back.alt = '';
+    const layer = document.createElement('span'); layer.className = 'peek-logo';
+    const logo = document.createElement('img'); logo.alt = '';
+    layer.appendChild(logo);
+    const first = art.querySelector('img');
+    if (first && first.nextSibling) art.insertBefore(back, first.nextSibling); else art.appendChild(back);
+    art.appendChild(layer);
+    const film = it.type === MOVIE;
+    const name = it.type === EPISODE && it.parentName ? it.parentName : it.name;
+    let urls = { logo: null, backdrop: null };
+    try {
+      const id = await tmdb.findId(film ? tmdb.MOVIE : tmdb.TV, name, it.tmdb);
+      if (id) urls = await tmdb.art(film ? tmdb.MOVIE : tmdb.TV, id);
+    } catch { /* no art: the poster stays */ }
+    if (my !== seq) return;
+    const put = (img, url, fade) => {
+      if (!url) return;
+      img.onload = () => { if (my === seq) fade.classList.add('shown'); };
+      img.src = url;
+    };
+    put(back, urls.backdrop, back);
+    put(logo, urls.logo, layer);
   }
 
   return {

@@ -6,4 +6,5 @@ export const NOTES = `
 - Film and series pages show the title's logo; on a series it shrinks when the seasons come up.
 - Recent Channels: hold OK on one to take it off the list (on your other devices too).
 - Movies and Series: rest on a poster and its details fade in beside it.
+- Home: the card you're on widens at once with its picture and logo, then plays.
 `;

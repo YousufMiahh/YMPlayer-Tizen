@@ -133,20 +133,36 @@ export async function recommendations(kind, id) {
  * The title's logo (the transparent artwork Netflix and Apple TV show instead of the name), as an
  * image URL, or null. English first, then one with no words; remembered per title.
  */
-export async function logo(kind, id) {
-  if (id == null || id === '') return null;
-  const ck = `${CACHE_PREFIX}logo:${kind}:${id}`;
-  const hit = ls().getItem(ck);
-  if (hit !== null) return hit === '' ? null : hit;
-  let url = null;
+export async function logo(kind, id) { return (await art(kind, id)).logo; }
+
+/**
+ * {logo, backdrop}: the logo as above, and a wide picture without words (or an English one) for a
+ * card that widens on Home. One request, remembered per title.
+ */
+export async function art(kind, id) {
+  const none = { logo: null, backdrop: null };
+  if (id == null || id === '') return none;
+  const lk = `${CACHE_PREFIX}logo:${kind}:${id}`; const bk = `${CACHE_PREFIX}backdrop:${kind}:${id}`;
+  const l = ls().getItem(lk); const b = ls().getItem(bk);
+  if (l !== null && b !== null) return { logo: l || null, backdrop: b || null };
+  let out;
   try {
     const d = await get(`/${kind}/${encodeURIComponent(id)}/images?include_image_language=en,null`);
-    url = pickLogo(d && d.logos);
+    out = { logo: pickLogo(d && d.logos), backdrop: pickBackdrop(d && d.backdrops) };
   } catch {
-    return null; // offline: try again next time
+    return none; // offline: try again next time
   }
-  try { ls().setItem(ck, url || ''); } catch { /* storage full */ }
-  return url;
+  try { ls().setItem(lk, out.logo || ''); ls().setItem(bk, out.backdrop || ''); } catch { /* storage full */ }
+  return out;
+}
+
+/** A backdrop without words first (the logo goes on top), then an English one; most liked. */
+export function pickBackdrop(list) {
+  if (!Array.isArray(list) || !list.length) return null;
+  const rank = (b) => (b.iso_639_1 == null || b.iso_639_1 === '' ? 0 : b.iso_639_1 === 'en' ? 1 : 9);
+  const best = list.filter((b) => b && b.file_path && rank(b) < 9)
+    .sort((a, b) => rank(a) - rank(b) || (b.vote_average || 0) - (a.vote_average || 0))[0];
+  return best ? `https://image.tmdb.org/t/p/w780${best.file_path}` : null;
 }
 
 /** Best logo from TMDB's list: English (most liked) before language-free; PNG (SVGs are asked for as PNG). */

@@ -42,3 +42,15 @@ describe('title logos', () => {
     h.remove();
   });
 });
+
+describe('backdrops for a widened Home card', () => {
+  it('a backdrop without words first, then English', () => {
+    expect(tmdb.pickBackdrop([
+      { iso_639_1: 'en', file_path: '/en.jpg', vote_average: 9 },
+      { iso_639_1: null, file_path: '/plain.jpg', vote_average: 5 },
+      { iso_639_1: 'fr', file_path: '/fr.jpg', vote_average: 10 },
+    ])).toBe('https://image.tmdb.org/t/p/w780/plain.jpg');
+    expect(tmdb.pickBackdrop([{ iso_639_1: 'en', file_path: '/en.jpg' }])).toBe('https://image.tmdb.org/t/p/w780/en.jpg');
+    expect(tmdb.pickBackdrop([])).toBeNull();
+  });
+});

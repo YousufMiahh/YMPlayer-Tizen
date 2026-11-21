@@ -37,14 +37,14 @@ afterEach(() => { vi.useRealTimers(); delete globalThis.webapis; });
 const peekOf = () => createHomePeek({ itemOf: (c) => items.get(c) || null });
 
 describe('Home card previews', () => {
-  it('a film card widens after a moment, then plays muted from 5 minutes in; moving off puts it back', async () => {
+  it('a film card widens straight away, then plays muted from 5 minutes in; moving off puts it back', async () => {
     const p = peekOf();
     const c = makeCard({ type: 'movie', id: '1', name: 'Heat' });
     c.focus(); p.focus(c);
-    await vi.advanceTimersByTimeAsync(WIDEN_AFTER_MS - 10);
-    expect(c.classList.contains('peek')).toBe(false);
-    await vi.advanceTimersByTimeAsync(20);
+    expect(WIDEN_AFTER_MS).toBe(0);
+    await vi.advanceTimersByTimeAsync(1);
     expect(c.classList.contains('peek')).toBe(true);
+    expect(c.querySelector('.peek-logo')).not.toBeNull(); // backdrop + logo layer (filled from TMDB when there is one)
     await vi.advanceTimersByTimeAsync(PLAY_AFTER_MS);
     expect(av.open).toHaveBeenCalledWith('http://x/movie/1');
     expect(av.seekTo).toHaveBeenCalledWith(FILM_START_MS, expect.any(Function), expect.any(Function));
@@ -53,6 +53,7 @@ describe('Home card previews', () => {
     const other = makeCard({ type: 'movie', id: '2', name: 'Ronin' });
     other.focus(); p.focus(other);
     expect(c.classList.contains('peek')).toBe(false);
+    expect(c.querySelector('.peek-logo')).toBeNull();
     expect(av.close).toHaveBeenCalled();
     expect(p.playing).toBe(false);
   });
