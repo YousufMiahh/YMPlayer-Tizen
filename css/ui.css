@@ -409,3 +409,9 @@ html.preview-on .card.peek-playing .art { background: transparent; }
 }
 .kp-wide { font-size: calc(17 * var(--u)); }
 .kp-key:focus { background: var(--focus-bg); color: var(--on-focus); }
+
+/* a film's or series' name in place of a poster that couldn't be loaded */
+.card .art .initials.poster-name {
+  font-size: calc(18 * var(--u)); line-height: 1.2; padding: calc(14 * var(--u)); text-align: center;
+  display: flex; align-items: center; justify-content: center; white-space: normal; overflow: hidden;
+}

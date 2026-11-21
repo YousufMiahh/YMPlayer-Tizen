@@ -29,10 +29,10 @@
 .search .s-chip.on { background: var(--surface-hi); color: var(--text); font-weight: 600; }
 .search .s-chip:focus { background: var(--focus-bg); color: var(--on-focus); transform: scale(1.06); }
 
-/* status: Regular 17u TEXT2, centred, padding-top 18u (an empty TextView keeps one line) */
+/* status: Regular 17u TEXT2, centred over the results, padding-top 18u (an empty TextView keeps one line) */
 .search .s-status {
-  margin: 0; padding-top: calc(18 * var(--u)); min-height: calc(17 * var(--u) * 1.15);
-  font-size: calc(17 * var(--u)); line-height: var(--lh); color: var(--text2); text-align: left; padding-left: calc(64 * var(--u)); white-space: pre;
+  margin: 0; padding: calc(18 * var(--u)) calc(64 * var(--u)) 0; min-height: calc(17 * var(--u) * 1.15);
+  font-size: calc(17 * var(--u)); line-height: var(--lh); color: var(--text2); text-align: center; white-space: pre;
 }
 
 .search .shelf-title { white-space: pre; }

@@ -200,3 +200,30 @@ html.preview-on, html.preview-on body { background: transparent; }
 /* Video plays on the AVPlay plane behind the page, so the page must be see-through. */
 html.video-on, body.video-on, body.video-on #root { background: transparent; }
 #av { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+
+/* Movies / Series: rest on a poster and it grows a little, with its details beside it */
+.browse-vod .poster-cell { transition: transform 320ms cubic-bezier(0.2, 0, 0, 1); }
+.browse-vod .poster-cell.peeking { transform: scale(1.08); z-index: 2; position: relative; }
+.poster-peek {
+  position: absolute; z-index: 30; box-sizing: border-box; pointer-events: none;
+  padding: calc(24 * var(--u)) calc(26 * var(--u)) calc(20 * var(--u));
+  background: var(--sheet); border-radius: var(--r-panel);
+  box-shadow: 0 calc(18 * var(--u)) calc(40 * var(--u)) rgba(0, 0, 0, 0.5);
+  opacity: 0; transform: scale(0.94);
+  transition: opacity 260ms ease, transform 340ms cubic-bezier(0.2, 0, 0, 1);
+}
+.poster-peek[data-side="right"] { transform-origin: left top; }
+.poster-peek[data-side="left"] { transform-origin: right top; }
+.poster-peek.shown { opacity: 1; transform: none; }
+.poster-peek .pp-title { font-size: calc(26 * var(--u)); font-weight: 700; letter-spacing: -0.01em; line-height: 1.15; color: var(--text); }
+.poster-peek .pp-meta { margin-top: calc(8 * var(--u)); font-size: calc(16 * var(--u)); font-weight: 500; color: var(--text2); }
+.poster-peek .pp-plot {
+  margin-top: calc(14 * var(--u)); font-size: calc(17 * var(--u)); line-height: 1.35; color: var(--text);
+  display: -webkit-box; -webkit-line-clamp: 7; -webkit-box-orient: vertical; overflow: hidden;
+}
+.poster-peek .pp-hint { margin-top: calc(16 * var(--u)); font-size: calc(14 * var(--u)); color: var(--text3, var(--text2)); }
+@media (prefers-reduced-motion: reduce) {
+  .poster-peek, .browse-vod .poster-cell { transition: opacity 200ms ease; }
+  .poster-peek { transform: none; }
+  .browse-vod .poster-cell.peeking { transform: none; }
+}
