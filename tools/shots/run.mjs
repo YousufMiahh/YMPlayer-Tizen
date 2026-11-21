@@ -647,24 +647,6 @@ const SCREENS = {
       await press(page, 'ArrowRight'); await wait(1100);
     },
   },
-  'movies-peek': { // rest on a poster: it grows, with its details beside it
-    seed: true,
-    steps: async (page) => {
-      await toHome(page); await hoverTab(page, 2);
-      await press(page, 'ArrowDown'); await press(page, 'ArrowDown', 3, 200); await wait(500);
-      await press(page, 'ArrowRight'); await page.waitForSelector('.poster-cell:focus', { timeout: 8000 });
-      await press(page, 'ArrowRight'); await wait(3200);
-    },
-  },
-  'movies-peek-right': { // near the right edge: the details go on the left
-    seed: true,
-    steps: async (page) => {
-      await toHome(page); await hoverTab(page, 2);
-      await press(page, 'ArrowDown'); await press(page, 'ArrowDown', 3, 200); await wait(500);
-      await press(page, 'ArrowRight'); await page.waitForSelector('.poster-cell:focus', { timeout: 8000 });
-      await press(page, 'ArrowRight', 4, 150); await wait(3200);
-    },
-  },
   'movies-fav': { // arrival: Favourite Movies shown, list on Search, nothing marked yet
     seed: true,
     steps: async (page) => { await toHome(page); await hoverTab(page, 2); await press(page, 'ArrowDown'); await wait(1100); },

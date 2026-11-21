@@ -37,7 +37,6 @@ import { createPreview } from '../live-preview.js';
 import { createEpgGrid, nowSec } from '../ui/epg-grid.js';
 import * as Guide from '../guide.js';
 import * as backdrop from '../ui/backdrop.js';
-import { createPosterPeek } from '../poster-peek.js';
 
 const K = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, ENTER: 13, BACK: 10009, ESC: 27, MENU: 10133, IME_DONE: 65376, IME_CANCEL: 65385 };
 const DIRS = { [K.LEFT]: 'left', [K.UP]: 'up', [K.RIGHT]: 'right', [K.DOWN]: 'down' };
@@ -100,7 +99,6 @@ export function browseView(type) {
     let emptyEl; let spinner; let info = null; let preview = null;
     let catList; let content; let catGlider; let contentGlider = null;
     let cats = []; let items = []; let favSet = new Set(); let watchedSet = new Set();
-    let peek = null; // Movies / Series: details beside a poster you rest on
     let currentCat = null; let activeIdx = -1; let picked = false; let hideActive = true; let slideDir = 1;
     let loadToken = 0; let searchToken = 0; let searchResults = [];
     let pendingCat = null; let pendingEpg = null; let pendingSearch = null; let tourTimer = null; let cancelTour = null;
@@ -250,12 +248,6 @@ export function browseView(type) {
           scroller: contentScroller, pitch: POSTER_CELL_H + POSTER_GAP, cellHeight: POSTER_CELL_H, colWidth: POSTER_COL_W,
           padTop: u(10), padBottom: u(30), render: posterCell, onSelect: onContentSelected,
           viewportWidth: 1920 - u(2 * 48 + 300 + 36), // only if the page has no layout yet
-        });
-        // rest on a poster: its details beside it
-        peek = createPosterPeek({
-          host: el, u,
-          elementAt: (i) => content.elementAt(i), itemAt: (i) => items[i],
-          canShow: () => content.hasFocus() && !(catsBox && catsBox.typing),
         });
       }
       return el;
@@ -425,7 +417,6 @@ export function browseView(type) {
      * @param o.noAnim  no slide (coming back to the screen)
      */
     function openCategory(cat, pos, focusContent, o = {}) {
-      if (peek) peek.hide();
       if (activeIdx >= 0 && pos !== activeIdx) slideDir = pos > activeIdx ? 1 : -1;
       currentCat = cat;
       activeIdx = pos;
@@ -529,7 +520,6 @@ export function browseView(type) {
 
     function onContentSelected(pos) {
       if (live) showChannelInfo(pos);
-      else if (peek) peek.selected(pos);
     }
 
     // ------------------------------------------------------------ live info panel + preview
@@ -909,7 +899,6 @@ export function browseView(type) {
 
     function onKey(e) {
       if (!alive()) return false;
-      if (peek) peek.hide(); // any key: the details go (a move to another poster brings its own after a moment)
       const k = e.keyCode;
       const z = zone();
       if (z === null || z === 'bar') return false;
@@ -1043,7 +1032,6 @@ export function browseView(type) {
     }
 
     function unmount() {
-      if (peek) { peek.destroy(); peek = null; }
       if (keys) keys.destroy();
       if (root) saveState();
       for (const t of [pendingCat, pendingEpg, pendingSearch, tourTimer, layoutTimer]) clearTimeout(t);
