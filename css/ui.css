@@ -279,7 +279,21 @@ html.light .toast { background: rgba(238, 238, 238, 0.97); color: rgba(0, 0, 0, 
 .sheet-body { flex: 1; min-height: 0; overflow-y: auto; }
 
 /* ---------------------------------------------------------------- Splash */
-.splash { height: 100%; display: flex; align-items: center; justify-content: center; }
+.splash {
+  height: 100%; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden;
+  background: radial-gradient(ellipse at 50% 45%, #1a1240 0%, #07060f 62%, #030308 100%);
+}
+/* "YOUSUF MIAH": builds in, then folds away into the Y and the M (js/ui/name-intro.js) */
+.si-word {
+  position: absolute; left: 0; right: 0; top: 50%; transform-origin: 50% 50%;
+  margin-top: calc(-0.6 * 130 * var(--u));
+  display: flex; justify-content: center; pointer-events: none;
+  font-family: "Helvetica Neue", Arial, sans-serif; font-weight: 800;
+  font-size: calc(98 * var(--u)); line-height: 1.2; letter-spacing: 0.02em; color: #fff;
+  text-shadow: 0 0 calc(30 * var(--u)) rgba(138, 63, 230, 0.55), 0 0 calc(70 * var(--u)) rgba(243, 94, 128, 0.25);
+}
+.si-letter { display: inline-block; transform-origin: 0 50%; opacity: 0; will-change: transform, opacity; }
+.si-letter[data-anchor] { transform-origin: 50% 50%; z-index: 1; position: relative; }
 .splash-col { width: 100%; display: flex; flex-direction: column; align-items: center; }
 /* The logo builds itself: tile springs in, Y flies from the left and M from the right, a flash
    as they lock together, the play button pops, then a sweep of light. Same as SplashActivity. */
@@ -318,12 +332,11 @@ html.light .toast { background: rgba(238, 238, 238, 0.97); color: rgba(0, 0, 0, 
   border-width: calc(9 * var(--u)) 0 calc(9 * var(--u)) calc(16 * var(--u));
   opacity: 0; transform: scale(0);
 }
-.splash.go .sl-tile { animation: sl-tile 620ms cubic-bezier(.34,1.56,.64,1) forwards, sl-punch 360ms ease-out 640ms; }
-.splash.go .sl-y { animation: sl-y 560ms cubic-bezier(.16,1,.3,1) 160ms forwards; }
-.splash.go .sl-m { animation: sl-m 560ms cubic-bezier(.16,1,.3,1) 160ms forwards; }
-.splash.go .sl-ring { animation: sl-ring 620ms ease-out 650ms; }
-.splash.go .sl-play { animation: sl-play 480ms cubic-bezier(.34,1.8,.64,1) 820ms forwards; }
-.splash.go .sl-shine { animation: sl-shine 800ms ease-in-out 1000ms; }
+.splash.lock .sl-tile { animation: sl-tile 620ms cubic-bezier(.34,1.56,.64,1) forwards, sl-punch 360ms ease-out 640ms; }
+.splash.lock .sl-y, .splash.lock .sl-m { opacity: 1; } /* the name's Y and M have just landed here */
+.splash.lock .sl-ring { animation: sl-ring 620ms ease-out 380ms; }
+.splash.lock .sl-play { animation: sl-play 480ms cubic-bezier(.34,1.8,.64,1) 420ms forwards; }
+.splash.lock .sl-shine { animation: sl-shine 800ms ease-in-out 650ms; }
 @keyframes sl-tile { 0% { opacity: 0; transform: scale(0.35) rotate(-14deg); } 60% { opacity: 1; } 100% { opacity: 1; transform: none; } }
 @keyframes sl-punch { 0% { transform: scale(1); filter: none; } 30% { transform: scale(1.08); filter: brightness(1.35); } 100% { transform: scale(1); filter: none; } }
 @keyframes sl-y {
@@ -345,14 +358,16 @@ html.light .toast { background: rgba(238, 238, 238, 0.97); color: rgba(0, 0, 0, 
   font-size: calc(40 * var(--u)); font-weight: 700; letter-spacing: -0.02em; color: var(--text);
   padding: calc(30 * var(--u)) 0 calc(8 * var(--u));
   opacity: 0; transform: translateY(calc(14 * var(--u)));
-  transition: opacity 500ms var(--ease-out) 1050ms, transform 500ms var(--ease-out) 1050ms;
+  transition: opacity 500ms var(--ease-out) 450ms, transform 500ms var(--ease-out) 450ms;
 }
 .splash-by {
   font-size: calc(18 * var(--u)); font-weight: 500; color: var(--text2);
-  opacity: 0; transition: opacity 450ms var(--ease-std) 1300ms;
+  opacity: 0; transition: opacity 450ms var(--ease-std) 700ms;
 }
-.splash.go .splash-name { opacity: 1; transform: none; }
-.splash.go .splash-by { opacity: 1; }
+.splash.lock .splash-name { opacity: 1; transform: none; }
+.splash.lock .splash-by { opacity: 1; }
+.splash .splash-name { color: #fff; }
+@media (prefers-reduced-motion: reduce) { .splash.lock .sl-tile { animation: none; opacity: 1; transform: none; } }
 
 /* ---------------------------------------------------------------- Coach overlay (Coach.java) */
 .coach { position: fixed; inset: 0; z-index: 900; opacity: 0; transition: opacity 200ms linear; overflow: hidden; }

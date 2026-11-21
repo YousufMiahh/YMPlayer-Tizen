@@ -310,7 +310,7 @@ describe('splash launch routing', () => {
   it('boot starts at splash, then redirects to home when an account exists', async () => {
     const dispose = setup(true);
     expect(router.current().name).toBe('splash');
-    await vi.advanceTimersByTimeAsync(2600); // the logo intro, then on
+    await vi.advanceTimersByTimeAsync(3400); // the name-to-logo intro, then on
     expect(router.current().name).toBe('home');
     dispose();
     delete views.home; delete views.login;
@@ -319,7 +319,7 @@ describe('splash launch routing', () => {
   it('redirects to login when no account exists', async () => {
     const dispose = setup(false);
     expect(router.current().name).toBe('splash');
-    await vi.advanceTimersByTimeAsync(2600); // the logo intro, then on
+    await vi.advanceTimersByTimeAsync(3400); // the name-to-logo intro, then on
     expect(router.current().name).toBe('login');
     dispose();
     delete views.home; delete views.login;

@@ -1,14 +1,15 @@
-// Port of SplashActivity.java: the logo builds itself (the Y flies in from the left, the M from the
-// right, they lock together with a flash, the play button pops in and light sweeps across), then
-// "YM Player" and "Developed by Yousuf Miah".
+// Port of SplashActivity.java: "YOUSUF MIAH" builds in, folds away into its Y and M, which land in
+// the logo as its tile springs up (a flash, the play button, a sweep of light), then "YM Player"
+// and "Developed by Yousuf Miah" (js/ui/name-intro.js).
 // Leaves after the later of 1400 ms and the library warm-up, but never later than 6000 ms, and
 // replaces itself (it is not on the back stack). Back is ignored while it shows.
 import * as store from '../store.js';
 import * as repo from '../repo.js';
 import { router } from '../router.js';
 import * as backdrop from '../ui/backdrop.js';
+import { playIntro, TOTAL_MS } from '../ui/name-intro.js';
 
-export const SHOW_MS = 2300; // the whole intro, then on
+export const SHOW_MS = TOTAL_MS + 300; // the whole intro, then on
 export const MAX_WAIT_MS = 6000;
 
 /**
@@ -23,7 +24,7 @@ export function destination() {
 /** @param opts.warmUp  () => Promise — loads the saved library while the logo shows (repo.warmUp). */
 export function splashView(opts = {}) {
   return function create() {
-    let t1 = null; let t2 = null; let left = false; let shownLongEnough = false; let libraryReady = false;
+    let t1 = null; let t2 = null; let left = false; let stopIntro = null; let shownLongEnough = false; let libraryReady = false;
 
     function next() {
       if (left) return;
@@ -44,6 +45,7 @@ export function splashView(opts = {}) {
         root.appendChild(el);
         void el.offsetWidth;
         el.classList.add('go');
+        stopIntro = playIntro(el);
 
         if (store.hasAccount() && opts.warmUp) {
           Promise.resolve().then(opts.warmUp).catch(() => {}).then(() => {
@@ -57,7 +59,7 @@ export function splashView(opts = {}) {
         t2 = setTimeout(next, MAX_WAIT_MS); // never keep you waiting long
       },
       onBack() { return true; }, // let the splash finish rather than closing the app halfway
-      unmount() { left = true; clearTimeout(t1); clearTimeout(t2); },
+      unmount() { left = true; clearTimeout(t1); clearTimeout(t2); if (stopIntro) stopIntro(); },
     };
   };
 }
