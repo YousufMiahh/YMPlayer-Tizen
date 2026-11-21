@@ -128,3 +128,33 @@ export async function recommendations(kind, id) {
   }
   return out;
 }
+
+/**
+ * The title's logo (the transparent artwork Netflix and Apple TV show instead of the name), as an
+ * image URL, or null. English first, then one with no words; remembered per title.
+ */
+export async function logo(kind, id) {
+  if (id == null || id === '') return null;
+  const ck = `${CACHE_PREFIX}logo:${kind}:${id}`;
+  const hit = ls().getItem(ck);
+  if (hit !== null) return hit === '' ? null : hit;
+  let url = null;
+  try {
+    const d = await get(`/${kind}/${encodeURIComponent(id)}/images?include_image_language=en,null`);
+    url = pickLogo(d && d.logos);
+  } catch {
+    return null; // offline: try again next time
+  }
+  try { ls().setItem(ck, url || ''); } catch { /* storage full */ }
+  return url;
+}
+
+/** Best logo from TMDB's list: English (most liked) before language-free; PNG (SVGs are asked for as PNG). */
+export function pickLogo(logos) {
+  if (!Array.isArray(logos) || !logos.length) return null;
+  const rank = (l) => (l.iso_639_1 === 'en' ? 0 : l.iso_639_1 == null || l.iso_639_1 === '' ? 1 : 9);
+  const best = logos.filter((l) => l && l.file_path && rank(l) < 9)
+    .sort((a, b) => rank(a) - rank(b) || (b.vote_average || 0) - (a.vote_average || 0))[0];
+  if (!best) return null;
+  return `https://image.tmdb.org/t/p/w500${String(best.file_path).replace(/\.svg$/i, '.png')}`;
+}

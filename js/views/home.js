@@ -8,6 +8,7 @@ import * as nav from '../nav.js';
 import * as top10 from '../top10.js';
 import * as recs from '../recs.js';
 import * as whatsNew from '../whats-new.js';
+import * as sync from '../sync.js';
 import { showItemMenu } from '../item-menu.js';
 import { showDialog } from '../ui/dialog.js';
 import { createHomePeek } from '../home-peek.js';
@@ -51,6 +52,7 @@ function memoNow() {
   return memo;
 }
 let mounted = null; // the Home on screen (or null)
+let offSync = null;
 
 /** Tests: forget everything kept between visits. */
 export function _reset() { memo = fresh(''); mounted = null; }
@@ -420,6 +422,9 @@ export function homeView() {
       }
       startTop10();
       loadRecs(); // cached for a few hours
+      // another device changed something: show it (Continue Watching, favourites…)
+      offSync = sync.onChange(() => { if (root) refreshKeepingPlace(active()); });
+      sync.soon(800);
     },
     onKey(e) {
       const f = active();
@@ -441,6 +446,7 @@ export function homeView() {
       if (peek) { peek.release(); peek = null; }
       if (screen) { rememberFocus(); memo.scrollTop = screen.scrollTop; }
       mounted = null;
+      if (offSync) { offSync(); offSync = null; }
       cancelTour(); coach.dismiss();
       timers.forEach(clearTimeout); timers = [];
       clearInterval(tick); tick = null;

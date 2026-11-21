@@ -4,6 +4,7 @@
 //
 //   ACCOUNTS                  {account} ✓ In use / Switch · Subscription · Add Account ·
 //                             Edit This Account · Remove This Account (confirm)
+//   SYNC                      Sync With Your Other Devices (On / Off) · Sync Now (when it last synced)
 //   APPEARANCE                Theme (Dark / Light, restarts Home) · Live TV Preview · Film & Series Previews
 //   HIDE WHAT YOU DON'T WATCH Countries & Languages · Rename Categories · Hidden Categories
 //   CUSTOMISE HOME SCREEN     the ten Home rows, On / Off
@@ -16,6 +17,7 @@
 // (one engine, AVPlay), and Check for Updates (no APK updates on a TV). The player's Audio Sync
 // can't work on AVPlay either.
 import * as store from '../store.js';
+import * as sync from '../sync.js';
 import * as nav from '../nav.js';
 import * as repo from '../repo.js';
 import * as api from '../api.js';
@@ -116,6 +118,17 @@ export function settingsView() {
   const listen = (el, ev, fn) => { el.addEventListener(ev, fn); off.push(() => el.removeEventListener(ev, fn)); };
   const actions = new Map(); // row element -> (valueEl) => void
 
+  /** "Synced 2 min ago", or why it isn't. */
+  function syncLabel() {
+    if (!sync.configured()) return 'Not set up in this version';
+    if (!store.syncEnabled()) return 'Off';
+    const st = sync.status();
+    if (!st) return 'Not synced yet';
+    if (!st.ok) return "Couldn't reach the sync server";
+    const min = Math.floor((Date.now() - st.at) / 60000);
+    return min < 1 ? 'Synced just now' : min < 60 ? `Synced ${min} min ago` : `Synced ${Math.floor(min / 60)} h ago`;
+  }
+
   function section(name) { list.appendChild(sectionHeading(name)); }
 
   /** SettingsActivity.row: an action makes it a focusable pill; without one it is an info row. */
@@ -155,6 +168,20 @@ export function settingsView() {
     });
     const status = accountsUi.statusValue;
     if (status) subscriptionText().then((t) => { if (status.isConnected) status.textContent = t; });
+
+    section('Sync');
+    row('sync', 'Sync With Your Other Devices', onOff(store.syncEnabled()), (v, r) => {
+      store.setSyncEnabled(!store.syncEnabled());
+      v.textContent = onOff(store.syncEnabled());
+      const now = list.querySelector('[data-key="sync_now"] .srow-value');
+      if (now) now.textContent = syncLabel();
+      if (store.syncEnabled()) sync.soon(300);
+    });
+    row('sync_now', 'Sync Now', syncLabel(), (v) => {
+      if (!sync.configured() || !store.syncEnabled()) return;
+      v.textContent = 'Syncing…';
+      sync.syncNow().then(() => { if (v.isConnected) v.textContent = syncLabel(); });
+    });
 
     section('Appearance');
     row('theme', 'Theme', store.dark() ? 'Dark' : 'Light', () => {

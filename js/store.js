@@ -17,12 +17,25 @@ const ls = () => globalThis.localStorage;
 
 // ---- raw helpers
 const getStr = (k, d) => { const v = ls().getItem(k); return v === null ? d : v; };
-const setStr = (k, v) => ls().setItem(k, String(v));
+const setStr = (k, v) => { ls().setItem(k, String(v)); touched(k); };
 const getInt = (k, d) => { const n = parseInt(ls().getItem(k), 10); return Number.isNaN(n) ? d : n; };
 const getBool = (k, d) => { const v = ls().getItem(k); return v === null ? d : v === 'true'; };
 const getJson = (k, d) => { try { const v = JSON.parse(ls().getItem(k)); return v ?? d; } catch { return d; } };
 const getArr = (k) => { const v = getJson(k, []); return Array.isArray(v) ? v : []; };
-const setJson = (k, v) => ls().setItem(k, JSON.stringify(v));
+const setJson = (k, v) => { ls().setItem(k, JSON.stringify(v)); touched(k); };
+const del = (k) => { ls().removeItem(k); touched(k); };
+
+// ---- changes to account data (cross-device sync listens: 'pos' for resume points, 'data' for the rest)
+let writeHook = null;
+export function onAccountWrite(fn) { writeHook = fn; }
+function touched(k) {
+  if (!writeHook) return;
+  const n = ns();
+  let rest = k;
+  if (n !== '') { if (!k.startsWith(n)) return; rest = k.slice(n.length); } else if (/^a\d+_/.test(k)) return;
+  if (!isAccountData(rest) || rest.startsWith('sync_') || rest.startsWith('lib_time')) return;
+  writeHook(rest.startsWith('pos_') || rest.startsWith('dur_') ? 'pos' : 'data');
+}
 
 // ================================================================ accounts
 
@@ -74,7 +87,7 @@ export function saveAccount(acc) {
 }
 
 function isAccountData(k) {
-  return /^(fav_|favcat_|pos_|dur_|hist_|lib_time|hide_tags|hide_cat_|show_cat_|catname_|pic_)/.test(k)
+  return /^(fav_|favcat_|pos_|dur_|hist_|lib_time|hide_tags|hide_cat_|show_cat_|catname_|pic_|sync_|rec_block)/.test(k)
     || k === 'watched' || k === 'queue' || k === 'upnext';
 }
 
@@ -146,6 +159,10 @@ export const setDark = (b) => setStr('dark', !!b);
 export const previewMode = () => getInt('preview', 2);
 export const setPreviewMode = (m) => setStr('preview', m);
 /** Film / series previews (Home cards and the page behind Resume): 1 on, 0 off. */
+/** Sync watch data with your other devices (on unless turned off in Settings). */
+export const syncEnabled = () => getBool('cloud_sync', true);
+export const setSyncEnabled = (b) => setStr('cloud_sync', !!b);
+
 export const homePreviews = () => getInt('home_previews', 1);
 export const setHomePreviews = (m) => setStr('home_previews', m);
 /** "Don't recommend based on this": films / series kept out of Because you watched (per account). */
@@ -218,7 +235,7 @@ export const position = (item) => getInt(`${ns()}pos_${key(item)}`, 0);
 export function setPosition(item, ms) {
   clearUpNext(item); // started (or removed): an ordinary entry from now on
   const k = `${ns()}pos_${key(item)}`;
-  if (ms <= 0) ls().removeItem(k); else setStr(k, Math.floor(ms));
+  if (ms <= 0) del(k); else setStr(k, Math.floor(ms));
 }
 
 export const duration = (item) => getInt(`${ns()}dur_${key(item)}`, 0);
@@ -262,7 +279,7 @@ export function picture(item) {
 
 export function setPicture(item, mode) {
   const k = `${ns()}pic_${pictureKey(item)}`;
-  if (mode <= 0) ls().removeItem(k); else setStr(k, mode);
+  if (mode <= 0) del(k); else setStr(k, mode);
 }
 
 // ================================================================ already watched (per account)
@@ -326,7 +343,7 @@ export const catName = (type, id) => { const v = ls().getItem(`${ns()}catname_${
 export function setCatName(type, id, name) {
   const k = `${ns()}catname_${type}_${id}`;
   const n = name == null ? '' : String(name).trim();
-  if (n === '') ls().removeItem(k); else setStr(k, n);
+  if (n === '') del(k); else setStr(k, n);
 }
 
 // ================================================================ watch history (per account, newest first)
@@ -354,7 +371,7 @@ export function clearHistory() {
     const rest = n === '' ? k : (k.startsWith(n) ? k.slice(n.length) : null);
     if (rest === null) continue;
     if (n === '' && /^a\d+_/.test(rest)) continue;
-    if (rest.startsWith('pos_') || rest.startsWith('dur_') || rest.startsWith('hist_') || rest === 'upnext') ls().removeItem(k);
+    if (rest.startsWith('pos_') || rest.startsWith('dur_') || rest.startsWith('hist_') || rest === 'upnext') del(k);
   }
 }
 

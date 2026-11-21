@@ -16,7 +16,7 @@ import { play } from '../open.js';
 import { openTrailer } from '../trailer.js';
 import { movieInfo, movieButtons, favLabel, queueLabel } from '../detail.js';
 import { pillButton } from '../ui/widgets.js';
-import { renderButtons, askAudioSubtitles, pagePreview } from '../ui/hero.js';
+import { renderButtons, askAudioSubtitles, pagePreview, titleLogo } from '../ui/hero.js';
 
 export const FADE_MS = 500; // loadBackdrop: alpha 0 -> 1 over 500 ms
 
@@ -119,6 +119,7 @@ export function movieDetailView() {
       creditsEl = document.createElement('div'); creditsEl.className = 'dp-credits';
       buttonsEl = document.createElement('div'); buttonsEl.className = 'dp-buttons';
       col.append(title, metaEl, plotEl, creditsEl, buttonsEl);
+      titleLogo(title, 'movie', item.name, item.tmdb);
       page.el.appendChild(col);
       root.appendChild(page.el);
       preview = pagePreview(page);

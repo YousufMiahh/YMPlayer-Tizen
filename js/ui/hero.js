@@ -7,6 +7,7 @@ import { showDialog } from './dialog.js';
 import { toast } from './toast.js';
 import { audioSubtitleChoices } from '../detail.js';
 import { createPreview } from '../live-preview.js';
+import * as tmdb from '../tmdb.js';
 
 export const PREVIEW_AFTER_MS = 2000;
 
@@ -88,4 +89,30 @@ export function pagePreview(page) {
     get pending() { return timer !== null; },
     get playing() { return p.playing; },
   };
+}
+
+/**
+ * Swaps a page's title for the film's or series' logo when TMDB has one (the name stays as the
+ * image's text, and shows if there's no logo or it can't load). kind: 'movie' or 'tv'.
+ */
+export async function titleLogo(titleEl, kind, name, knownTmdb) {
+  if (!titleEl || !store.dark()) return; // logos are made for dark backgrounds
+  let url = null;
+  try {
+    const id = await tmdb.findId(kind, name, knownTmdb);
+    url = id ? await tmdb.logo(kind, id) : null;
+  } catch { url = null; }
+  if (!url || !titleEl.isConnected) return;
+  const img = new Image();
+  img.className = 'dp-logo';
+  img.alt = name || '';
+  img.decoding = 'async';
+  img.onload = () => {
+    if (!titleEl.isConnected) return;
+    titleEl.textContent = '';
+    titleEl.appendChild(img);
+    titleEl.classList.add('has-logo');
+    requestAnimationFrame(() => img.classList.add('shown'));
+  };
+  img.src = url;
 }

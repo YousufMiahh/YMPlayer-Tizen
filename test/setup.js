@@ -12,6 +12,8 @@ beforeEach(async () => {
   const tmdb = await import('../js/tmdb.js');
   tmdb.setFetch(() => Promise.reject(new Error('offline in tests')));
   tmdb.state.failed = false;
+  // Nor the sync server (sync.test.js points at a fake one).
+  (await import('../js/sync.js'))._configure('', '');
   (await import('../js/recs.js'))._reset();
   (await import('../js/intros.js'))._reset();
   const home = await import('../js/views/home.js');

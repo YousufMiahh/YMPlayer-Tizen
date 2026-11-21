@@ -22,7 +22,7 @@ import {
   seriesInfo, parseSeasons, seasonPillLabel, lastWatched, seriesHero,
   startSeason, episodeCard, favLabel,
 } from '../detail.js';
-import { renderButtons, askAudioSubtitles, pagePreview } from '../ui/hero.js';
+import { renderButtons, askAudioSubtitles, pagePreview, titleLogo } from '../ui/hero.js';
 import { showItemMenu } from '../item-menu.js';
 import { LONG_PRESS_MS } from '../ui/theme.js';
 import { pillButton, card } from '../ui/widgets.js';
@@ -231,6 +231,7 @@ export function seriesDetailView() {
         <div class="sp-scroll sp-shelf-scroll" data-own-scroll><div class="sp-shelf"></div></div>`;
       page.el.appendChild(body);
       page.el.querySelector('.dp-title').textContent = series.name || '';
+      titleLogo(page.el.querySelector('.dp-title'), 'tv', series.name, series.tmdb);
       metaEl = page.el.querySelector('.dp-meta'); metaEl.textContent = series.info || '';
       epLabelEl = page.el.querySelector('.sp-eplabel');
       plotEl = page.el.querySelector('.dp-plot'); plotEl.textContent = series.plot || '';
