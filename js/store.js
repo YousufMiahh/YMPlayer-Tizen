@@ -30,6 +30,7 @@ let writeHook = null;
 export function onAccountWrite(fn) { writeHook = fn; }
 function touched(k, removed = false) {
   if (!writeHook) return;
+  if (/^(sub_size|sub_color|sub_bg|sub_bg_opacity|sub_lang|audio_lang|home_)/.test(k)) { writeHook('data'); return; } // shared settings
   const n = ns();
   let rest = k;
   if (n !== '') { if (!k.startsWith(n)) return; rest = k.slice(n.length); } else if (/^a\d+_/.test(k)) return;

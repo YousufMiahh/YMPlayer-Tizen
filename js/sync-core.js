@@ -23,6 +23,9 @@
 //   catname  "type:categoryId" → {n: name}
 //   pic      picture key → {m: mode}       ("series_<id>" for a series, else the item key)
 //   adelay   same keys → {ms}                                         audio sync
+//   settings name → {v}   subtitle style and languages, Home rows (sub_size, sub_color, sub_bg,
+//            sub_bg_opacity, sub_lang, audio_lang, home_<row>): an app only reads and writes the
+//            ones it has; the others are left alone (never removed)
 //   hist     item key → {i, t}            watch history (newest t first; live: keys are channels)
 //   histclear {live: t, vod: t}           history cleared at
 //
@@ -33,13 +36,16 @@ import { sha256, pbkdf2, gcm } from './lib/noble.js';
 
 export const VERSION = 1;
 export const MAPS = ['pos', 'up', 'watched', 'fav', 'favcat', 'hidecat', 'showcat', 'hidetag', 'recblock',
-  'catname', 'queue', 'pic', 'adelay'];
+  'catname', 'queue', 'pic', 'adelay', 'settings'];
 const SAME = {
   pos: (a, b) => a.p === b.p,
   catname: (a, b) => a.n === b.n,
   pic: (a, b) => a.m === b.m,
   adelay: (a, b) => a.ms === b.ms,
+  settings: (a, b) => JSON.stringify(a.v) === JSON.stringify(b.v),
 };
+/** Maps whose missing keys mean "this app doesn't have that one", not "removed". */
+const KEEP_MISSING = new Set(['settings']);
 const DAY = 86400000;
 export const TOMBSTONE_MS = 60 * DAY;
 export const HIST_KEEP = 60;
@@ -161,7 +167,7 @@ export function stamp(state, shadowIn, now, maps = MAPS) {
     }
     for (const k of Object.keys(old)) {
       if (k in res) continue;
-      res[k] = old[k].x ? old[k] : { x: 1, t: now };
+      res[k] = old[k].x || KEEP_MISSING.has(m) ? old[k] : { x: 1, t: now };
     }
     out[m] = res;
   }

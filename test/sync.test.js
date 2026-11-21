@@ -221,6 +221,34 @@ describe('sync between two devices', () => {
     expect(store.inQueue({ type: 'movie', id: '1' })).toBe(true);
   });
 
+  it('subtitle style, languages and Home rows follow too; a default never replaces a choice', async () => {
+    use('a'); login();
+    store.setSubtitleSize(3);
+    store.setSubtitleLanguage('en');
+    store.setHomeShows('top_movies', false);
+    await sync.syncNow();
+    use('b'); login();
+    expect(store.subtitleSize()).toBe(1);
+    await sync.syncNow();
+    expect(store.subtitleSize()).toBe(3);
+    expect(store.subtitleLanguage()).toBe('en');
+    expect(store.homeShows('top_movies')).toBe(false);
+    expect(store.homeShows('top_series')).toBe(true);
+    store.setSubtitleColor(2);
+    await sync.syncNow();
+    use('a'); await sync.syncNow();
+    expect(store.subtitleColor()).toBe(2);
+    expect(store.subtitleSize()).toBe(3);
+  });
+
+  it('keeps settings this app does not have (from the Mac or phone)', () => {
+    const d = core.emptyDoc();
+    d.settings.home_queue = { v: false, t: 5 };
+    const s = core.stamp(stateWith({ settings: { sub_size: { v: 2 } } }), d, 10);
+    expect(s.settings.home_queue).toEqual({ v: false, t: 5 });
+    expect(s.settings.sub_size).toEqual({ v: 2, t: 10 });
+  });
+
   it('does nothing when switched off or not set up', async () => {
     use('a'); login();
     store.setSyncEnabled(false);

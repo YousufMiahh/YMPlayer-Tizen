@@ -34,6 +34,26 @@ export function fromWire(o) {
 
 const keyOf = (it) => `${it.type}:${it.id}`;
 
+// ================================================================ settings shared too (not per account)
+
+const INT_SETTINGS = ['sub_size', 'sub_color', 'sub_bg_opacity'];
+const STR_SETTINGS = ['sub_lang', 'audio_lang'];
+/** The setting names this TV has: subtitle style and languages, and the Home rows. */
+export const settingNames = () => [...INT_SETTINGS, 'sub_bg', ...STR_SETTINGS, ...store.HOME_KEYS.map((k) => `home_${k}`)];
+const isBoolSetting = (k) => k === 'sub_bg' || k.startsWith('home_');
+
+/** Only ones set on this TV (a default here mustn't replace a choice made on another device). */
+function readSettings() {
+  const out = {};
+  for (const k of settingNames()) {
+    const raw = ls().getItem(k);
+    if (raw === null) continue;
+    if (isBoolSetting(k)) out[k] = { v: raw === 'true' };
+    else if (INT_SETTINGS.includes(k)) { const n = parseInt(raw, 10); if (!Number.isNaN(n)) out[k] = { v: n }; } else out[k] = { v: raw };
+  }
+  return out;
+}
+
 // ================================================================ this device's data
 
 /** Keys of the current account (the first account's have no prefix: skip other accounts' "a123_…"). */
@@ -88,6 +108,7 @@ export function readLocal() {
     for (const id of arr(`${n}show_cat_${type}`)) st.showcat[`${type}:${id}`] = {};
   }
   arr(`${n}queue`).forEach((q, o) => { st.queue[keyOf(q)] = { o, i: toWire(q) }; });
+  st.settings = readSettings();
   return st;
 }
 
@@ -135,6 +156,14 @@ export function writeLocal(next, prev) {
     for (const kind of ['live', 'vod']) {
       const list = sorted(next.hist).filter(([k]) => (typeOf(k) === 'live') === (kind === 'live')).map(([, e]) => fromWire(e.i));
       setJson(`${n}hist_${kind}`, list);
+    }
+  }
+  if (diff('settings')) {
+    const known = new Set(settingNames());
+    for (const [k, e] of Object.entries(next.settings || {})) {
+      if (!known.has(k) || e.v === undefined || e.v === null) continue;
+      if (prev.settings && prev.settings[k] && JSON.stringify(prev.settings[k].v) === JSON.stringify(e.v)) continue;
+      ls().setItem(k, String(e.v));
     }
   }
   if (filters) filtersChanged();
