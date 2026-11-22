@@ -135,26 +135,78 @@ export async function recommendations(kind, id) {
  */
 export async function logo(kind, id) { return (await art(kind, id)).logo; }
 
-/**
- * {logo, backdrop}: the logo as above, and a wide picture without words (or an English one) for a
- * card that widens on Home. One request, remembered per title.
- */
+/** {logo, backdrop}: from details() (one request for everything). */
 export async function art(kind, id) {
-  const none = { logo: null, backdrop: null };
-  if (id == null || id === '') return none;
-  const lk = `${CACHE_PREFIX}logo:${kind}:${id}`; const bk = `${CACHE_PREFIX}backdrop:${kind}:${id}`;
-  const l = ls().getItem(lk); const b = ls().getItem(bk);
-  if (l !== null && b !== null) return { logo: l || null, backdrop: b || null };
-  let out;
-  try {
-    const d = await get(`/${kind}/${encodeURIComponent(id)}/images?include_image_language=en,null`);
-    out = { logo: pickLogo(d && d.logos), backdrop: pickBackdrop(d && d.backdrops) };
-  } catch {
-    return none; // offline: try again next time
-  }
-  try { ls().setItem(lk, out.logo || ''); ls().setItem(bk, out.backdrop || ''); } catch { /* storage full */ }
-  return out;
+  const d = await details(kind, id);
+  return d ? { logo: d.logo, backdrop: d.backdrop } : { logo: null, backdrop: null };
 }
+
+const DETAILS = new Map();
+const WEEK = 7 * 86400000;
+
+/**
+ * What Home shows under a card you're on, Netflix-style: {genres, year, seasons, runtime, cert,
+ * overview, logo, backdrop}. One request (with the pictures and the UK age rating), remembered.
+ */
+export async function details(kind, id) {
+  if (id == null || id === '') return null;
+  const ck = `${CACHE_PREFIX}details:${kind}:${id}`;
+  if (DETAILS.has(ck)) return DETAILS.get(ck);
+  let o = null;
+  try { const w = JSON.parse(ls().getItem(ck)); if (w && Date.now() - w.at < WEEK) o = w.d; } catch { /* not saved */ }
+  if (!o) {
+    const tv = kind === TV;
+    let r;
+    try {
+      r = await get(`/${kind}/${encodeURIComponent(id)}?append_to_response=images,${tv ? 'content_ratings' : 'release_dates'}&include_image_language=en,null`);
+    } catch { return null; } // offline: try again next time
+    o = {
+      genres: (r.genres || []).map((g) => g && g.name).filter(Boolean),
+      date: r.first_air_date || r.release_date || '',
+      seasons: r.number_of_seasons || 0,
+      runtime: r.runtime || 0,
+      overview: r.overview || '',
+      logo: pickLogo(r.images && r.images.logos),
+      backdrop: pickBackdrop(r.images && r.images.backdrops),
+      cert: ukRating(r, tv),
+    };
+    try { ls().setItem(ck, JSON.stringify({ at: Date.now(), d: o })); } catch { /* storage full */ }
+  }
+  const d = {
+    genres: o.genres.map((g) => g.replace('Action & Adventure', 'Action').replace('Sci-Fi & Fantasy', 'Sci-Fi')),
+    year: o.date && o.date.length >= 4 ? o.date.slice(0, 4) : '',
+    seasons: o.seasons, overview: o.overview || '', logo: o.logo || null, backdrop: o.backdrop || null, cert: o.cert || '',
+    runtime: o.runtime > 0 ? (o.runtime >= 60 ? `${Math.floor(o.runtime / 60)}h ${o.runtime % 60}m` : `${o.runtime}m`) : '',
+  };
+  DETAILS.set(ck, d);
+  return d;
+}
+
+/** "Series · Thriller · 2026 · 2 Seasons" (the age rating is drawn separately). */
+export function detailsLine(d, series) {
+  const p = [series ? 'Series' : 'Film'];
+  if (d.genres[0]) p.push(d.genres[0]);
+  if (d.year) p.push(d.year);
+  if (series && d.seasons > 0) p.push(`${d.seasons} ${d.seasons === 1 ? 'Season' : 'Seasons'}`);
+  if (!series && d.runtime) p.push(d.runtime);
+  return p.join('  ·  ');
+}
+
+/** The UK (BBFC) rating: "U", "PG", "12", "12A", "15", "18", or "". */
+export function ukRating(r, tv) {
+  try {
+    if (tv) {
+      const x = (r.content_ratings.results || []).find((e) => e.iso_3166_1 === 'GB');
+      return x ? x.rating || '' : '';
+    }
+    const x = (r.release_dates.results || []).find((e) => e.iso_3166_1 === 'GB');
+    const c = x && (x.release_dates || []).find((e) => e.certification);
+    return c ? c.certification : '';
+  } catch { return ''; }
+}
+
+/** Tests. */
+export function _resetDetails() { DETAILS.clear(); }
 
 /** A backdrop without words first (the logo goes on top), then an English one; most liked. */
 export function pickBackdrop(list) {

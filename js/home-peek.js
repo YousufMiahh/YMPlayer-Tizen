@@ -58,8 +58,34 @@ export function createHomePeek(o) {
     }
   }
 
+  let shownInfo = null;
+  const infoOf = (el) => (el && el.closest ? el.closest('.home-row')?.querySelector('.row-info') || null : null);
+
+  /** Under the row, like Netflix: "Series · Thriller · 2026 · 2 Seasons (15)" and the summary. */
+  function showInfo(c, d, series) {
+    const box = infoOf(c);
+    if (!box) return;
+    box.replaceChildren();
+    const meta = document.createElement('div'); meta.className = 'ri-meta';
+    const line = document.createElement('span'); line.textContent = tmdb.detailsLine(d, series);
+    meta.appendChild(line);
+    if (d.cert) {
+      const b = document.createElement('span');
+      b.className = `ri-cert c${d.cert.toUpperCase().replace(/[^A-Z0-9]/g, '')}`;
+      b.textContent = d.cert;
+      meta.appendChild(b);
+    }
+    box.appendChild(meta);
+    if (d.overview) { const s = document.createElement('p'); s.className = 'ri-sum'; s.textContent = d.overview; box.appendChild(s); }
+    if (shownInfo && shownInfo !== box) shownInfo.hidden = true;
+    shownInfo = box;
+    box.hidden = false;
+  }
+
   function focus(el) {
     if (el === card) return;
+    // the details under a row stay while you move along it (the next card's replace them)
+    if (shownInfo && infoOf(el) !== shownInfo) { shownInfo.hidden = true; shownInfo = null; }
     leave();
     if (store.homePreviews() !== 1) return;
     const it = peekable(el);
@@ -104,10 +130,11 @@ export function createHomePeek(o) {
     art.appendChild(layer);
     const film = it.type === MOVIE;
     const name = it.type === EPISODE && it.parentName ? it.parentName : it.name;
-    let urls = { logo: null, backdrop: null };
+    let urls = { logo: null, backdrop: null, details: null };
     try {
       const id = await tmdb.findId(film ? tmdb.MOVIE : tmdb.TV, name, it.tmdb);
-      if (id) urls = await tmdb.art(film ? tmdb.MOVIE : tmdb.TV, id);
+      const d = id ? await tmdb.details(film ? tmdb.MOVIE : tmdb.TV, id) : null;
+      if (d) urls = { logo: d.logo, backdrop: d.backdrop, details: d };
     } catch { /* no art: the poster stays */ }
     if (my !== seq) return;
     const put = (img, url, fade) => {
@@ -117,6 +144,7 @@ export function createHomePeek(o) {
     };
     put(back, urls.backdrop, back);
     put(logo, urls.logo, layer);
+    if (urls.details) showInfo(c, urls.details, !film);
   }
 
   return {

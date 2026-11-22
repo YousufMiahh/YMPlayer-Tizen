@@ -16,3 +16,29 @@
 .home .strip::after { content: ''; flex: none; width: calc(64 * var(--u)); height: 1px; } /* every card's 32u right margin + the row's 64u right padding */
 .home-empty { margin: 0; padding-top: calc(80 * var(--u)); font-size: calc(18 * var(--u)); color: var(--text2); text-align: center; white-space: pre-line; line-height: var(--lh); }
 .home-empty[hidden] { display: none; }
+
+/* Home, Netflix-size posters; the one you're on widens to 16:9 (294u × 16/9) */
+.home .card.poster .art { width: calc(196 * var(--u)); height: calc(294 * var(--u)); }
+.home .card.poster .title, .home .card.poster .sub { width: calc(196 * var(--u)); }
+.home .card.poster.peek .art, .home .card.poster.peek .title, .home .card.poster.peek .sub { width: calc(523 * var(--u)); }
+
+/* what the card you're on is: "Series · Thriller · 2026 · 2 Seasons (15)" and the summary */
+.row-info { padding: 0 calc(64 * var(--u)) calc(10 * var(--u)); animation: ri-in 220ms ease; }
+.row-info[hidden] { display: none; }
+@keyframes ri-in { from { opacity: 0; } to { opacity: 1; } }
+.ri-meta { display: flex; align-items: center; gap: calc(12 * var(--u)); font-size: calc(17 * var(--u)); font-weight: 600; color: var(--text); white-space: pre; }
+.ri-cert {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: calc(26 * var(--u)); height: calc(26 * var(--u)); border-radius: 50%;
+  font-size: calc(12 * var(--u)); font-weight: 800; color: #fff; background: #555560;
+}
+.ri-cert.cU { background: #00A651; }
+.ri-cert.cPG { background: #FDB913; color: #111; }
+.ri-cert.c12, .ri-cert.c12A { background: #F7941D; }
+.ri-cert.c15 { background: #E7378F; }
+.ri-cert.c18, .ri-cert.cR18 { background: #E21D2B; }
+.ri-sum {
+  margin: calc(6 * var(--u)) 0 0; max-width: calc(760 * var(--u));
+  font-size: calc(17 * var(--u)); line-height: 1.3; color: var(--text2);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}

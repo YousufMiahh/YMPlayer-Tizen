@@ -159,7 +159,10 @@ function renderShelf(row) {
   strip.className = 'strip';
   const watched = store.watchedKeys(); // read once per shelf, not once per card
   row.items.forEach((it, i) => strip.appendChild(renderCard(row, it, i, watched)));
-  sec.append(shelfTitle(row.title, row.key === 'continue' || row.key === 'queue' || row.sourceKey ? CW_HINT : ''), strip);
+  // what the card you're on is (filled in by the Home preview), like Netflix
+  const info = document.createElement('div');
+  info.className = 'row-info'; info.hidden = true;
+  sec.append(shelfTitle(row.title, row.key === 'continue' || row.key === 'queue' || row.sourceKey ? CW_HINT : ''), strip, info);
   sec._row = row;
   return sec;
 }
