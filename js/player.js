@@ -114,7 +114,7 @@ function onCompleted(av, session) {
     try { len = Number(av.getDuration()) || 0; } catch { /* not prepared */ }
     let at = session.pos;
     try { const t = Number(av.getCurrentTime()); if (Number.isFinite(t) && t > 0) at = t; } catch { /* use the last tick */ }
-    if (len > 0 && at > 0 && at < len * 0.9 && at < len - 60000) {
+    if (len > 0 && at > 0 && at < len * 0.9 && at < len - CREDITS_MS) {
       store.setDuration(session.item, len);
       session.pos = at;
       emit('ended', { early: true, position: at });
@@ -394,8 +394,10 @@ function applyPreferredTracks(av, session) {
 
 // ---------------------------------------------------------------- stop
 
-/** Finished (or into the credits): within the last minute, or 90% of the way through. */
-export const finishedAt = (p, d) => d > 0 && (p > d - 60000 || p >= d * 0.9);
+/** Less than this left: the credits, so it counts as finished (and the next episode is up next). */
+export const CREDITS_MS = 3 * 60000;
+/** Finished (into the credits): under 3 minutes left (or 97% of the way through something short). */
+export const finishedAt = (p, d) => d > 0 && (p > d - CREDITS_MS || p >= d * 0.97);
 
 /** Stop and release. Persists resume position + duration for VOD/episodes (never live). */
 export function stop() {

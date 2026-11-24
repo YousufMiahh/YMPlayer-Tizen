@@ -858,8 +858,18 @@ export function playerView() {
   function finishedCurrent() {
     const cur = current();
     store.setWatched(cur, true);
-    if (cur.type !== EPISODE || cur.parentId == null || index >= queue.length - 1) return;
-    const nx = queue[index + 1];
+    if (cur.type !== EPISODE || cur.parentId == null) return;
+    if (index < queue.length - 1) { upNextAfter(cur, queue[index + 1]); return; }
+    // Played on its own (from Continue Watching) or the last of a season: find what comes next
+    Promise.resolve().then(() => api.seriesInfo(cur.parentId)).then((r) => followingEpisodes(r, cur)).catch(() => null).then((all) => {
+      if (!all) return;
+      const at = all.findIndex((e) => String(e.id) === String(cur.id));
+      if (at >= 0 && at < all.length - 1) upNextAfter(cur, all[at + 1]);
+    });
+  }
+
+  /** The next episode goes into Continue Watching, ready at the start (unless already watched or started). */
+  function upNextAfter(cur, nx) {
     if (nx.type === EPISODE && String(cur.parentId) === String(nx.parentId) && !store.isWatched(nx) && store.position(nx) === 0) {
       store.markUpNext(nx);
     }
