@@ -92,6 +92,23 @@ export function createPreview(o) {
   const realVideo = () => (o.realVideo !== undefined ? o.realVideo : !!globalThis.webapis?.avplay);
   const avEl = () => document.getElementById('av');
 
+  // The <object id="av"> is itself a see-through window onto the video plane, through everything
+  // painted under it (the page background too): it must cover only the preview's box, or the whole
+  // background goes black while a preview plays. The full-screen player puts it back (placeAv(null)).
+  function placeAv(r) {
+    const el = avEl();
+    if (!el) return;
+    if (!r) { el.style.left = ''; el.style.top = ''; el.style.width = ''; el.style.height = ''; return; }
+    el.style.left = `${Math.round(r.left)}px`; el.style.top = `${Math.round(r.top)}px`;
+    el.style.width = `${Math.round(r.width)}px`; el.style.height = `${Math.round(r.height)}px`;
+  }
+  /** Video and hole onto the box where it is now (it may have scrolled since the preview started). */
+  function place() {
+    const r = o.box.getBoundingClientRect();
+    placeAv(r);
+    try { const av = getAvplay(); if (av) av.setDisplayRect(Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)); } catch { /* not ready */ }
+  }
+
   function setMute(on) {
     if (on) muteTv(); else restoreTvMute();
   }
@@ -131,6 +148,7 @@ export function createPreview(o) {
 
   function ready(my) {
     if (my !== seq || !realVideo()) return; // the shim draws nothing: keep the artwork
+    place(); // the row may have scrolled while it buffered
     punch(true);
     // Give the decoder a moment to draw its first picture, then uncover it
     o.logo.style.transition = `opacity ${LOGO_FADE_MS}ms linear ${LOGO_FADE_DELAY_MS}ms`;
@@ -151,10 +169,10 @@ export function createPreview(o) {
       try { av.close(); } catch { /* already closed */ }
     }
     const el = avEl();
-    if (el) el.hidden = true;
+    if (el) { el.hidden = true; placeAv(null); }
   }
   function closeLater() {
-    if (opened) { opened = false; closing = true; }
+    if (opened) { opened = false; closing = true; placeAv({ left: 0, top: 0, width: 0, height: 0 }); } // no window onto it meanwhile
     if (!closing) { setMute(false); return; }
     clearTimeout(closeTimer);
     closeTimer = setTimeout(() => { shut(); if (!opened) setMute(false); }, CLOSE_AFTER_MS);
@@ -169,7 +187,7 @@ export function createPreview(o) {
     try { av.stop(); } catch { /* already idle */ }
     try { av.close(); } catch { /* already closed */ }
     const el = avEl();
-    if (el) el.hidden = true;
+    if (el) { el.hidden = true; placeAv(null); }
   }
 
   const api$ = {
@@ -193,9 +211,10 @@ export function createPreview(o) {
         av.open(api.playUrl(it, store.liveFormat()));
         opened = true;
         const el = avEl();
+        const r = o.box.getBoundingClientRect();
+        placeAv(r);
         if (el && realVideo()) el.hidden = false; // a desktop browser would draw a plugin placeholder
         av.setListener({ onerror: () => { if (my === seq) api$.stop(); } });
-        const r = o.box.getBoundingClientRect();
         av.setDisplayRect(Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height));
         try { av.setStreamingProperty('USER_AGENT', store.userAgent()); } catch { /* unsupported */ }
         // PlayerFactory.create(preview): show the picture after a short buffer (Android 0.3 s;
@@ -237,8 +256,7 @@ export function createPreview(o) {
      */
     relayout() {
       if (!opened) return;
-      const r = o.box.getBoundingClientRect();
-      try { const av = getAvplay(); if (av) av.setDisplayRect(Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)); } catch { /* not ready */ }
+      place();
       if (document.documentElement.classList.contains('preview-on')) punch(true);
     },
     /** releasePreview: before the full-screen player starts, or when leaving. */

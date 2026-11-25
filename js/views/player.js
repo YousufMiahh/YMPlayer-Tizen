@@ -1292,7 +1292,7 @@ export function playerView() {
       alive = true;
       build();
       const av = document.getElementById('av');
-      if (av) av.hidden = false;
+      if (av) { av.style.left = av.style.top = av.style.width = av.style.height = ''; av.hidden = false; } // full screen again (a preview sizes it to its box)
       document.body.classList.add('video-on');
       document.documentElement.classList.add('video-on'); // the AVPlay plane is under the whole page
       screenSaver(false);

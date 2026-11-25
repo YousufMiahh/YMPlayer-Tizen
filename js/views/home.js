@@ -373,7 +373,7 @@ export function homeView() {
       else memoNow();
       root = rootEl;
       mounted = { remoteChanged };
-      const sec = mountSection(root, 'home');
+      const sec = mountSection(root, 'home', { tint: false });
       bar = sec.bar; screen = sec.el;
       screen.dataset.ownScroll = '';
       const body = document.createElement('div');

@@ -252,7 +252,7 @@ export function mountSection(root, current, opts = {}) {
   backdrop.setSection(current);
   bar.claimFocus();
   animateIn(page);
-  page.addEventListener('focusin', (e) => {
+  if (opts.tint !== false) page.addEventListener('focusin', (e) => {
     const art = e.target.closest && e.target.closest('[data-art]');
     if (art && art.dataset.art) backdrop.tint(art.dataset.art);
   });

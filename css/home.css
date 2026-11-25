@@ -51,4 +51,7 @@
 .home .card.poster.peek .title, .home .card.poster.peek .sub { width: 0; min-width: 100%; transition: none; }
 .home .card.poster .art { transition: width 380ms var(--ease-focus); }
 .home .card.poster.peek .art, .home .card.poster:focus .art { box-shadow: none; }
-.home .card { will-change: transform; }
+/* the poster you're on widens instead of growing: no scale (and no layer per card) */
+.home .card.poster:focus, .home .card.poster.keep-focus { transform: none; }
+/* playing: square corners, as the video under it is square (rounded ones let it show past the ring) */
+.home .card.poster.peek-playing .art { border-radius: 0; }
