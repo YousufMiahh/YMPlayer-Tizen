@@ -47,9 +47,12 @@ export function createHomePeek(o) {
   function getPreview() {
     if (!preview) {
       preview = createPreview({
-        box: { getBoundingClientRect: () => (box ? box.getBoundingClientRect() : { left: 0, top: 0, width: 0, height: 0 }) },
+        box: {
+          getBoundingClientRect: () => (box ? box.getBoundingClientRect() : { left: 0, top: 0, width: 0, height: 0 }),
+          get el() { return box; },
+        },
         logo: { style: {} },
-        radius: 0,
+        radius: 'css', // the card's own rounded corners
         holes: () => [document.getElementById('backdrop')],
         enabled: () => store.homePreviews() === 1,
         muted: () => true,
@@ -96,10 +99,12 @@ export function createHomePeek(o) {
     if (shownInfo && shownInfo !== box) shownInfo.hidden = true;
     shownInfo = box;
     box.hidden = false;
+    if (o.revealInfo) o.revealInfo(box); // the summary under the row, not cut off at the bottom
   }
 
   function focus(el) {
     if (el === card) return;
+    const was = card;
     // the details under a row stay while you move along it (the next card's replace them)
     if (shownInfo && infoOf(el) !== shownInfo) { shownInfo.hidden = true; shownInfo = null; }
     leave();
@@ -108,12 +113,12 @@ export function createHomePeek(o) {
     if (!it) return;
     card = el;
     const my = seq;
-    widenTimer = setTimeout(() => {
+    const widen = () => {
       widenTimer = null;
       if (my !== seq || card !== document.activeElement) return;
       card.classList.add('peek');
+      if (o.reveal) o.reveal(card, was); // straight to where it will be once it has widened
       dress(card, it, my);
-      if (o.reveal) setTimeout(() => { if (my === seq && card) o.reveal(card); }, 380); // once it has widened
       playTimer = setTimeout(async () => {
         playTimer = null;
         if (my !== seq) return;
@@ -126,7 +131,8 @@ export function createHomePeek(o) {
         card.classList.add('peek-playing');
         p.start(w.item, w.from);
       }, PLAY_AFTER_MS);
-    }, WIDEN_AFTER_MS);
+    };
+    if (WIDEN_AFTER_MS > 0) widenTimer = setTimeout(widen, WIDEN_AFTER_MS); else widen();
   }
 
   /** The widened card's picture: TMDB's wide backdrop and the title's logo, faded in when they're here. */

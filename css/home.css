@@ -20,7 +20,7 @@
 /* Home, Netflix-size posters; the one you're on widens to 16:9 (294u × 16/9) */
 .home .card.poster .art { width: calc(196 * var(--u)); height: calc(294 * var(--u)); }
 .home .card.poster .title, .home .card.poster .sub { width: calc(196 * var(--u)); }
-.home .card.poster.peek .art, .home .card.poster.peek .title, .home .card.poster.peek .sub { width: calc(523 * var(--u)); }
+.home .card.poster.peek .art, .home .card.poster.peek .title, .home .card.poster.peek .sub { width: calc(var(--peek-w) * var(--u)); }
 
 /* what the card you're on is: "Series · Thriller · 2026 · 2 Seasons (15)" and the summary */
 .row-info { padding: 0 calc(64 * var(--u)) calc(10 * var(--u)); animation: ri-in 220ms ease; }
@@ -49,9 +49,14 @@
 .home .strip { contain: layout style; }
 .home .card.poster .title, .home .card.poster .sub,
 .home .card.poster.peek .title, .home .card.poster.peek .sub { width: 0; min-width: 100%; transition: none; }
-.home .card.poster .art { transition: width 380ms var(--ease-focus); }
 .home .card.poster.peek .art, .home .card.poster:focus .art { box-shadow: none; }
 /* the poster you're on widens instead of growing: no scale (and no layer per card) */
 .home .card.poster:focus, .home .card.poster.keep-focus { transform: none; }
-/* playing: square corners, as the video under it is square (rounded ones let it show past the ring) */
-.home .card.poster.peek-playing .art { border-radius: 0; }
+/* Widening without redrawing the pictures every frame: they keep their final size and the card's
+   growing edge just uncovers more of them; the row you're on gets its own layers, so the cards
+   beside it slide rather than repaint. */
+:root { --peek-w: 523; }
+.home .card.poster .art { min-width: calc(196 * var(--u)); transition: width 300ms var(--ease-focus); }
+.home .card.poster .art > img:first-child { width: calc(196 * var(--u)); margin: 0 auto; }
+.home .card.poster .art .peek-back { width: calc(var(--peek-w) * var(--u)); right: auto; }
+.home .strip:focus-within .card { will-change: transform; }

@@ -24,7 +24,7 @@ import { LONG_PRESS_MS } from '../ui/theme.js';
 import { isOpen as dialogOpen } from '../ui/dialog.js';
 import { toast } from '../ui/toast.js';
 import * as coach from '../ui/coach.js';
-import { bringIntoView } from '../ui/scroll.js';
+import { bringIntoView, scrollBy, deltaToShow } from '../ui/scroll.js';
 
 export { deltaToShow } from '../ui/scroll.js';
 
@@ -191,6 +191,31 @@ export function homeView() {
     if (!el || !screen) return;
     if (el.classList.contains('card')) bringIntoView(el, el.parentElement, false, smooth);
     bringIntoView(el, screen, true, smooth);
+  }
+
+  /**
+   * A card that is widening: scroll its row once, to where the card will be when it has finished
+   * (the card it came from, if that's to its left in the same row, is narrowing at the same time),
+   * rather than chasing it while it grows.
+   */
+  function revealPeek(c, was) {
+    if (!c || !screen) return;
+    const strip = c.parentElement;
+    const art = c.querySelector('.art');
+    const css = getComputedStyle(art);
+    const wide = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--peek-w')) || 0;
+    const u = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--u')) || 1;
+    const W = wide ? wide * u : art.offsetWidth;
+    const narrow = parseFloat(css.minWidth) || art.offsetWidth;
+    let left = c.offsetLeft;
+    if (was && was !== c && was.parentElement === strip && was.offsetLeft < left) {
+      const wa = was.querySelector('.art');
+      if (wa) left -= Math.max(0, wa.offsetWidth - narrow);
+    }
+    const grow = Math.max(0, W - art.offsetWidth);
+    const d = deltaToShow(left, left + W, strip.scrollLeft, strip.clientWidth, strip.scrollWidth + grow - strip.clientWidth);
+    scrollBy(strip, 'scrollLeft', d, true);
+    bringIntoView(c, screen, true, true);
   }
 
   /** HomeActivity.focusFirstCard. With no cards at all, the window's first focusable is the Home tab. */
@@ -384,8 +409,17 @@ export function homeView() {
       body.append(localEl, remoteEl, emptyEl);
       sec.page.appendChild(body);
 
-      peek = createHomePeek({ itemOf: (card) => { const x = itemOf(card); return x ? x.it : null; }, reveal: (c) => reveal(c, true) });
-      onFocusIn = (e) => { reveal(e.target, true); peek.focus(e.target); };
+      peek = createHomePeek({
+        itemOf: (card) => { const x = itemOf(card); return x ? x.it : null; },
+        reveal: revealPeek,
+        revealInfo: (el) => { if (screen && root) bringIntoView(el, screen, true, true); },
+      });
+      onFocusIn = (e) => {
+        // back up to the top bar: all the way to the top, as Home first opened
+        if (bar.el.contains(e.target)) { if (screen.scrollTop) scrollBy(screen, 'scrollTop', -screen.scrollTop, true); return; }
+        peek.focus(e.target);
+        if (peek.card !== e.target) reveal(e.target, true); // a widening card is brought into view where it will end up
+      };
       screen.addEventListener('focusin', onFocusIn);
       onClick = (e) => {
         const card = e.target.closest && e.target.closest('.card');

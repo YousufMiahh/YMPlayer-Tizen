@@ -199,5 +199,7 @@ html.preview-on, html.preview-on body { background: transparent; }
 
 /* Video plays on the AVPlay plane behind the page, so the page must be see-through. */
 html.video-on, body.video-on, body.video-on #root { background: transparent; }
-#av { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+/* Under the page background (z-index -1): a preview shows through the hole cut in #backdrop, with
+   its rounded corners; the full-screen player hides #backdrop altogether (video-on). */
+#av { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; z-index: -1; }
 

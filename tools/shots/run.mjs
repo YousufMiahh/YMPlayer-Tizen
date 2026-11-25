@@ -426,6 +426,10 @@ const SCREENS = {
     seed: true,
     steps: async (page) => { await toHome(page); await press(page, 'ArrowRight', 2); await wait(1100); },
   },
+  'home-backup': { // down a few rows, then back up to the top bar: Home goes back to the top
+    seed: true,
+    steps: async (page) => { await toHome(page); await press(page, 'ArrowDown', 3, 300); await press(page, 'ArrowUp', 4, 300); await wait(900); },
+  },
   'home-cw': { // Continue Watching: episode card ("<series>  ·  m:ss left", series art) focused
     seed: true,
     steps: async (page) => { await toHome(page); await wait(1100); },

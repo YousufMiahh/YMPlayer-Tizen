@@ -27,12 +27,21 @@ export function holeMask(w, h, r, radius) {
 const round = (v) => Math.round(v * 100) / 100;
 
 /**
- * A square-cornered hole as a clip-path (w x h with the rect r cut out): one outline that runs
- * round the edge and back round the hole, so no mask image has to load (a mask that fails to load
- * hides the whole element: the page went black behind Home's preview).
+ * The hole as a clip-path (w x h with the rect r cut out, corners rounded by radius), so no mask
+ * image has to load. Square: one outline that runs round the edge and back round the hole.
+ * Rounded: an even-odd path(); null where the browser can't do path() (the mask is used instead).
  */
-export function holeClip(w, h, r) {
+export function holeClip(w, h, r, radius = 0) {
   const x0 = r.x; const y0 = r.y; const x1 = r.x + r.w; const y1 = r.y + r.h;
+  if (radius > 0) {
+    const ok = globalThis.CSS && typeof CSS.supports === 'function' && CSS.supports('clip-path', 'path(evenodd, "M0 0H1V1Z")');
+    if (!ok) return null;
+    const k = round(Math.max(0, Math.min(radius, r.w / 2, r.h / 2)));
+    const [a, b, c, d] = [x0, y0, x1, y1].map(round);
+    const hole = `M${a + k} ${b}H${c - k}A${k} ${k} 0 0 1 ${c} ${b + k}V${d - k}A${k} ${k} 0 0 1 ${c - k} ${d}`
+      + `H${a + k}A${k} ${k} 0 0 1 ${a} ${d - k}V${b + k}A${k} ${k} 0 0 1 ${a + k} ${b}Z`;
+    return `path(evenodd, "M0 0H${round(w)}V${round(h)}H0Z${hole}")`;
+  }
   const p = (x, y) => `${round(x)}px ${round(y)}px`;
   return `polygon(${[p(0, 0), p(0, h), p(x0, h), p(x0, y0), p(x1, y0), p(x1, y1), p(x0, y1), p(x0, h), p(w, h), p(w, 0)].join(', ')})`;
 }
@@ -113,6 +122,12 @@ export function createPreview(o) {
     if (on) muteTv(); else restoreTvMute();
   }
 
+  /** The box's corner radius: o.radius, or 'css' to read it off the box (Home's cards). */
+  const radius = () => {
+    if (o.radius !== 'css') return o.radius || 0;
+    try { return parseFloat(getComputedStyle(o.box.el || o.box).borderTopLeftRadius) || 0; } catch { return 0; }
+  };
+
   function punch(on) {
     const html = document.documentElement;
     const els = o.holes ? o.holes() : [];
@@ -129,12 +144,9 @@ export function createPreview(o) {
     for (const el of els) {
       if (!el) continue;
       const r = el.getBoundingClientRect();
-      if (!o.radius) {
-        const c = holeClip(r.width, r.height, { x: b.left - r.left, y: b.top - r.top, w: b.width, h: b.height });
-        el.style.webkitClipPath = c; el.style.clipPath = c;
-        continue;
-      }
-      const m = holeMask(round(r.width), round(r.height), { x: round(b.left - r.left), y: round(b.top - r.top), w: round(b.width), h: round(b.height) }, o.radius || 0);
+      const c = holeClip(r.width, r.height, { x: b.left - r.left, y: b.top - r.top, w: b.width, h: b.height }, radius());
+      if (c) { el.style.webkitClipPath = c; el.style.clipPath = c; continue; }
+      const m = holeMask(round(r.width), round(r.height), { x: round(b.left - r.left), y: round(b.top - r.top), w: round(b.width), h: round(b.height) }, radius());
       el.style.webkitMaskImage = m; el.style.maskImage = m;
       el.style.webkitMaskSize = '100% 100%'; el.style.webkitMaskRepeat = 'no-repeat';
     }
