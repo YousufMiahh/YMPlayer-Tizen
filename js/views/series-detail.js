@@ -72,7 +72,7 @@ export function seriesDetailView() {
   function showRows(firstSeason = false) {
     if (!loaded) return;
     params.rows = true;
-    if (preview) preview.stop();
+    if (preview) preview.stop(true); // hidden now; the player closes once the rows are up
     page.el.classList.remove('sp-hero');
     if (firstSeason) {
       const p = pillsEl.firstElementChild;

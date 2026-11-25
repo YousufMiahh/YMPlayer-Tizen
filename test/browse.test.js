@@ -13,6 +13,7 @@ import * as store from '../js/store.js';
 import * as filters from '../js/filters.js';
 import * as nav from '../js/nav.js';
 import * as B from '../js/browse.js';
+import { CLOSE_AFTER_MS } from '../js/live-preview.js';
 import * as toast from '../js/ui/toast.js';
 import { router } from '../js/router.js';
 import { shim } from '../js/avplay-shim.js';
@@ -561,13 +562,16 @@ describe('Live TV info panel and preview', () => {
     press(K.DOWN); press(K.DOWN); press(K.DOWN); press(K.DOWN);
     await ok(); await wait(460);
     shim.calls = [];
-    press(K.DOWN); // scrolling past: stopped at once, nothing new until you pause
-    expect(shim.names()).toEqual(['stop', 'close']);
+    press(K.DOWN); // scrolling past: hidden at once, closed when you pause (before the next opens)
+    expect(shim.names()).toEqual([]);
     await wait(460);
+    expect(shim.names().slice(0, 2)).toEqual(['stop', 'close']);
     expect(shim.names().slice(2)).toEqual(['open', 'setListener', 'setDisplayRect', 'setStreamingProperty', 'prepareAsync', 'play']);
     expect(shim.calls[2].args[0]).toContain('/11.ts');
     shim.calls = [];
-    press(K.LEFT); // back to the categories
+    press(K.LEFT); // back to the categories: hidden at once, closed a moment later
+    expect(shim.names()).toEqual([]);
+    await wait(CLOSE_AFTER_MS + 10);
     expect(shim.names()).toEqual(['stop', 'close']);
   });
 
@@ -602,6 +606,7 @@ describe('Live TV info panel and preview', () => {
     expect(shim.names()).toContain('play');
     expect(muted).toBe(true);
     press(K.LEFT);
+    await wait(CLOSE_AFTER_MS + 10); // the sound comes back once the player has closed
     expect(muted).toBe(false);
   });
 

@@ -390,7 +390,7 @@ describe("What's New", () => {
     whatsNew.init();
     expect(whatsNew.maybeShow()).toBe(true);
     expect(document.querySelector('.dialog-title').textContent).toMatch(/^What's New in YM Player \d+\.\d+\.\d+$/);
-    expect(document.querySelector('.dialog-message').textContent.startsWith('•  A new launch intro')).toBe(true);
+    expect(document.querySelector('.dialog-message').textContent.startsWith('•  Smoother')).toBe(true);
     expect(whatsNew.NOTES.trim().split('\n').length).toBeLessThanOrEqual(7); // more would not fit the pop-up
     expect(document.querySelector('.dialog-button').textContent).toBe('Got it');
     expect(whatsNew.maybeShow()).toBe(false);

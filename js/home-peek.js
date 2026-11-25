@@ -42,15 +42,31 @@ export function createHomePeek(o) {
     return eps && eps.length ? { item: eps[0], from: EPISODE_START_MS } : null;
   }
 
-  function stopPlaying() {
-    if (preview) { preview.stop(); preview = null; }
+  // One preview for the whole of Home: moving off a card hides its video at once and closes the
+  // player a moment later (or just before the next card plays), so the move itself never waits on it.
+  function getPreview() {
+    if (!preview) {
+      preview = createPreview({
+        box: { getBoundingClientRect: () => (box ? box.getBoundingClientRect() : { left: 0, top: 0, width: 0, height: 0 }) },
+        logo: { style: {} },
+        radius: 0,
+        holes: () => [document.getElementById('backdrop')],
+        enabled: () => store.homePreviews() === 1,
+        muted: () => true,
+      });
+    }
+    return preview;
   }
+  let box = null; let cover = null;
 
-  function leave() {
+  /** @param now  close the player straight away (leaving Home, the app hidden) */
+  function leave(now = false) {
     seq++;
     clearTimeout(widenTimer); widenTimer = null;
     clearTimeout(playTimer); playTimer = null;
-    stopPlaying();
+    if (preview) { preview.stop(!now); if (now) preview = null; }
+    if (cover) { cover.style.transition = 'none'; cover.style.opacity = '1'; }
+    box = null; cover = null;
     if (card) {
       card.classList.remove('peek', 'peek-playing');
       for (const el of card.querySelectorAll('.peek-back, .peek-logo')) el.remove();
@@ -104,15 +120,11 @@ export function createHomePeek(o) {
         const w = await what(it);
         if (!w || my !== seq || !card || card !== document.activeElement) return;
         const art = card.querySelector('.art');
-        const img = art && art.querySelector('img');
-        preview = createPreview({
-          box: art, logo: img || art, radius: 0,
-          holes: () => [document.getElementById('backdrop')],
-          enabled: () => store.homePreviews() === 1,
-          muted: () => true,
-        });
+        box = art; cover = (art && art.querySelector('img')) || art;
+        const p = getPreview();
+        p.setLogo(cover);
         card.classList.add('peek-playing');
-        preview.start(w.item, w.from);
+        p.start(w.item, w.from);
       }, PLAY_AFTER_MS);
     }, WIDEN_AFTER_MS);
   }
@@ -149,9 +161,9 @@ export function createHomePeek(o) {
 
   return {
     focus,
-    leave,
-    release: leave,
+    leave: () => leave(false),
+    release: () => leave(true),
     get card() { return card; },
-    get playing() { return !!preview; },
+    get playing() { return !!preview && preview.playing; },
   };
 }

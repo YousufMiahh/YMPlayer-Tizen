@@ -545,7 +545,7 @@ export function browseView(type) {
       clearInfo();
       if (it.icon) { info.img.hidden = false; info.img.src = it.icon; } else { info.img.hidden = true; info.img.removeAttribute('src'); }
       if (preview.item !== it) {
-        preview.stop();
+        preview.stop(true); // hidden now, closed once you rest
         if (content.hasFocus()) schedulePreview();
       }
       pendingEpg = setTimeout(loadEpgForSelection, B.EPG_DELAY_MS);
@@ -867,7 +867,7 @@ export function browseView(type) {
       if (live && was !== z) {
         if (z === 'content') schedulePreview();
         // Going into the TV guide: the preview keeps playing and just moves to the top
-        else if (was === 'content' && z !== 'guide') preview.stop();
+        else if (was === 'content' && z !== 'guide') preview.stop(true);
       }
     }
 

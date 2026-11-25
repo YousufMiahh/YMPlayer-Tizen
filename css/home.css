@@ -42,3 +42,13 @@
   font-size: calc(17 * var(--u)); line-height: 1.3; color: var(--text2);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
+
+/* Smoothness: only the picture's width animates as a card widens (the title and the line under it
+   follow the card instead of animating too), the shelf's layout stays inside the shelf, and the
+   widening card drops its shadow (a big blurred shadow repainted every frame is what stutters). */
+.home .strip { contain: layout style; }
+.home .card.poster .title, .home .card.poster .sub,
+.home .card.poster.peek .title, .home .card.poster.peek .sub { width: 0; min-width: 100%; transition: none; }
+.home .card.poster .art { transition: width 380ms var(--ease-focus); }
+.home .card.poster.peek .art, .home .card.poster:focus .art { box-shadow: none; }
+.home .card { will-change: transform; }

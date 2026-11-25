@@ -172,7 +172,7 @@ function renderShelf(row) {
 export function homeView() {
   let root; let screen; let bar; let localEl; let remoteEl; let emptyEl;
   let firstRun = false; let timers = []; let tick = null; let cancelTour = () => {};
-  let holdTimer = null; let held = false; let holdCard = null;
+  let holdTimer = null; let held = false; let holdCard = null; let holdAt = 0;
   let onKeyUp; let onClick; let onFocusIn; let onVisibility;
   let peek = null; // the highlighted film / series card widening into a preview
 
@@ -400,7 +400,7 @@ export function homeView() {
       };
       document.addEventListener('keyup', onKeyUp);
       onVisibility = () => {
-        if (document.hidden && peek) peek.leave();
+        if (document.hidden && peek) peek.release();
         if (document.hidden) { clearInterval(tick); tick = null; } else if (root && !tick) startTop10();
       };
       document.addEventListener('visibilitychange', onVisibility);
@@ -438,8 +438,12 @@ export function homeView() {
         // OK is decided on release: a short press opens, a hold (LONG_PRESS_MS) is the menu.
         e.preventDefault();
         if (!e.repeat && holdTimer === null && !held) {
-          holdCard = f;
+          holdCard = f; holdAt = Date.now();
           holdTimer = setTimeout(() => { holdTimer = null; held = true; if (root && holdCard === active()) menu(holdCard); }, LONG_PRESS_MS);
+        } else if (holdTimer !== null && !held && Date.now() - holdAt >= LONG_PRESS_MS) {
+          // the key is still coming in and the timer hasn't had its turn yet: open it now
+          clearTimeout(holdTimer); holdTimer = null; held = true;
+          if (root && holdCard === active()) menu(holdCard);
         }
         return true;
       }

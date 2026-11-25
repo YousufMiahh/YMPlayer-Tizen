@@ -26,6 +26,20 @@ export function holeMask(w, h, r, radius) {
 
 const round = (v) => Math.round(v * 100) / 100;
 
+/**
+ * A square-cornered hole as a clip-path (w x h with the rect r cut out): one outline that runs
+ * round the edge and back round the hole, so no mask image has to load (a mask that fails to load
+ * hides the whole element: the page went black behind Home's preview).
+ */
+export function holeClip(w, h, r) {
+  const x0 = r.x; const y0 = r.y; const x1 = r.x + r.w; const y1 = r.y + r.h;
+  const p = (x, y) => `${round(x)}px ${round(y)}px`;
+  return `polygon(${[p(0, 0), p(0, h), p(x0, h), p(x0, y0), p(x1, y0), p(x1, y1), p(x0, y1), p(x0, h), p(w, h), p(w, 0)].join(', ')})`;
+}
+
+/** How long a preview that was moved off keeps decoding, hidden, before AVPlay is closed. */
+export const CLOSE_AFTER_MS = 700;
+
 // ------------------------------------------------------------ the TV's own mute
 //
 // A muted preview mutes the whole TV (AVPlay has no volume of its own). The app must never leave
@@ -87,13 +101,22 @@ export function createPreview(o) {
     const els = o.holes ? o.holes() : [];
     if (!on) {
       html.classList.remove('preview-on');
-      for (const el of els) if (el) { el.style.webkitMaskImage = ''; el.style.maskImage = ''; }
+      for (const el of els) {
+        if (!el) continue;
+        el.style.webkitMaskImage = ''; el.style.maskImage = '';
+        el.style.webkitClipPath = ''; el.style.clipPath = '';
+      }
       return;
     }
     const b = o.box.getBoundingClientRect();
     for (const el of els) {
       if (!el) continue;
       const r = el.getBoundingClientRect();
+      if (!o.radius) {
+        const c = holeClip(r.width, r.height, { x: b.left - r.left, y: b.top - r.top, w: b.width, h: b.height });
+        el.style.webkitClipPath = c; el.style.clipPath = c;
+        continue;
+      }
       const m = holeMask(round(r.width), round(r.height), { x: round(b.left - r.left), y: round(b.top - r.top), w: round(b.width), h: round(b.height) }, o.radius || 0);
       el.style.webkitMaskImage = m; el.style.maskImage = m;
       el.style.webkitMaskSize = '100% 100%'; el.style.webkitMaskRepeat = 'no-repeat';
@@ -114,7 +137,31 @@ export function createPreview(o) {
     o.logo.style.opacity = '0';
   }
 
+  // Stopping and closing AVPlay are synchronous and can hold the page for a moment, so moving off a
+  // preview only hides it (the page covers the video plane again) and the player is closed once
+  // you rest, or right before the next preview opens: the move itself stays smooth.
+  let closing = false; let closeTimer = null;
+  function shut() {
+    clearTimeout(closeTimer); closeTimer = null;
+    if (!closing) return;
+    closing = false;
+    const av = getAvplay();
+    if (av) {
+      try { av.stop(); } catch { /* already idle */ }
+      try { av.close(); } catch { /* already closed */ }
+    }
+    const el = avEl();
+    if (el) el.hidden = true;
+  }
+  function closeLater() {
+    if (opened) { opened = false; closing = true; }
+    if (!closing) { setMute(false); return; }
+    clearTimeout(closeTimer);
+    closeTimer = setTimeout(() => { shut(); if (!opened) setMute(false); }, CLOSE_AFTER_MS);
+  }
+
   function closePlayer() {
+    shut();
     if (!opened) return;
     opened = false;
     const av = getAvplay();
@@ -170,15 +217,19 @@ export function createPreview(o) {
         api$.stop();
       }
     },
-    /** stopPreview: nothing pending, nothing playing, the artwork back. */
-    stop() {
+    /**
+     * stopPreview: nothing pending, nothing playing, the artwork back.
+     * @param later  hide it now and close the player a moment later (moving along Home's rows)
+     */
+    stop(later = false) {
       clearTimeout(timer); timer = null;
       seq++;
       item = null;
-      closePlayer();
       punch(false);
-      setMute(false);
       showLogo();
+      if (later) { closeLater(); return; }
+      closePlayer();
+      setMute(false);
     },
     /**
      * The box moved or changed size (the TV guide's layout glide): the picture and the hole follow
@@ -192,9 +243,12 @@ export function createPreview(o) {
     },
     /** releasePreview: before the full-screen player starts, or when leaving. */
     release() { api$.stop(); },
+    /** The artwork over the video (Home moves one preview from card to card). */
+    setLogo(el) { o.logo = el; },
     get item() { return item; },
     get pending() { return timer !== null; },
     get playing() { return opened; },
+    get closing() { return closing; },
   };
   return api$;
 }

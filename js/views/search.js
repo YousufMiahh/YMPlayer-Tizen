@@ -84,7 +84,7 @@ export function searchView() {
   let filter = 0; let token = 0; let timer = null; let cancelTour = () => {};
   let ready = [false, false, false]; let found = [0, 0, 0]; let hits = [[], [], []];
   let doneMask = 0; let hitMask = 0;
-  let holdTimer = null; let held = false; let holdCard = null;
+  let holdTimer = null; let held = false; let holdCard = null; let holdAt = 0;
   const listeners = [];
   const listen = (el, ev, fn) => { el.addEventListener(ev, fn); listeners.push([el, ev, fn]); };
   const alive = () => !!root;
@@ -325,8 +325,12 @@ export function searchView() {
       if (k === K.ENTER) {
         e.preventDefault();
         if (!e.repeat && holdTimer === null && !held) {
-          holdCard = f;
+          holdCard = f; holdAt = Date.now();
           holdTimer = setTimeout(() => { holdTimer = null; held = true; if (root && holdCard === active()) menu(holdCard); }, LONG_PRESS_MS);
+        } else if (holdTimer !== null && !held && Date.now() - holdAt >= LONG_PRESS_MS) {
+          // the key is still coming in and the timer hasn't had its turn yet: open it now
+          clearTimeout(holdTimer); holdTimer = null; held = true;
+          if (root && holdCard === active()) menu(holdCard);
         }
         return true;
       }

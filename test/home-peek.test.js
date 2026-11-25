@@ -54,8 +54,12 @@ describe('Home card previews', () => {
     other.focus(); p.focus(other);
     expect(c.classList.contains('peek')).toBe(false);
     expect(c.querySelector('.peek-logo')).toBeNull();
-    expect(av.close).toHaveBeenCalled();
     expect(p.playing).toBe(false);
+    expect(document.documentElement.classList.contains('preview-on')).toBe(false);
+    expect(av.close).not.toHaveBeenCalled(); // hidden at once; closed when you rest, not mid-move
+    await vi.advanceTimersByTimeAsync(PLAY_AFTER_MS);
+    expect(av.close).toHaveBeenCalled(); // before the next card's preview opens
+    expect(av.close.mock.invocationCallOrder[0]).toBeLessThan(av.open.mock.invocationCallOrder[1]);
   });
 
   it('something you were watching plays from where you were; a series from its first episode', async () => {
